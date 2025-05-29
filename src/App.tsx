@@ -1,6 +1,15 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
+import TerrariumList from './components/manager/TerrariumList';
+import TerrariumCreate from './components/manager/TerrariumCreate';
+import TerrariumEdit from './components/manager/TerrariumEdit';
+import ShapeList from './components/manager/ShapeList';
+import ShapeCreate from './components/manager/ShapeCreate';
+import ShapeEdit from './components/manager/ShapeEdit';
+import ThemeList from './components/manager/ThemeList';
+import ThemeCreate from './components/manager/ThemeCreate';
+import ThemeEdit from './components/manager/ThemeEdit';
 
 const Home = lazy(() => import('./pages/Customer/Home'));
 const Layout = lazy(() => import('./components/customer/Layout/Layout'));
@@ -41,6 +50,7 @@ const Cart = lazy(() => import('./pages/Customer/Cart'));
 const StaffDashboard = lazy(() => import('./pages/Staff/StaffDashboard'));
 const ManagerDashboard = lazy(() => import('./pages/Manager/ManagerDashboard'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
+const ManagerLayout = lazy(() => import('./components/manager/ManagerLayout'));
 
 const App: React.FC = () => {
   return (
@@ -87,6 +97,17 @@ const App: React.FC = () => {
           <Route path="/admin/statistics" element={<Suspense fallback={<div>Đang tải...</div>}><StatisticsReport /></Suspense>} /> 
           <Route path="/admin/settings" element={<Suspense fallback={<div>Đang tải...</div>}><AdminDashboard /></Suspense>} />
           <Route path="/admin/reports" element={<Suspense fallback={<div>Đang tải...</div>}><AdminDashboard /></Suspense>} />
+        </Route>
+        <Route element={<Suspense fallback={<div>Đang tải...</div>}><ManagerLayout /></Suspense>}>
+          <Route path="/manager/terrarium/list" element={<Suspense fallback={<div>Đang tải...</div>}><TerrariumList /></Suspense>} />
+          <Route path="/manager/terrarium/create" element={<Suspense fallback={<div>Đang tải...</div>}><TerrariumCreate /></Suspense>} />
+          <Route path="/manager/terrarium/edit/:id" element={<Suspense fallback={<div>Đang tải...</div>}><TerrariumEdit /></Suspense>} />
+          <Route path="/manager/shape/list" element={<Suspense fallback={<div>Đang tải...</div>}><ShapeList /></Suspense>} />
+          <Route path="/manager/shape/create" element={<Suspense fallback={<div>Đang tải...</div>}><ShapeCreate /></Suspense>} />
+          <Route path="/manager/shape/edit/:id" element={<Suspense fallback={<div>Đang tải...</div>}><ShapeEdit /></Suspense>} />
+          <Route path="/manager/theme/list" element={<Suspense fallback={<div>Đang tải...</div>}><ThemeList /></Suspense>} />
+          <Route path="/manager/theme/create" element={<Suspense fallback={<div>Đang tải...</div>}><ThemeCreate /></Suspense>} />
+          <Route path="/manager/theme/edit/:id" element={<Suspense fallback={<div>Đang tải...</div>}><ThemeEdit /></Suspense>} />
         </Route>
         <Route path="/staff-dashboard" element={<Suspense fallback={<div>Đang tải...</div>}><StaffDashboard /></Suspense>} />
         <Route path="/manager-dashboard" element={<Suspense fallback={<div>Đang tải...</div>}><ManagerDashboard /></Suspense>} />
