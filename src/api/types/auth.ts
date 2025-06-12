@@ -1,0 +1,35 @@
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  token: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  passwordHash: string;
+  email: string;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: 'male' | 'female' | 'other';
+  fullName: string;
+}
+
+export interface RegisterResponse {
+  success?: boolean; // Optional vì server hiện chỉ trả message
+  message?: string;
+  otpRequired?: boolean;
+}
+
+export interface VerifyOTPRequest {
+  email: string;
+  otp: string;
+}
+
+export interface VerifyOTPResponse {
+  success: boolean;
+  message?: string;
+  token?: string;
+}

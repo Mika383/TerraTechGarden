@@ -1,14 +1,33 @@
 import React from 'react';
 import { Form, Input, Button, Checkbox, Select, DatePicker } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hook/useAuth';
+import { RegisterRequest } from '../../api/types/auth';
+import OTPModal from '../../components/customer/Layout/OTPModal';
+import moment from 'moment';
 
 const { Option } = Select;
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
+  const { handleRegister, loading, error, showOTP, setShowOTP } = useAuth();
+  const [form] = Form.useForm();
 
-  const onFinish = (values: any) => {
-    console.log('Đăng ký với:', values);
+  const onFinish = async (values: any) => {
+    const registerData: RegisterRequest = {
+      username: values.username,
+      passwordHash: values.password,
+      email: values.email,
+      phoneNumber: values.phone,
+      dateOfBirth: moment(values.birthYear).toISOString(),
+      gender: values.gender || 'other',
+      fullName: values.name,
+    };
+    try {
+      await handleRegister(registerData);
+    } catch (err) {
+      // Error is handled in useAuth
+    }
   };
 
   return (
@@ -20,8 +39,8 @@ const Register: React.FC = () => {
             name="register_form"
             onFinish={onFinish}
             layout="vertical"
+            form={form}
           >
-            {/* Tên tài khoản */}
             <Form.Item
               label="Tên tài khoản"
               name="username"
@@ -30,7 +49,6 @@ const Register: React.FC = () => {
               <Input placeholder="Nhập tên tài khoản" />
             </Form.Item>
 
-            {/* Họ và Tên */}
             <Form.Item
               label="Họ và Tên"
               name="name"
@@ -39,7 +57,6 @@ const Register: React.FC = () => {
               <Input placeholder="Nhập họ và tên" />
             </Form.Item>
 
-            {/* Số điện thoại */}
             <Form.Item
               label="Số điện thoại"
               name="phone"
@@ -51,7 +68,6 @@ const Register: React.FC = () => {
               <Input placeholder="Nhập số điện thoại" />
             </Form.Item>
 
-            {/* Email */}
             <Form.Item
               label="Email"
               name="email"
@@ -63,7 +79,6 @@ const Register: React.FC = () => {
               <Input placeholder="Nhập email của bạn" />
             </Form.Item>
 
-            {/* Mật khẩu */}
             <Form.Item
               label="Mật khẩu"
               name="password"
@@ -75,7 +90,6 @@ const Register: React.FC = () => {
               <Input.Password placeholder="Nhập mật khẩu" />
             </Form.Item>
 
-            {/* Xác nhận mật khẩu */}
             <Form.Item
               label="Xác nhận mật khẩu"
               name="confirmPassword"
@@ -95,10 +109,10 @@ const Register: React.FC = () => {
               <Input.Password placeholder="Xác nhận mật khẩu" />
             </Form.Item>
 
-            {/* Giới tính */}
             <Form.Item
               label="Giới tính"
               name="gender"
+              initialValue="other"
             >
               <Select placeholder="Chọn giới tính">
                 <Option value="male">Nam</Option>
@@ -107,14 +121,18 @@ const Register: React.FC = () => {
               </Select>
             </Form.Item>
 
-            {/* Năm sinh */}
             <Form.Item
               label="Năm sinh"
               name="birthYear"
+              rules={[{ required: true, message: 'Vui lòng chọn năm sinh!' }]}
             >
-              <DatePicker picker="year" placeholder="Chọn năm sinh" />
+              <DatePicker
+                picker="year"
+                placeholder="Chọn năm sinh"
+                disabledDate={(current) => current && current > moment().endOf('year')}
+              />
             </Form.Item>
-            {/* Checkbox chấp nhận chính sách */}
+
             <Form.Item
               name="acceptTerms"
               valuePropName="checked"
@@ -130,11 +148,11 @@ const Register: React.FC = () => {
               </Checkbox>
             </Form.Item>
 
-            {/* Nút Đăng Ký */}
             <Form.Item>
-              <Button type="primary" htmlType="submit" className="w-full bg-blue-500">
-                Đăng Ký
+              <Button type="primary" htmlType="submit" className="w-full bg-blue-500" disabled={loading}>
+                {loading ? 'Đang đăng ký...' : 'Đăng Ký'}
               </Button>
+              {error && <p className="text-red-500 text-center mt-2">{error}</p>}
             </Form.Item>
           </Form>
 
@@ -150,6 +168,8 @@ const Register: React.FC = () => {
             </p>
           </div>
         </div>
+
+        <OTPModal visible={showOTP} onCancel={() => setShowOTP(false)} />
       </div>
     </div>
   );

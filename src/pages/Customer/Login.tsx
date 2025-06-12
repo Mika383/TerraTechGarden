@@ -1,14 +1,27 @@
 import React from 'react';
 import { Form, Input, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hook/useAuth';
+import { LoginRequest } from '../../api/types/auth';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
+  const { handleLogin, loading, error } = useAuth();
+  const [form] = Form.useForm();
 
-  
-  const onFinish = (values: any) => {
-    console.log('Đăng nhập với:', values);
-    
+  const onFinish = async (values: { username: string; password: string }) => {
+    const credentials: LoginRequest = {
+      username: values.username,
+      password: values.password,
+    };
+    try {
+      const success = await handleLogin(credentials);
+      if (success) {
+        navigate('/'); // Redirect to home
+      }
+    } catch (err) {
+      // Error is handled in useAuth
+    }
   };
 
   return (
@@ -20,13 +33,14 @@ const Login: React.FC = () => {
             name="login_form"
             onFinish={onFinish}
             layout="vertical"
+            form={form}
           >
             <Form.Item
-              label="Email"
-              name="email"
-              rules={[{ required: true, message: 'Vui lòng nhập email!' }, { type: 'email', message: 'Email không hợp lệ!' }]}
+              label="Tên đăng nhập"
+              name="username"
+              rules={[{ required: true, message: 'Vui lòng nhập tên đăng nhập!' }]}
             >
-              <Input placeholder="Nhập email của bạn" />
+              <Input placeholder="Nhập tên đăng nhập của bạn" />
             </Form.Item>
 
             <Form.Item
@@ -38,9 +52,10 @@ const Login: React.FC = () => {
             </Form.Item>
 
             <Form.Item>
-              <Button type="primary" htmlType="submit" className="w-full bg-blue-500">
-                Đăng Nhập
+              <Button type="primary" htmlType="submit" className="w-full bg-blue-500" disabled={loading}>
+                {loading ? 'Đang đăng nhập...' : 'Đăng Nhập'}
               </Button>
+              {error && <p className="text-red-500 text-center mt-2">{error}</p>}
             </Form.Item>
           </Form>
 
