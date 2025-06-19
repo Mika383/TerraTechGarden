@@ -9,4 +9,13 @@ export default defineConfig({
             plugins: [tailwindcss(), autoprefixer()],
         },
     },
+    server: {
+        proxy: {
+            '/api': {
+                target: 'https://terarium.shop',
+                changeOrigin: true,
+                rewrite: function (path) { return path.replace(/^\/api/, ''); },
+            },
+        },
+    },
 });
