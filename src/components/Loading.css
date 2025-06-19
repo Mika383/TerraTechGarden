@@ -1,0 +1,77 @@
+/* src/components/Loading.css */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-color: #f8fafc; /* Màu nền */
+}
+
+.loading-circle {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    animation: rotate 2s linear infinite;
+}
+
+.terrarium {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: spin 1.5s linear infinite;
+}
+
+.leaf-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    animation: rotate 2s linear infinite;
+}
+
+.leaf {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: green; /* Màu xanh lá */
+    border-radius: 50%;
+    animation: bounce 1s infinite;
+}
+
+.leaf:nth-child(1) { transform: rotate(0deg) translate(40px) rotate(0deg); }
+.leaf:nth-child(2) { transform: rotate(30deg) translate(40px) rotate(-30deg); }
+.leaf:nth-child(3) { transform: rotate(60deg) translate(40px) rotate(-60deg); }
+.leaf:nth-child(4) { transform: rotate(90deg) translate(40px) rotate(-90deg); }
+.leaf:nth-child(5) { transform: rotate(120deg) translate(40px) rotate(-120deg); }
+.leaf:nth-child(6) { transform: rotate(150deg) translate(40px) rotate(-150deg); }
+.leaf:nth-child(7) { transform: rotate(180deg) translate(40px) rotate(-180deg); }
+.leaf:nth-child(8) { transform: rotate(210deg) translate(40px) rotate(-210deg); }
+.leaf:nth-child(9) { transform: rotate(240deg) translate(40px) rotate(-240deg); }
+.leaf:nth-child(10) { transform: rotate(270deg) translate(40px) rotate(-270deg); }
+.leaf:nth-child(11) { transform: rotate(300deg) translate(40px) rotate(-300deg); }
+.leaf:nth-child(12) { transform: rotate(330deg) translate(40px) rotate(-330deg); }
+
+@keyframes rotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes bounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.5); }
+}
+
+.loading-text {
+    margin-top: 20px;
+    font-size: 1.5rem;
+    color: #333;
+}
