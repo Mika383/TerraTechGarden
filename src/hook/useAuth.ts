@@ -34,8 +34,8 @@ export const useAuth = (): AuthHook => {
       const response: RegisterResponse = await register(data);
       console.log('Registration response:', response); // Debug
       if (response && response.message === 'Save data success') {
-        setRegisteredEmail(data.email);
-        setShowOTP(true); // Hiển thị OTP modal khi đăng ký thành công
+        setRegisteredEmail(data.email); // Keep this for other potential uses
+        setShowOTP(true); // This is now managed by Register component
         console.log('OTP modal should display, showOTP set to true');
       } else if (response && response.message) {
         setError(response.message);

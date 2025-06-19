@@ -6,16 +6,20 @@ import api from '../../../api/axios';
 interface OTPModalProps {
   visible: boolean;
   onCancel: () => void;
+  email: string; // Added email prop
 }
 
-const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel }) => {
+const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
   console.log('OTPModal rendering, visible:', visible);
-  const { loading, error, otp, setOtp, verifyOTP, registeredEmail, setError, setLoading } = useAuth();
+  const { loading, error, otp, setOtp, verifyOTP, setError, setLoading } = useAuth();
 
   const handleOTPSubmit = async () => {
     if (!otp || otp.length !== 6) {
       return;
     }
+    // Log the data being sent (payload including email and otp)
+    const payload = { email, otp };
+    console.log('Data sent to verify OTP:', payload);
     const success = await verifyOTP(otp);
     if (success) {
       setOtp('');
@@ -24,14 +28,13 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel }) => {
   };
 
   const handleResendOTP = async () => {
-    if (!registeredEmail) {
+    if (!email) {
       setError('No registered email. Please try registering again.');
       return;
     }
     setLoading(true);
     try {
-      // Gọi API để gửi lại OTP (cần xác nhận endpoint với backend)
-      const response = await api.post('/api/Users/resend-otp', { email: registeredEmail });
+      const response = await api.post('/api/Users/resend-otp', { email });
       console.log('Resend OTP response:', response.data);
       setError(response.data.message || 'OTP has been resent.');
     } catch (error: any) {

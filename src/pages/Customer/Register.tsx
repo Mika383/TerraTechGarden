@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Form, Input, Button, Checkbox, Select, DatePicker } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hook/useAuth';
@@ -10,8 +10,10 @@ const { Option } = Select;
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  const { handleRegister, loading, error, showOTP, setShowOTP } = useAuth();
+  const { handleRegister, loading, error } = useAuth();
   const [form] = Form.useForm();
+  const [showOTP, setShowOTP] = useState(false); // Manage OTP modal state locally
+  const [email, setEmail] = useState(''); // Store the email from the form
 
   const onFinish = async (values: any) => {
     const registerData: RegisterRequest = {
@@ -23,8 +25,10 @@ const Register: React.FC = () => {
       gender: values.gender || 'other',
       fullName: values.name,
     };
+    setEmail(values.email); // Save the email for OTP verification
     try {
       await handleRegister(registerData);
+      setShowOTP(true); // Show OTP modal after successful registration
     } catch (err) {
       // Error is handled in useAuth
     }
@@ -169,7 +173,7 @@ const Register: React.FC = () => {
           </div>
         </div>
 
-        <OTPModal visible={showOTP} onCancel={() => setShowOTP(false)} />
+        <OTPModal visible={showOTP} onCancel={() => setShowOTP(false)} email={email} />
       </div>
     </div>
   );
