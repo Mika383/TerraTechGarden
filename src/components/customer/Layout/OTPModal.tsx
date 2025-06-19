@@ -1,37 +1,51 @@
 import React from 'react';
 import { Modal, Button, Input } from 'antd';
 import { useAuth } from '../../../hook/useAuth';
+import { useNavigate } from 'react-router-dom'; // Sử dụng useNavigate
 import api from '../../../api/axios';
 
 interface OTPModalProps {
   visible: boolean;
   onCancel: () => void;
+  email: string;
 }
 
-const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel }) => {
-  console.log('OTPModal rendering, visible:', visible);
-  const { loading, error, otp, setOtp, verifyOTP, registeredEmail, setError, setLoading } = useAuth();
+const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
+  console.log('OTPModal rendering, visible:', visible, 'email:', email);
+  const { loading, error, otp, setOtp, verifyOTP, setError, setLoading } = useAuth();
+  const navigate = useNavigate(); // Sử dụng useNavigate trong OTPModal
 
   const handleOTPSubmit = async () => {
     if (!otp || otp.length !== 6) {
+      setError('Vui lòng nhập mã OTP 6 chữ số.');
       return;
     }
-    const success = await verifyOTP(otp);
-    if (success) {
-      setOtp('');
-      onCancel();
+    const payload = { email, otp };
+    console.log('Data sent to verify OTP:', payload);
+    setLoading(true); // Bắt đầu loading
+    try {
+      const success = await verifyOTP(otp, email);
+      if (success) {
+        setOtp('');
+        onCancel(); // Đóng modal
+        console.log('OTP verified successfully, navigating to /login...');
+        navigate('/login'); // Chuyển trang chỉ khi thành công
+        setError(''); // Xóa lỗi sau khi thành công
+      } else {
+        setError('Xác thực OTP thất bại. Vui lòng kiểm tra lại mã OTP.');
+      }
+    } catch (err) {
+      console.error('OTP verification error:', err);
+      setError('Lỗi khi xác thực OTP. Vui lòng thử lại.');
+    } finally {
+      setLoading(false); // Kết thúc loading
     }
   };
 
   const handleResendOTP = async () => {
-    if (!registeredEmail) {
-      setError('No registered email. Please try registering again.');
-      return;
-    }
     setLoading(true);
     try {
-      // Gọi API để gửi lại OTP (cần xác nhận endpoint với backend)
-      const response = await api.post('/api/Users/resend-otp', { email: registeredEmail });
+      const response = await api.post('/api/Users/resend-otp', { email });
       console.log('Resend OTP response:', response.data);
       setError(response.data.message || 'OTP has been resent.');
     } catch (error: any) {
@@ -48,20 +62,18 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel }) => {
       onOk={handleOTPSubmit}
       onCancel={() => {
         setOtp('');
+        setError(''); // Xóa lỗi khi hủy
         onCancel();
       }}
       footer={[
-        <Button
-          key="resend"
-          onClick={handleResendOTP}
-          disabled={loading}
-        >
+        <Button key="resend" onClick={handleResendOTP} disabled={loading}>
           Gửi lại OTP
         </Button>,
         <Button
           key="back"
           onClick={() => {
             setOtp('');
+            setError(''); // Xóa lỗi khi hủy
             onCancel();
           }}
         >

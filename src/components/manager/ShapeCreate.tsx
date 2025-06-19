@@ -38,6 +38,7 @@ const ShapeCreate: React.FC = () => {
   }, [formData]);
 
   const validateImage = (file: File): { valid: boolean; error?: string } => {
+    
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
     const maxSize = 10 * 1024 * 1024; // 10MB
 

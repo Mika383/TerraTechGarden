@@ -1,13 +1,14 @@
+// hook/useAuth.ts
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register, login, verifyOTP } from '../api';
 import { RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, VerifyOTPRequest, VerifyOTPResponse } from '../api/types/auth';
+import { getRoleFromToken } from '../utils/jwt';
 
-// Define the return type of useAuth
 interface AuthHook {
   handleRegister: (data: RegisterRequest) => Promise<void>;
   handleLogin: (data: LoginRequest) => Promise<boolean>;
-  verifyOTP: (otp: string) => Promise<boolean>;
+  verifyOTP: (otp: string, email: string) => Promise<boolean>;
   loading: boolean;
   error: string | null;
   showOTP: boolean;
@@ -32,22 +33,16 @@ export const useAuth = (): AuthHook => {
     setError(null);
     try {
       const response: RegisterResponse = await register(data);
-      console.log('Registration response:', response); // Debug
       if (response && response.message === 'Save data success') {
         setRegisteredEmail(data.email);
-        setShowOTP(true); // Hiển thị OTP modal khi đăng ký thành công
-        console.log('OTP modal should display, showOTP set to true');
+        setShowOTP(true);
       } else if (response && response.message) {
         setError(response.message);
-        console.log('Registration failed or incomplete:', response.message);
       } else {
         setError('Registration failed. Unexpected server response.');
-        console.log('Unexpected response:', response);
       }
     } catch (error: any) {
-      const message = error.message || 'Registration failed. Please try again.';
-      setError(message);
-      console.error('Registration error:', message);
+      setError(error.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -60,6 +55,12 @@ export const useAuth = (): AuthHook => {
       const response: LoginResponse = await login(data);
       if (response.token) {
         localStorage.setItem('authToken', response.token);
+        const role = getRoleFromToken();
+        if (!role) {
+          setError('Login failed: Role not found in token.');
+          localStorage.removeItem('authToken');
+          return false;
+        }
         navigate('/');
         return true;
       }
@@ -73,29 +74,30 @@ export const useAuth = (): AuthHook => {
     }
   };
 
-  const verifyOTPHandler = async (otp: string) => {
-    if (!registeredEmail) {
-      setError('No email registered. Please try registering again.');
-      return false;
-    }
+  const verifyOTPHandler = async (otp: string, email: string) => {
     setLoading(true);
     setError(null);
     try {
-      console.log('Sending OTP verification with email:', registeredEmail, 'otp:', otp); // Debug
-      const response: VerifyOTPResponse = await verifyOTP({ email: registeredEmail, otp });
-      if (response.success) {
-        setShowOTP(false);
-        setOtp('');
+      const response: VerifyOTPResponse = await verifyOTP({ email, otp });
+      if (response.success || (response.message && response.message.includes('thành công'))) {
         if (response.token) {
           localStorage.setItem('authToken', response.token);
+          const role = getRoleFromToken();
+          if (!role) {
+            setError('OTP verified but role not found in token.');
+            localStorage.removeItem('authToken');
+            return false;
+          }
         }
-        navigate('/dashboard');
+        setShowOTP(false);
+        setOtp('');
+        navigate('/');
         return true;
       }
       setError(response.message || 'Invalid OTP.');
       return false;
     } catch (error: any) {
-      setError(error.message);
+      setError(error.response?.data?.message || error.message || 'Failed to verify OTP.');
       return false;
     } finally {
       setLoading(false);
