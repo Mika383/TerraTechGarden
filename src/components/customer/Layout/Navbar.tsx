@@ -1,13 +1,18 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from 'antd';
-import { ShoppingCartOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons';
+import { ShoppingCartOutlined, SearchOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useState, useRef } from 'react';
+import { getRoleFromToken } from '../../../utils/jwt'; // Đường dẫn đã được điều chỉnh
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lấy role từ token
+  const userRole = getRoleFromToken();
+  const isAuthenticated = !!userRole; // Kiểm tra xem đã đăng nhập chưa
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -27,6 +32,12 @@ const Navbar: React.FC = () => {
   };
 
   const isActive = (path: string) => location.pathname === path;
+
+  // Xử lý logout
+  const handleLogout = () => {
+    localStorage.removeItem('authToken'); // Xóa token
+    navigate('/login'); // Chuyển hướng về trang đăng nhập
+  };
 
   return (
     <nav className="bg-white shadow-md py-4 font-roboto">
@@ -84,50 +95,77 @@ const Navbar: React.FC = () => {
             onClick={() => handleNavigate('/cart')}
             className={`text-black font-bold nav-button ${isActive('/cart') ? 'active' : ''} !text-black hover:!text-black`}
           />
-          <div
-            className="relative"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
-            <Button
-              icon={<UserOutlined />}
-              className="text-black font-bold !text-black hover:!text-black"
-            />
-            {isDropdownVisible && (
-              <div
-                className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg z-10"
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
+          {isAuthenticated ? (
+            <div
+              className="relative"
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+            >
+              <Button
+                icon={<UserOutlined />}
+                className="text-black font-bold !text-black hover:!text-black"
+              />
+              {isDropdownVisible && (
+                <div
+                  className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg z-10"
+                  onMouseEnter={handleMouseEnter}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <ul className="py-1">
+                    {userRole === 'User' && (
+                      <li
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleNavigate('/customer-dashboard')}
+                      >
+                        Quản Lý Người Dùng
+                      </li>
+                    )}
+                    {(userRole === 'Staff' || userRole === 'Manager' || userRole === 'Admin') && (
+                      <li
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleNavigate('/staff-dashboard')}
+                      >
+                        Bảng Điều Khiển Nhân Viên
+                      </li>
+                    )}
+                    {(userRole === 'Manager' || userRole === 'Admin') && (
+                      <li
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleNavigate('/manager-dashboard')}
+                      >
+                        Bảng Điều Khiển Quản Lý
+                      </li>
+                    )}
+                    {userRole === 'Admin' && (
+                      <li
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleNavigate('/admin/dashboard')}
+                      >
+                        Bảng Điều Khiển Quản Trị
+                      </li>
+                    )}
+                    <li
+                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-red-500"
+                      onClick={handleLogout}
+                    >
+                      <span className="flex items-center">
+                        <LogoutOutlined className="mr-2" /> Đăng xuất
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <Button
+                onClick={() => handleNavigate('/login')}
+                className="text-black font-bold !text-black hover:!text-black"
               >
-                <ul className="py-1">
-                  <li
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleNavigate('/customer-dashboard')}
-                  >
-                    Quản Lý Người Dùng
-                  </li>
-                  <li
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleNavigate('/staff-dashboard')}
-                  >
-                    Bảng Điều Khiển Nhân Viên
-                  </li>
-                  <li
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleNavigate('/manager-dashboard')}
-                  >
-                    Bảng Điều Khiển Quản Lý
-                  </li>
-                  <li
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleNavigate('/admin/dashboard')}
-                  >
-                    Bảng Điều Khiển Quản Trị
-                  </li>
-                </ul>
-              </div>
-            )}
-          </div>
+                Đăng nhập/Đang ký
+              </Button>
+            </>
+          )}
         </div>
       </div>
       <style>

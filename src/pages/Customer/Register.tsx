@@ -10,32 +10,53 @@ const { Option } = Select;
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  const { handleRegister, loading, error } = useAuth();
+  const { handleRegister, loading, error, showOTP, setShowOTP } = useAuth();
   const [form] = Form.useForm();
-  const [showOTP, setShowOTP] = useState(false); // Manage OTP modal state locally
   const [email, setEmail] = useState(''); // Store the email from the form
 
   const onFinish = async (values: any) => {
-    const registerData: RegisterRequest = {
-      username: values.username,
-      passwordHash: values.password,
-      email: values.email,
-      phoneNumber: values.phone,
-      dateOfBirth: moment(values.birthYear).toISOString(),
-      gender: values.gender || 'other',
-      fullName: values.name,
-    };
-    setEmail(values.email); // Save the email for OTP verification
     try {
+      // Validate all fields before submitting
+      await form.validateFields();
+      const registerData: RegisterRequest = {
+        username: values.username,
+        passwordHash: values.password,
+        email: values.email,
+        phoneNumber: values.phone,
+        dateOfBirth: moment(values.birthYear).toISOString(),
+        gender: values.gender || 'other',
+        fullName: values.name,
+      };
+      setEmail(values.email); // Save the email for OTP verification
       await handleRegister(registerData);
-      setShowOTP(true); // Show OTP modal after successful registration
+      // showOTP is now managed by useAuth, no need to set it here manually
     } catch (err) {
-      // Error is handled in useAuth
+      console.log('Validation or submission error:', err);
+      // Handle errors from form or useAuth
+      if (error) {
+        if (error.includes('Username')) {
+          form.setFields([{ name: 'username', errors: ['Tên tài khoản đã tồn tại!'] }]);
+        }
+        if (error.includes('Email')) {
+          form.setFields([{ name: 'email', errors: ['Email đã tồn tại!'] }]);
+        }
+      }
     }
   };
 
+  // Custom CSS to style the error border
+  const customErrorStyle = `
+    .ant-form-item-has-error .ant-input,
+    .ant-form-item-has-error .ant-select-selector,
+    .ant-form-item-has-error .ant-picker {
+      border-color: #ff4d4f !important;
+      background-color: #fff1f0 !important;
+    }
+  `;
+
   return (
     <div className="min-h-screen flex flex-col">
+      <style>{customErrorStyle}</style> {/* Inline CSS for error styling */}
       <div className="flex-1 container mx-auto py-12">
         <h1 className="text-3xl font-bold text-center mb-8">Đăng Ký</h1>
         <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow">
@@ -44,11 +65,14 @@ const Register: React.FC = () => {
             onFinish={onFinish}
             layout="vertical"
             form={form}
+            validateTrigger="onSubmit" // Validate on submit
           >
             <Form.Item
               label="Tên tài khoản"
               name="username"
               rules={[{ required: true, message: 'Vui lòng nhập tên tài khoản!' }]}
+              validateStatus={form.getFieldError('username').length > 0 ? 'error' : ''}
+              help={form.getFieldError('username')}
             >
               <Input placeholder="Nhập tên tài khoản" />
             </Form.Item>
@@ -57,6 +81,8 @@ const Register: React.FC = () => {
               label="Họ và Tên"
               name="name"
               rules={[{ required: true, message: 'Vui lòng nhập họ và tên!' }]}
+              validateStatus={form.getFieldError('name').length > 0 ? 'error' : ''}
+              help={form.getFieldError('name')}
             >
               <Input placeholder="Nhập họ và tên" />
             </Form.Item>
@@ -68,6 +94,8 @@ const Register: React.FC = () => {
                 { required: true, message: 'Vui lòng nhập số điện thoại!' },
                 { pattern: /^[0-9]{10}$/, message: 'Số điện thoại không hợp lệ!' },
               ]}
+              validateStatus={form.getFieldError('phone').length > 0 ? 'error' : ''}
+              help={form.getFieldError('phone')}
             >
               <Input placeholder="Nhập số điện thoại" />
             </Form.Item>
@@ -79,6 +107,8 @@ const Register: React.FC = () => {
                 { required: true, message: 'Vui lòng nhập email!' },
                 { type: 'email', message: 'Email không hợp lệ!' },
               ]}
+              validateStatus={form.getFieldError('email').length > 0 ? 'error' : ''}
+              help={form.getFieldError('email')}
             >
               <Input placeholder="Nhập email của bạn" />
             </Form.Item>
@@ -116,7 +146,9 @@ const Register: React.FC = () => {
             <Form.Item
               label="Giới tính"
               name="gender"
-              initialValue="other"
+              rules={[{ required: true, message: 'Vui lòng chọn giới tính!' }]}
+              validateStatus={form.getFieldError('gender').length > 0 ? 'error' : ''}
+              help={form.getFieldError('gender')}
             >
               <Select placeholder="Chọn giới tính">
                 <Option value="male">Nam</Option>
@@ -129,6 +161,8 @@ const Register: React.FC = () => {
               label="Năm sinh"
               name="birthYear"
               rules={[{ required: true, message: 'Vui lòng chọn năm sinh!' }]}
+              validateStatus={form.getFieldError('birthYear').length > 0 ? 'error' : ''}
+              help={form.getFieldError('birthYear')}
             >
               <DatePicker
                 picker="year"
@@ -146,6 +180,8 @@ const Register: React.FC = () => {
                     value ? Promise.resolve() : Promise.reject(new Error('Bạn phải đồng ý với các chính sách!')),
                 },
               ]}
+              validateStatus={form.getFieldError('acceptTerms').length > 0 ? 'error' : ''}
+              help={form.getFieldError('acceptTerms')}
             >
               <Checkbox>
                 Tôi đồng ý với các <a href="/terms">chính sách</a> của website
@@ -156,12 +192,14 @@ const Register: React.FC = () => {
               <Button type="primary" htmlType="submit" className="w-full bg-blue-500" disabled={loading}>
                 {loading ? 'Đang đăng ký...' : 'Đăng Ký'}
               </Button>
-              {error && <p className="text-red-500 text-center mt-2">{error}</p>}
+              {error && !form.getFieldError('username').length && !form.getFieldError('email').length && (
+                <p className="text-red-500 text-center mt-2">{error}</p>
+              )}
             </Form.Item>
           </Form>
 
           <div className="text-center mt-4">
-            <p className="text-gray-600">
+            <p className="text-gray-500">
               Bạn đã có tài khoản?{' '}
               <span
                 className="text-blue-500 cursor-pointer hover:underline"
