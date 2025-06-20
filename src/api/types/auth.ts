@@ -1,10 +1,12 @@
+// api/types/auth.ts
 export interface LoginRequest {
   username: string;
   password: string;
 }
 
 export interface LoginResponse {
-  token: string;
+  token: string; // Giả định API login-google trả về token
+  // Nếu BE trả về thêm dữ liệu (ví dụ: user info), thêm vào đây
 }
 
 export interface RegisterRequest {
@@ -18,7 +20,7 @@ export interface RegisterRequest {
 }
 
 export interface RegisterResponse {
-  success?: boolean; // Optional vì server hiện chỉ trả message
+  success?: boolean;
   message?: string;
   otpRequired?: boolean;
 }

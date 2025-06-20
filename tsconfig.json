@@ -8,7 +8,7 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": ["DOM", "DOM.Iterable", "ESNext", "ES2015"], // Add ES2015 for Set, Map, Iterable, Symbol
+    "lib": ["DOM", "DOM.Iterable", "ESNext", "ES2015"],
     "useDefineForClassFields": true,
     "allowJs": false,
     "skipLibCheck": true,
@@ -17,14 +17,13 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Bundler", // Use 'Bundler' for Vite compatibility
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "allowImportingTsExtensions": true, // Allow .tsx imports
-    "types": ["react", "react-dom", "node"]
-    
+    "allowImportingTsExtensions": true,
+    "types": [] // Xóa hoặc để trống để nhận tất cả khai báo
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
