@@ -131,7 +131,7 @@ const Navbar: React.FC = () => {
                     {(userRole === 'Manager' || userRole === 'Admin') && (
                       <li
                         className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleNavigate('/manager-dashboard')}
+                        onClick={() => handleNavigate('/manager/dashboard')}
                       >
                         Bảng Điều Khiển Quản Lý
                       </li>
@@ -162,7 +162,7 @@ const Navbar: React.FC = () => {
                 onClick={() => handleNavigate('/login')}
                 className="text-black font-bold !text-black hover:!text-black"
               >
-                Đăng nhập/Đang ký
+                Đăng nhập/Đăng ký
               </Button>
             </>
           )}

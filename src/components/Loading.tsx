@@ -5,7 +5,7 @@ import * as THREE from 'three';
 
 const TerrariumModel: React.FC = () => {
   const terrariumRef = useRef<THREE.Group>(null);
-  const { scene } = useGLTF('/models/terrarium1.glb');
+  const { scene } = useGLTF('/models/terrarium2.glb');
 
   useEffect(() => {
     console.log('Scene loaded:', scene); // Debug: Kiểm tra scene

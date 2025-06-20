@@ -1,10 +1,13 @@
-import { Suspense, lazy } from 'react';
+import  { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import Loading from '../components/Loading';
 
-// Lazy load tất cả components
+
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
+const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
+const AdminLayout = lazy(() => import('../components/admin/AdminLayout'));
+const ManagerLayout = lazy(() => import('../components/manager/ManagerLayout'));
 const TerrariumList = lazy(() => import('../components/manager/TerrariumList'));
 const TerrariumCreate = lazy(() => import('../components/manager/TerrariumCreate'));
 const TerrariumEdit = lazy(() => import('../components/manager/TerrariumEdit'));
@@ -72,15 +75,17 @@ const AppRoutes = () => {
 
       {/* Customer Routes */}
       <Route path="customer-dashboard" element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}>
-        <Route index element={<Suspense fallback={<Loading />}><CustomerDashboard /></Suspense>} />
-        <Route path="orders" element={<Suspense fallback={<Loading />}><Orders /></Suspense>} />
-        <Route path="notifications" element={<Suspense fallback={<Loading />}><Notifications /></Suspense>} />
-        <Route path="favorites" element={<Suspense fallback={<Loading />}><Favorites /></Suspense>} />
-        <Route path="wishlist" element={<Suspense fallback={<Loading />}><Wishlist /></Suspense>} />
-        <Route path="layouts" element={<Suspense fallback={<Loading />}><SavedLayouts /></Suspense>} />
-        <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
-        <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
-        <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
+        <Route element={<Suspense fallback={<Loading />}><CustomerLayout /></Suspense>}>
+          <Route index element={<Suspense fallback={<Loading />}><CustomerDashboard /></Suspense>} />
+          <Route path="orders" element={<Suspense fallback={<Loading />}><Orders /></Suspense>} />
+          <Route path="notifications" element={<Suspense fallback={<Loading />}><Notifications /></Suspense>} />
+          <Route path="favorites" element={<Suspense fallback={<Loading />}><Favorites /></Suspense>} />
+          <Route path="wishlist" element={<Suspense fallback={<Loading />}><Wishlist /></Suspense>} />
+          <Route path="layouts" element={<Suspense fallback={<Loading />}><SavedLayouts /></Suspense>} />
+          <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
+          <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
+          <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
+        </Route>
       </Route>
 
       {/* Staff Routes */}
@@ -90,37 +95,41 @@ const AppRoutes = () => {
 
       {/* Manager Routes */}
       <Route path="manager" element={<PrivateRoute allowedRoles={['Manager', 'Admin']} />}>
-        <Route path="dashboard" element={<Suspense fallback={<Loading />}><ManagerDashboard /></Suspense>} />
-        <Route path="terrarium/list" element={<Suspense fallback={<Loading />}><TerrariumList /></Suspense>} />
-        <Route path="terrarium/create" element={<Suspense fallback={<Loading />}><TerrariumCreate /></Suspense>} />
-        <Route path="terrarium/edit/:id" element={<Suspense fallback={<Loading />}><TerrariumEdit /></Suspense>} />
-        <Route path="shape/list" element={<Suspense fallback={<Loading />}><ShapeList /></Suspense>} />
-        <Route path="shape/create" element={<Suspense fallback={<Loading />}><ShapeCreate /></Suspense>} />
-        <Route path="shape/edit/:id" element={<Suspense fallback={<Loading />}><ShapeEdit /></Suspense>} />
-        <Route path="theme/list" element={<Suspense fallback={<Loading />}><ThemeList /></Suspense>} />
-        <Route path="theme/create" element={<Suspense fallback={<Loading />}><ThemeCreate /></Suspense>} />
-        <Route path="theme/edit/:id" element={<Suspense fallback={<Loading />}><ThemeEdit /></Suspense>} />
+        <Route element={<Suspense fallback={<Loading />}><ManagerLayout /></Suspense>}>
+          <Route path="dashboard" element={<Suspense fallback={<Loading />}><ManagerDashboard /></Suspense>} />
+          <Route path="terrarium/list" element={<Suspense fallback={<Loading />}><TerrariumList /></Suspense>} />
+          <Route path="terrarium/create" element={<Suspense fallback={<Loading />}><TerrariumCreate /></Suspense>} />
+          <Route path="terrarium/edit/:id" element={<Suspense fallback={<Loading />}><TerrariumEdit /></Suspense>} />
+          <Route path="shape/list" element={<Suspense fallback={<Loading />}><ShapeList /></Suspense>} />
+          <Route path="shape/create" element={<Suspense fallback={<Loading />}><ShapeCreate /></Suspense>} />
+          <Route path="shape/edit/:id" element={<Suspense fallback={<Loading />}><ShapeEdit /></Suspense>} />
+          <Route path="theme/list" element={<Suspense fallback={<Loading />}><ThemeList /></Suspense>} />
+          <Route path="theme/create" element={<Suspense fallback={<Loading />}><ThemeCreate /></Suspense>} />
+          <Route path="theme/edit/:id" element={<Suspense fallback={<Loading />}><ThemeEdit /></Suspense>} />
+        </Route>
       </Route>
 
       {/* Admin Routes */}
       <Route path="admin" element={<PrivateRoute allowedRoles={['Admin']} />}>
-        <Route index element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
-        <Route path="dashboard" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
-        <Route path="shift-management" element={<Suspense fallback={<Loading />}><ShiftManagement /></Suspense>} />
-        <Route path="overview" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
-        <Route path="accounts/customer" element={<Suspense fallback={<Loading />}><CustomerManagement /></Suspense>} />
-        <Route path="accounts/staff" element={<Suspense fallback={<Loading />}><StaffManagement /></Suspense>} />
-        <Route path="accounts/manager" element={<Suspense fallback={<Loading />}><ManagerManagement /></Suspense>} />
-        <Route path="accounts/shipper" element={<Suspense fallback={<Loading />}><ShipperManagement /></Suspense>} />
-        <Route path="orders/all" element={<Suspense fallback={<Loading />}><AllOrders /></Suspense>} />
-        <Route path="orders/preparing" element={<Suspense fallback={<Loading />}><PreparingOrders /></Suspense>} />
-        <Route path="orders/shipping" element={<Suspense fallback={<Loading />}><ShippingOrders /></Suspense>} />
-        <Route path="orders/completed" element={<Suspense fallback={<Loading />}><CompletedOrders /></Suspense>} />
-        <Route path="orders/canceled" element={<Suspense fallback={<Loading />}><CanceledOrders /></Suspense>} />
-        <Route path="revenue" element={<Suspense fallback={<Loading />}><RevenueReport /></Suspense>} />
-        <Route path="statistics" element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
-        <Route path="settings" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
-        <Route path="reports" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+        <Route element={<Suspense fallback={<Loading />}><AdminLayout /></Suspense>}>
+          <Route index element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="dashboard" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="shift-management" element={<Suspense fallback={<Loading />}><ShiftManagement /></Suspense>} />
+          <Route path="overview" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="accounts/customer" element={<Suspense fallback={<Loading />}><CustomerManagement /></Suspense>} />
+          <Route path="accounts/staff" element={<Suspense fallback={<Loading />}><StaffManagement /></Suspense>} />
+          <Route path="accounts/manager" element={<Suspense fallback={<Loading />}><ManagerManagement /></Suspense>} />
+          <Route path="accounts/shipper" element={<Suspense fallback={<Loading />}><ShipperManagement /></Suspense>} />
+          <Route path="orders/all" element={<Suspense fallback={<Loading />}><AllOrders /></Suspense>} />
+          <Route path="orders/preparing" element={<Suspense fallback={<Loading />}><PreparingOrders /></Suspense>} />
+          <Route path="orders/shipping" element={<Suspense fallback={<Loading />}><ShippingOrders /></Suspense>} />
+          <Route path="orders/completed" element={<Suspense fallback={<Loading />}><CompletedOrders /></Suspense>} />
+          <Route path="orders/canceled" element={<Suspense fallback={<Loading />}><CanceledOrders /></Suspense>} />
+          <Route path="revenue" element={<Suspense fallback={<Loading />}><RevenueReport /></Suspense>} />
+          <Route path="statistics" element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
+          <Route path="settings" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="reports" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+        </Route>
       </Route>
 
       {/* Error Routes */}
