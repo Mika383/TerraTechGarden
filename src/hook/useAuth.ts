@@ -1,13 +1,14 @@
 // hook/useAuth.ts
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { register, login, verifyOTP } from '../api';
+import { register, login, loginWithGoogle, verifyOTP } from '../api';
 import { RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, VerifyOTPRequest, VerifyOTPResponse } from '../api/types/auth';
 import { getRoleFromToken } from '../utils/jwt';
 
 interface AuthHook {
   handleRegister: (data: RegisterRequest) => Promise<void>;
   handleLogin: (data: LoginRequest) => Promise<boolean>;
+  handleGoogleLogin: (accessToken: string) => Promise<boolean>;
   verifyOTP: (otp: string, email: string) => Promise<boolean>;
   loading: boolean;
   error: string | null;
@@ -39,10 +40,10 @@ export const useAuth = (): AuthHook => {
       } else if (response && response.message) {
         setError(response.message);
       } else {
-        setError('Registration failed. Unexpected server response.');
+        setError('Đăng ký thất bại. Phản hồi từ server không hợp lệ.');
       }
     } catch (error: any) {
-      setError(error.message || 'Registration failed. Please try again.');
+      setError(error.message || 'Đăng ký thất bại. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
@@ -57,14 +58,41 @@ export const useAuth = (): AuthHook => {
         localStorage.setItem('authToken', response.token);
         const role = getRoleFromToken();
         if (!role) {
-          setError('Login failed: Role not found in token.');
+          setError('Đăng nhập thất bại: Không tìm thấy vai trò trong token.');
           localStorage.removeItem('authToken');
           return false;
         }
         navigate('/');
         return true;
       }
-      setError('Login failed: No token received.');
+      setError('Đăng nhập thất bại: Không nhận được token.');
+      return false;
+    } catch (error: any) {
+      setError(error.message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async (accessToken: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response: LoginResponse = await loginWithGoogle(accessToken);
+      if (response.token) {
+        console.log('Google Login Token:', response.token); // Thêm dòng này để in token
+        localStorage.setItem('authToken', response.token);
+        const role = getRoleFromToken();
+        if (!role) {
+          setError('Đăng nhập Google thất bại: Không tìm thấy vai trò trong token.');
+          localStorage.removeItem('authToken');
+          return false;
+        }
+        navigate('/');
+        return true;
+      }
+      setError('Đăng nhập Google thất bại: Không nhận được token.');
       return false;
     } catch (error: any) {
       setError(error.message);
@@ -84,7 +112,7 @@ export const useAuth = (): AuthHook => {
           localStorage.setItem('authToken', response.token);
           const role = getRoleFromToken();
           if (!role) {
-            setError('OTP verified but role not found in token.');
+            setError('Xác minh OTP thành công nhưng không tìm thấy vai trò trong token.');
             localStorage.removeItem('authToken');
             return false;
           }
@@ -94,10 +122,10 @@ export const useAuth = (): AuthHook => {
         navigate('/');
         return true;
       }
-      setError(response.message || 'Invalid OTP.');
+      setError(response.message || 'OTP không hợp lệ.');
       return false;
     } catch (error: any) {
-      setError(error.response?.data?.message || error.message || 'Failed to verify OTP.');
+      setError(error.response?.data?.message || error.message || 'Xác minh OTP thất bại.');
       return false;
     } finally {
       setLoading(false);
@@ -107,6 +135,7 @@ export const useAuth = (): AuthHook => {
   return {
     handleRegister,
     handleLogin,
+    handleGoogleLogin,
     verifyOTP: verifyOTPHandler,
     loading,
     error,
