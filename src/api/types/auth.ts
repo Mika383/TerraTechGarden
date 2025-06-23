@@ -5,9 +5,11 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  status: number;
-  message: string;
-  data: string; // Token JWT nằm trong trường data
+  status?: number;           // Cho đăng nhập Google
+  message?: string;         // Cho đăng nhập Google
+  data?: string;            // Token cho đăng nhập Google
+  token?: string;           // Token cho đăng nhập bình thường
+  refreshToken?: string;    // Refresh token cho đăng nhập bình thường
 }
 
 export interface RegisterRequest {

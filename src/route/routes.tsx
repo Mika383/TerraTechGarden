@@ -1,8 +1,7 @@
-import  { Suspense, lazy } from 'react';
+import { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import Loading from '../components/Loading';
-
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -58,8 +57,9 @@ const NotFound = lazy(() => import('../pages/NotFound'));
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Public Routes và Customer Dashboard Routes được bọc bởi Layout */}
       <Route element={<Suspense fallback={<Loading />}><Layout /></Suspense>}>
+        {/* Public Routes */}
         <Route index element={<Suspense fallback={<Loading />}><Home /></Suspense>} />
         <Route path="shop" element={<Suspense fallback={<Loading />}><Shop /></Suspense>} />
         <Route path="membership" element={<Suspense fallback={<Loading />}><Membership /></Suspense>} />
@@ -71,20 +71,25 @@ const AppRoutes = () => {
         <Route path="cart" element={<Suspense fallback={<Loading />}><Cart /></Suspense>} />
         <Route path="checkout" element={<Suspense fallback={<Loading />}><Checkout /></Suspense>} />
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
-      </Route>
 
-      {/* Customer Routes */}
-      <Route path="customer-dashboard" element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}>
-        <Route element={<Suspense fallback={<Loading />}><CustomerLayout /></Suspense>}>
-          <Route index element={<Suspense fallback={<Loading />}><CustomerDashboard /></Suspense>} />
-          <Route path="orders" element={<Suspense fallback={<Loading />}><Orders /></Suspense>} />
-          <Route path="notifications" element={<Suspense fallback={<Loading />}><Notifications /></Suspense>} />
-          <Route path="favorites" element={<Suspense fallback={<Loading />}><Favorites /></Suspense>} />
-          <Route path="wishlist" element={<Suspense fallback={<Loading />}><Wishlist /></Suspense>} />
-          <Route path="layouts" element={<Suspense fallback={<Loading />}><SavedLayouts /></Suspense>} />
-          <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
-          <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
-          <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
+        {/* Customer Dashboard Routes */}
+        <Route
+          path="customer-dashboard"
+          element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
+        >
+          <Route
+            element={<Suspense fallback={<Loading />}><CustomerLayout /></Suspense>}
+          >
+            <Route index element={<Suspense fallback={<Loading />}><CustomerDashboard /></Suspense>} />
+            <Route path="orders" element={<Suspense fallback={<Loading />}><Orders /></Suspense>} />
+            <Route path="notifications" element={<Suspense fallback={<Loading />}><Notifications /></Suspense>} />
+            <Route path="favorites" element={<Suspense fallback={<Loading />}><Favorites /></Suspense>} />
+            <Route path="wishlist" element={<Suspense fallback={<Loading />}><Wishlist /></Suspense>} />
+            <Route path="layouts" element={<Suspense fallback={<Loading />}><SavedLayouts /></Suspense>} />
+            <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
+            <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
+            <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
+          </Route>
         </Route>
       </Route>
 

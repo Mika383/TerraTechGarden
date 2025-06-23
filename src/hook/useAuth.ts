@@ -54,8 +54,17 @@ export const useAuth = (): AuthHook => {
     setError(null);
     try {
       const response: LoginResponse = await login(data);
-      if (response.status === 200 && response.data) {
-        localStorage.setItem('authToken', response.data);
+      let token: string | undefined;
+      if (response.token) {
+        // Trường hợp đăng nhập bình thường
+        token = response.token;
+      } else if (response.status === 200 && response.data) {
+        // Trường hợp đăng nhập thất bại (nếu có)
+        setError('Đăng nhập thất bại: Không nhận được token.');
+        return false;
+      }
+      if (token) {
+        localStorage.setItem('authToken', token);
         const role = getRoleFromToken();
         if (!role) {
           setError('Đăng nhập thất bại: Không tìm thấy vai trò trong token.');
@@ -80,9 +89,14 @@ export const useAuth = (): AuthHook => {
     setError(null);
     try {
       const response: LoginResponse = await loginWithGoogle(accessToken);
+      let token: string | undefined;
       if (response.status === 200 && response.data) {
-        console.log('Google Login Token từ API:', response.data); // Log token từ API
-        localStorage.setItem('authToken', response.data); // Lưu token vào localStorage
+        // Trường hợp đăng nhập Google
+        token = response.data;
+      }
+      if (token) {
+        console.log('Google Login Token từ API:', token);
+        localStorage.setItem('authToken', token);
         const role = getRoleFromToken();
         if (!role) {
           setError('Đăng nhập Google thất bại: Không tìm thấy vai trò trong token.');
