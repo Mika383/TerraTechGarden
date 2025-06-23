@@ -5,8 +5,9 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  token: string; // Giả định API login-google trả về token
-  // Nếu BE trả về thêm dữ liệu (ví dụ: user info), thêm vào đây
+  status: number;
+  message: string;
+  data: string; // Token JWT nằm trong trường data
 }
 
 export interface RegisterRequest {

@@ -1,47 +1,37 @@
 // src/pages/Customer/Login.tsx
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hook/useAuth';
 import { LoginRequest } from '../../api/types/auth';
 import { GoogleOutlined } from '@ant-design/icons';
-
-// Khai báo tạm thời để sửa TS2339
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential: string }) => void;
-          }) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
-}
+import { useGoogleLogin } from '@react-oauth/google';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { handleLogin, handleGoogleLogin, loading, error } = useAuth();
   const [form] = Form.useForm();
-  const [googleScriptLoaded, setGoogleScriptLoaded] = useState(false);
 
-  useEffect(() => {
-    console.log('Google Client ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
-    const checkGoogleScript = () => {
-      if (window.google?.accounts) {
-        console.log('Google Sign-In script đã tải xong.');
-        setGoogleScriptLoaded(true);
-      } else {
-        console.warn('Google Sign-In script chưa tải xong. Đang thử lại...');
-        setTimeout(checkGoogleScript, 500);
+  const login = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        console.log('Access Token từ Google:', tokenResponse.access_token);
+        const success = await handleGoogleLogin(tokenResponse.access_token);
+        if (success) {
+          message.success('Đăng nhập Google thành công');
+          navigate('/');
+        }
+      } catch (err) {
+        console.error('Đăng nhập Google thất bại:', err);
+        message.error('Đăng nhập Google thất bại. Vui lòng thử lại.');
       }
-    };
-    checkGoogleScript();
-  }, []);
+    },
+    onError: (error) => {
+      console.error('Lỗi đăng nhập Google:', error);
+      message.error('Không thể kết nối với Google. Vui lòng thử lại.');
+    },
+    scope: 'email profile',
+  });
 
   const onFinish = async (values: { username: string; password: string }) => {
     const credentials: LoginRequest = {
@@ -55,31 +45,6 @@ const Login: React.FC = () => {
       }
     } catch (err) {
       // Lỗi được xử lý trong useAuth
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    if (!googleScriptLoaded || !window.google?.accounts) {
-      message.error('Không thể kết nối với Google. Vui lòng thử lại sau.');
-      console.error('Google Sign-In script chưa sẵn sàng.');
-      return;
-    }
-    try {
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        callback: async (response: any) => {
-          const accessToken = response.credential;
-          console.log('Google ID Token:', accessToken);
-          const success = await handleGoogleLogin(accessToken);
-          if (success) {
-            navigate('/');
-          }
-        },
-      });
-      window.google.accounts.id.prompt();
-    } catch (err) {
-      console.error('Đăng nhập Google thất bại:', err);
-      message.error('Đăng nhập Google thất bại. Vui lòng thử lại.');
     }
   };
 
@@ -127,10 +92,10 @@ const Login: React.FC = () => {
             <p className="text-gray-600">Hoặc đăng nhập với:</p>
             <Button
               icon={<GoogleOutlined />}
-              onClick={handleGoogleSignIn}
+              onClick={() => login()}
               className="w-full mt-2"
               loading={loading}
-              disabled={loading || !googleScriptLoaded}
+              disabled={loading}
             >
               Đăng nhập bằng Google
             </Button>
