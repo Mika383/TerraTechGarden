@@ -1,155 +1,130 @@
-// src/components/FloatingChat.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
+import { Button, Input } from 'antd';
+import { MessageOutlined, InfoCircleOutlined, LayoutOutlined, FileImageOutlined, CloseOutlined } from '@ant-design/icons';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const FloatingChat: React.FC = () => {
   const location = useLocation();
   const [activeChat, setActiveChat] = useState<string | null>(null);
+  const chatButtonsRef = useRef<HTMLDivElement>(null);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
 
-  // Ẩn FloatingChat trên trang Checkout
+  useEffect(() => {
+    if (chatButtonsRef.current) {
+      const buttons = Array.from(chatButtonsRef.current.children);
+      gsap.fromTo(
+        buttons,
+        { opacity: 0, x: 20 },
+        {
+          opacity: 1,
+          x: 0,
+          duration: 0.8,
+          stagger: 0.1,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: chatButtonsRef.current,
+            start: 'top 80%',
+          },
+        }
+      );
+    }
+
+    if (activeChat && chatWindowRef.current) {
+      gsap.fromTo(
+        chatWindowRef.current,
+        { opacity: 0, scale: 0.8 },
+        { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.7)' }
+      );
+    }
+  }, [activeChat]);
+
   if (location.pathname === '/checkout') {
     return null;
   }
 
-  // Đóng/mở khung chat
   const toggleChat = (chatType: string) => {
-    if (activeChat === chatType) {
-      setActiveChat(null); // Đóng nếu đã mở
-    } else {
-      setActiveChat(chatType); // Mở khung chat mới
-    }
+    setActiveChat(activeChat === chatType ? null : chatType);
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
-      {/* Nút Chat */}
-      <div className="flex flex-col items-end space-y-3">
-        {/* Nút Chat với CSKH */}
+    <div className="fixed bottom-6 right-6 z-50 font-roboto">
+      <div ref={chatButtonsRef} className="flex flex-col items-end space-y-3">
         <div className="relative group">
-          <button
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<MessageOutlined />}
+            size="large"
+            className="bg-blue-600 hover:bg-blue-700"
             onClick={() => toggleChat('support')}
-            className="bg-blue-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-blue-600 transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5v-2a2 2 0 012-2h10a2 2 0 012 2v2h-4m-6 0h6"
-              />
-            </svg>
-          </button>
+          />
           <span className="absolute right-14 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
             Chat với CSKH
           </span>
         </div>
-
-        {/* Nút Chat với AI - Thông tin Terrarium */}
         <div className="relative group">
-          <button
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<InfoCircleOutlined />}
+            size="large"
+            className="bg-green-600 hover:bg-green-700"
             onClick={() => toggleChat('info')}
-            className="bg-green-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-green-600 transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </button>
+          />
           <span className="absolute right-14 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
             Hỏi thông tin Terrarium
           </span>
         </div>
-
-        {/* Nút Chat với AI - Tạo layout Terrarium */}
         <div className="relative group">
-          <button
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<LayoutOutlined />}
+            size="large"
+            className="bg-purple-600 hover:bg-purple-700"
             onClick={() => toggleChat('layout')}
-            className="bg-purple-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-purple-600 transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
-          </button>
+          />
           <span className="absolute right-14 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
             Tạo layout Terrarium
           </span>
         </div>
-
-        {/* Nút Chat với AI - Phân tích hình ảnh */}
         <div className="relative group">
-          <button
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<FileImageOutlined />}
+            size="large"
+            className="bg-orange-600 hover:bg-orange-700"
             onClick={() => toggleChat('analysis')}
-            className="bg-orange-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-orange-600 transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4-4m0 0l4 4m-4-4V4m4 12l4-4m-4 4V4"
-              />
-            </svg>
-          </button>
+          />
           <span className="absolute right-14 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
             Phân tích bể Terrarium
           </span>
         </div>
       </div>
 
-      {/* Khung Chat */}
       {activeChat && (
-        <div className="fixed bottom-24 right-6 w-80 h-96 bg-white rounded-lg shadow-lg flex flex-col">
-          <div className="bg-gray-100 p-4 rounded-t-lg flex justify-between items-center">
+        <div
+          ref={chatWindowRef}
+          className="fixed bottom-24 right-6 w-80 h-96 bg-white rounded-lg shadow-lg flex flex-col"
+        >
+          <div className="bg-green-600 text-white p-4 rounded-t-lg flex justify-between items-center">
             <h3 className="text-lg font-semibold">
               {activeChat === 'support' && 'Chat với CSKH'}
               {activeChat === 'info' && 'Hỏi thông tin Terrarium'}
               {activeChat === 'layout' && 'Tạo layout Terrarium'}
               {activeChat === 'analysis' && 'Phân tích bể Terrarium'}
             </h3>
-            <button onClick={() => setActiveChat(null)} className="text-gray-500 hover:text-gray-700">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <Button
+              type="text"
+              icon={<CloseOutlined />}
+              className="text-white hover:text-yellow-500"
+              onClick={() => setActiveChat(null)}
+            />
           </div>
           <div className="flex-1 p-4 overflow-y-auto">
             {activeChat === 'support' && (
@@ -172,19 +147,24 @@ const FloatingChat: React.FC = () => {
                 <p className="text-gray-600 mb-2">
                   Chào bạn! Tôi là AI Terrarium Analyzer. Vui lòng tải lên hình ảnh bể Terrarium của bạn.
                 </p>
-                <input type="file" accept="image/*" className="w-full p-2 border rounded-lg" />
+                <Input type="file" accept="image/*" className="w-full p-2 border rounded-lg" />
               </div>
             )}
           </div>
           <div className="p-4 border-t">
-            <input
-              type="text"
+            <Input
               placeholder="Nhập tin nhắn..."
-              className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500"
             />
           </div>
         </div>
       )}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        .font-roboto {
+          font-family: 'Roboto', sans-serif;
+        }
+      `}</style>
     </div>
   );
 };

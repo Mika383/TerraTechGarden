@@ -57,9 +57,7 @@ const NotFound = lazy(() => import('../pages/NotFound'));
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public Routes và Customer Dashboard Routes được bọc bởi Layout */}
       <Route element={<Suspense fallback={<Loading />}><Layout /></Suspense>}>
-        {/* Public Routes */}
         <Route index element={<Suspense fallback={<Loading />}><Home /></Suspense>} />
         <Route path="shop" element={<Suspense fallback={<Loading />}><Shop /></Suspense>} />
         <Route path="membership" element={<Suspense fallback={<Loading />}><Membership /></Suspense>} />
@@ -71,8 +69,6 @@ const AppRoutes = () => {
         <Route path="cart" element={<Suspense fallback={<Loading />}><Cart /></Suspense>} />
         <Route path="checkout" element={<Suspense fallback={<Loading />}><Checkout /></Suspense>} />
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
-
-        {/* Customer Dashboard Routes */}
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
@@ -92,13 +88,9 @@ const AppRoutes = () => {
           </Route>
         </Route>
       </Route>
-
-      {/* Staff Routes */}
       <Route path="staff-dashboard" element={<PrivateRoute allowedRoles={['Staff', 'Manager', 'Admin']} />}>
         <Route index element={<Suspense fallback={<Loading />}><StaffDashboard /></Suspense>} />
       </Route>
-
-      {/* Manager Routes */}
       <Route path="manager" element={<PrivateRoute allowedRoles={['Manager', 'Admin']} />}>
         <Route element={<Suspense fallback={<Loading />}><ManagerLayout /></Suspense>}>
           <Route path="dashboard" element={<Suspense fallback={<Loading />}><ManagerDashboard /></Suspense>} />
@@ -113,8 +105,6 @@ const AppRoutes = () => {
           <Route path="theme/edit/:id" element={<Suspense fallback={<Loading />}><ThemeEdit /></Suspense>} />
         </Route>
       </Route>
-
-      {/* Admin Routes */}
       <Route path="admin" element={<PrivateRoute allowedRoles={['Admin']} />}>
         <Route element={<Suspense fallback={<Loading />}><AdminLayout /></Suspense>}>
           <Route index element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
@@ -136,8 +126,6 @@ const AppRoutes = () => {
           <Route path="reports" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
         </Route>
       </Route>
-
-      {/* Error Routes */}
       <Route path="unauthorized" element={<Suspense fallback={<Loading />}><Unauthorized /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<Loading />}><NotFound /></Suspense>} />
     </Routes>

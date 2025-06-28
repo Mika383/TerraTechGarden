@@ -1,23 +1,98 @@
+import React, { useEffect, useRef } from 'react';
 import { Card, Col, Row } from 'antd';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const benefits = [
-  { title: '24/7 Plant Care Assistant', description: 'Get instant answers to your plant care queries.' },
-  { title: 'Design Your Perfect Setup', description: 'Create custom terrarium layouts with our app.' },
-  { title: 'Smart Plant Health Tracking', description: 'Monitor your terrarium’s conditions and get alerts.' },
+  {
+    title: 'Hỗ Trợ Chăm Sóc Cây 24/7',
+    description: 'Nhận câu trả lời tức thì cho các thắc mắc về chăm sóc cây.',
+  },
+  {
+    title: 'Thiết Kế Terrarium Tùy Chỉnh',
+    description: 'Tạo layout terrarium độc đáo với ứng dụng của chúng tôi.',
+  },
+  {
+    title: 'Theo Dõi Sức Khỏe Cây Thông Minh',
+    description: 'Giám sát điều kiện terrarium và nhận cảnh báo.',
+  },
 ];
 
 const MemberBenefits: React.FC = () => {
+  const benefitsRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gsapContext = useRef<gsap.Context | null>(null);
+
+  useEffect(() => {
+    gsapContext.current = gsap.context(() => {
+      gsap.fromTo(
+        benefitsRef.current,
+        { opacity: 0, y: 50 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 1.3,
+          ease: 'power4.out',
+          scrollTrigger: {
+            trigger: benefitsRef.current,
+            start: 'top 80%',
+            toggleActions: 'play none none reverse',
+          },
+        }
+      );
+
+      cardRefs.current.forEach((card, index) => {
+        if (card) {
+          gsap.fromTo(
+            card,
+            { opacity: 0, y: 30 },
+            {
+              opacity: 1,
+              y: 0,
+              duration: 1,
+              delay: index * 0.3,
+              ease: 'power4.out',
+              scrollTrigger: {
+                trigger: card,
+                start: 'top 85%',
+                toggleActions: 'play none none reverse',
+              },
+            }
+          );
+        }
+      });
+    }, benefitsRef);
+
+    return () => {
+      gsapContext.current?.revert();
+    };
+  }, []);
+
   return (
-    <div className="py-12 bg-gray-100">
-      <h2 className="text-3xl font-bold text-center mb-8">Quyền Lợi Thành Viên</h2>
+    <div ref={benefitsRef} className="py-16 bg-green-50 font-roboto will-change-transform-opacity">
+      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">
+        Quyền Lợi Thành Viên
+      </h2>
       <div className="container mx-auto">
-        <Row gutter={[16, 16]}>
+        <Row gutter={[24, 24]}>
           {benefits.map((benefit, index) => (
             <Col xs={24} md={8} key={index}>
-              <Card>
-                <h3 className="text-xl font-semibold">{benefit.title}</h3>
-                <p className="mt-2">{benefit.description}</p>
-              </Card>
+              <div
+                ref={(el) => {
+                  cardRefs.current[index] = el;
+                }}
+                className="will-change-transform-opacity"
+              >
+                <Card
+                  hoverable
+                  className="shadow-md rounded-lg transition-transform hover:scale-105"
+                >
+                  <h3 className="text-xl font-semibold text-teal-700">{benefit.title}</h3>
+                  <p className="mt-2 text-gray-600">{benefit.description}</p>
+                </Card>
+              </div>
             </Col>
           ))}
         </Row>

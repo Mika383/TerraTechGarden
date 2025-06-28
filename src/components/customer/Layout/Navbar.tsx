@@ -1,202 +1,202 @@
+import React, { useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Button } from 'antd';
-import { ShoppingCartOutlined, SearchOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
-import { useState, useRef } from 'react';
-import { getRoleFromToken } from '../../../utils/jwt'; // Đường dẫn đã được điều chỉnh
+import { Button, Dropdown, MenuProps } from 'antd';
+import { HomeOutlined, ShopOutlined, TeamOutlined, ReadOutlined, InfoCircleOutlined, SearchOutlined, ShoppingCartOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+// Note: Ensure 'getRoleFromToken' is defined in '../../../utils/jwt' or implement it as shown below
+import { getRoleFromToken } from '../../../utils/jwt';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isDropdownVisible, setIsDropdownVisible] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navbarRef = useRef<HTMLDivElement>(null);
+  const logoRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const gsapContext = useRef<gsap.Context | null>(null);
+  // Fallback to null if getRoleFromToken is undefined; replace with actual implementation
+  const userRole = getRoleFromToken ? getRoleFromToken() : null;
+  const isAuthenticated = !!userRole;
 
-  // Lấy role từ token
-  const userRole = getRoleFromToken();
-  const isAuthenticated = !!userRole; // Kiểm tra xem đã đăng nhập chưa
+  useEffect(() => {
+    gsapContext.current = gsap.context(() => {
+      gsap.fromTo(
+        navbarRef.current,
+        { y: -100, opacity: 0 },
+        { y: 0, opacity: 1, duration: 1.2, ease: 'power4.out' }
+      );
+      gsap.fromTo(
+        logoRef.current,
+        { opacity: 0, x: -20 },
+        { opacity: 1, x: 0, duration: 1, delay: 0.3, ease: 'power4.out' }
+      );
+      if (menuRef.current) {
+        const menuItems = Array.from(menuRef.current.children);
+        gsap.fromTo(
+          menuItems,
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 1, delay: 0.5, stagger: 0.15, ease: 'power4.out' }
+        );
+      }
+    }, navbarRef);
+
+    return () => {
+      gsapContext.current?.revert();
+    };
+  }, []);
 
   const handleNavigate = (path: string) => {
     navigate(path);
-    setIsDropdownVisible(false);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
   };
 
-  const handleMouseEnter = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setIsDropdownVisible(true);
-  };
-
-  const handleMouseLeave = () => {
-    timeoutRef.current = setTimeout(() => {
-      setIsDropdownVisible(false);
-    }, 300);
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    navigate('/login');
   };
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Xử lý logout
-  const handleLogout = () => {
-    localStorage.removeItem('authToken'); // Xóa token
-    navigate('/login'); // Chuyển hướng về trang đăng nhập
-  };
+  const dropdownItems: MenuProps['items'] = [
+    ...(userRole === 'User'
+      ? [
+          {
+            key: '1',
+            label: 'Quản Lý Người Dùng',
+            onClick: () => handleNavigate('/customer-dashboard'),
+          },
+        ]
+      : []),
+    ...(userRole === 'Staff' || userRole === 'Manager' || userRole === 'Admin'
+      ? [
+          {
+            key: '2',
+            label: 'Bảng Điều Khiển Nhân Viên',
+            onClick: () => handleNavigate('/staff-dashboard'),
+          },
+        ]
+      : []),
+    ...(userRole === 'Manager' || userRole === 'Admin'
+      ? [
+          {
+            key: '3',
+            label: 'Bảng Điều Khiển Quản Lý',
+            onClick: () => handleNavigate('/manager/dashboard'),
+          },
+        ]
+      : []),
+    ...(userRole === 'Admin'
+      ? [
+          {
+            key: '4',
+            label: 'Bảng Điều Khiển Quản Trị',
+            onClick: () => handleNavigate('/admin/dashboard'),
+          },
+        ]
+      : []),
+    {
+      key: '5',
+      label: (
+        <span className="flex items-center text-red-500">
+          <LogoutOutlined className="mr-2" /> Đăng xuất
+        </span>
+      ),
+      onClick: handleLogout,
+    },
+  ];
 
   return (
-    <nav className="bg-white shadow-md py-4 font-roboto">
-      <div className="container mx-auto flex justify-between items-center relative">
+    <nav
+      ref={navbarRef}
+      className="fixed top-0 left-0 w-full bg-white/80 backdrop-blur-md shadow-md py-4 font-roboto z-50 will-change-transform-opacity"
+    >
+      <div className="container mx-auto flex justify-between items-center">
         <div
-          className="text-2xl font-bold text-green-600 cursor-pointer"
-          onClick={() => handleNavigate('/')}
+          ref={logoRef}
+          className="text-3xl font-bold text-green-600 cursor-pointer hover:text-green-700 transition-colors will-change-transform-opacity"
         >
           TerraTech
         </div>
-        <div className="flex space-x-6">
+        <div ref={menuRef} className="flex space-x-6">
           <Button
             type="link"
+            icon={<HomeOutlined />}
             onClick={() => handleNavigate('/')}
-            className={`text-black font-bold nav-button ${isActive('/') ? 'active' : ''} !text-black hover:!text-black`}
+            className={`!text-teal-700 text-lg font-semibold ${isActive('/') ? 'bg-green-100 !text-green-600' : ''} hover:!text-teal-500 transition-colors flex items-center will-change-transform-opacity`}
           >
             Trang Chủ
           </Button>
           <Button
             type="link"
+            icon={<ShopOutlined />}
             onClick={() => handleNavigate('/shop')}
-            className={`text-black font-bold nav-button ${isActive('/shop') ? 'active' : ''} !text-black hover:!text-black`}
+            className={`!text-teal-700 text-lg font-semibold ${isActive('/shop') ? 'bg-green-100 !text-green-600' : ''} hover:!text-teal-500 transition-colors flex items-center will-change-transform-opacity`}
           >
             Cửa Hàng
           </Button>
           <Button
             type="link"
+            icon={<TeamOutlined />}
             onClick={() => handleNavigate('/membership')}
-            className={`text-black font-bold nav-button ${isActive('/membership') ? 'active' : ''} !text-black hover:!text-black`}
+            className={`!text-teal-700 text-lg font-semibold ${isActive('/membership') ? 'bg-green-100 !text-green-600' : ''} hover:!text-teal-500 transition-colors flex items-center will-change-transform-opacity`}
           >
             Thành Viên
           </Button>
           <Button
             type="link"
+            icon={<ReadOutlined />}
             onClick={() => handleNavigate('/blog')}
-            className={`text-black font-bold nav-button ${isActive('/blog') ? 'active' : ''} !text-black hover:!text-black`}
+            className={`!text-teal-700 text-lg font-semibold ${isActive('/blog') ? 'bg-green-100 !text-green-600' : ''} hover:!text-teal-500 transition-colors flex items-center will-change-transform-opacity`}
           >
             Blog
           </Button>
           <Button
             type="link"
+            icon={<InfoCircleOutlined />}
             onClick={() => handleNavigate('/about')}
-            className={`text-black font-bold nav-button ${isActive('/about') ? 'active' : ''} !text-black hover:!text-black`}
+            className={`!text-teal-700 text-lg font-semibold ${isActive('/about') ? 'bg-green-100 !text-green-600' : ''} hover:!text-teal-500 transition-colors flex items-center will-change-transform-opacity`}
           >
             Giới Thiệu
           </Button>
         </div>
-        <div className="flex space-x-4 relative">
+        <div className="flex space-x-4">
           <Button
             icon={<SearchOutlined />}
-            className="text-black font-bold !text-black hover:!text-black"
+            className="!text-teal-700 hover:!text-teal-500 transition-colors will-change-transform-opacity"
           />
           <Button
             icon={<ShoppingCartOutlined />}
             onClick={() => handleNavigate('/cart')}
-            className={`text-black font-bold nav-button ${isActive('/cart') ? 'active' : ''} !text-black hover:!text-black`}
+            className={`!text-teal-700 ${isActive('/cart') ? 'bg-green-100 !text-green-600' : ''} hover:!text-teal-500 transition-colors will-change-transform-opacity`}
           />
           {isAuthenticated ? (
-            <div
-              className="relative"
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
+            <Dropdown menu={{ items: dropdownItems }} trigger={['hover']}>
               <Button
                 icon={<UserOutlined />}
-                className="text-black font-bold !text-black hover:!text-black"
+                className="!text-teal-700 hover:!text-teal-500 transition-colors will-change-transform-opacity"
               />
-              {isDropdownVisible && (
-                <div
-                  className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg z-10"
-                  onMouseEnter={handleMouseEnter}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <ul className="py-1">
-                    {userRole === 'User' && (
-                      <li
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleNavigate('/customer-dashboard')}
-                      >
-                        Quản Lý Người Dùng
-                      </li>
-                    )}
-                    {(userRole === 'Staff' || userRole === 'Manager' || userRole === 'Admin') && (
-                      <li
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleNavigate('/staff-dashboard')}
-                      >
-                        Bảng Điều Khiển Nhân Viên
-                      </li>
-                    )}
-                    {(userRole === 'Manager' || userRole === 'Admin') && (
-                      <li
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleNavigate('/manager/dashboard')}
-                      >
-                        Bảng Điều Khiển Quản Lý
-                      </li>
-                    )}
-                    {userRole === 'Admin' && (
-                      <li
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleNavigate('/admin/dashboard')}
-                      >
-                        Bảng Điều Khiển Quản Trị
-                      </li>
-                    )}
-                    <li
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-red-500"
-                      onClick={handleLogout}
-                    >
-                      <span className="flex items-center">
-                        <LogoutOutlined className="mr-2" /> Đăng xuất
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-            </div>
+            </Dropdown>
           ) : (
-            <>
-              <Button
-                onClick={() => handleNavigate('/login')}
-                className="text-black font-bold !text-black hover:!text-black"
-              >
-                Đăng nhập/Đăng ký
-              </Button>
-            </>
+            <Button
+              icon={<UserOutlined />}
+              onClick={() => handleNavigate('/login')}
+              className="!text-teal-700 text-lg font-semibold hover:!text-teal-500 transition-colors flex items-center will-change-transform-opacity"
+            >
+              Đăng nhập/Đăng ký
+            </Button>
           )}
         </div>
       </div>
-      <style>
-        {`
-          @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
-          .font-roboto {
-            font-family: 'Roboto', sans-serif;
-          }
-          .ant-btn-link {
-            color: black !important;
-          }
-          .ant-btn-link:hover {
-            color: black !important;
-          }
-          .nav-button {
-            padding: 4px 8px;
-            border-radius: 4px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .active {
-            background-color: #90EE90 !important;
-            color: white !important;
-            text-decoration: none !important;
-          }
-          .active:hover {
-            color: white !important;
-          }
-        `}
-      </style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        .font-roboto {
+          font-family: 'Roboto', sans-serif;
+        }
+        .will-change-transform-opacity {
+          will-change: transform, opacity;
+        }
+      `}</style>
     </nav>
   );
 };
