@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Button, Input } from 'antd';
-import { FacebookOutlined, TwitterOutlined, InstagramOutlined } from '@ant-design/icons';
+import { FacebookOutlined, TwitterOutlined, InstagramOutlined, LinkedinOutlined } from '@ant-design/icons';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -52,10 +52,8 @@ const Footer: React.FC = () => {
 
   return (
     <footer ref={footerRef} className="bg-green-800 text-white py-12 font-roboto">
-      <div className="container mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div ref={(el) => {
-          sectionRefs.current[0] = el;
-        }}>
+      <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div ref={(el) => { sectionRefs.current[0] = el; }}>
           <h3 className="text-xl font-semibold mb-4 text-yellow-500">Về Chúng Tôi</h3>
           <p>SĐT: +84 123 456 789</p>
           <p>Email: support@terratech.com</p>
@@ -63,19 +61,16 @@ const Footer: React.FC = () => {
             Liên Hệ
           </p>
         </div>
-        <div ref={(el) => {
-          sectionRefs.current[1] = el;
-        }}>
+        <div ref={(el) => { sectionRefs.current[1] = el; }}>
           <h3 className="text-xl font-semibold mb-4 text-yellow-500">Theo Dõi Chúng Tôi</h3>
           <div className="flex space-x-4">
             <FacebookOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
             <TwitterOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
             <InstagramOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
+            <LinkedinOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
           </div>
         </div>
-        <div ref={(el) => {
-          sectionRefs.current[2] = el;
-        }}>
+        <div ref={(el) => { sectionRefs.current[2] = el; }}>
           <h3 className="text-xl font-semibold mb-4 text-yellow-500">Bản Tin</h3>
           <p className="mb-4">Đăng ký để nhận các mẹo và ưu đãi mới nhất!</p>
           <div className="flex">
@@ -84,6 +79,15 @@ const Footer: React.FC = () => {
               Đăng Ký
             </Button>
           </div>
+        </div>
+        <div ref={(el) => { sectionRefs.current[3] = el; }}>
+          <h3 className="text-xl font-semibold mb-4 text-yellow-500">Liên Kết Nhanh</h3>
+          <ul className="space-y-2">
+            <li className="cursor-pointer hover:text-yellow-500 transition-colors">Giới Thiệu</li>
+            <li className="cursor-pointer hover:text-yellow-500 transition-colors">Chính Sách Bảo Mật</li>
+            <li className="cursor-pointer hover:text-yellow-500 transition-colors">Điều Khoản Dịch Vụ</li>
+            <li className="cursor-pointer hover:text-yellow-500 transition-colors">Hỗ Trợ</li>
+          </ul>
         </div>
       </div>
       <div className="text-center mt-8">
