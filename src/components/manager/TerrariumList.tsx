@@ -1,72 +1,97 @@
-// TerrariumList.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
+import { notification } from 'antd';
 
 interface Terrarium {
-  id: number;
+  terrariumId: number;
   name: string;
   price: number;
-  category: string;
-  status: 'active' | 'inactive';
-  image: string;
   description: string;
+  stock: number;
+  status: number;
+  environments: string[];
+  shapes: string[];
+  tankMethods: string[];
   createdAt: string;
+  updatedAt: string;
+  bodyHTML: string;
 }
 
 const TerrariumList: React.FC = () => {
   const [terrariums, setTerrariums] = useState<Terrarium[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data - replace with API call
+  // Fetch terrariums from API
   useEffect(() => {
-    const mockData: Terrarium[] = [
-      {
-        id: 1,
-        name: 'Terrarium Rừng Nhiệt Đới',
-        price: 250000,
-        category: 'Tropical',
-        status: 'active',
-        image: '/images/terrarium1.jpg',
-        description: 'Terrarium mô phỏng rừng nhiệt đới với thực vật xanh tươi',
-        createdAt: '2024-01-15',
-      },
-      {
-        id: 2,
-        name: 'Terrarium Sa Mạc',
-        price: 180000,
-        category: 'Desert',
-        status: 'active',
-        image: '/images/terrarium2.jpg',
-        description: 'Terrarium sa mạc với cây xương rồng và đá trang trí',
-        createdAt: '2024-01-10',
-      },
-      {
-        id: 3,
-        name: 'Terrarium Rêu Xanh',
-        price: 150000,
-        category: 'Moss',
-        status: 'inactive',
-        image: '/images/terrarium3.jpg',
-        description: 'Terrarium với rêu xanh tự nhiên',
-        createdAt: '2024-01-05',
-      },
-    ];
-    setTerrariums(mockData);
+    const fetchTerrariums = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await fetch('https://terarium.shop/api/Terrarium/get-all');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.status === 200 && result.data) {
+          // Data structure matches the API response directly
+          setTerrariums(result.data);
+        } else {
+          throw new Error(result.message || 'Failed to fetch terrariums');
+        }
+      } catch (error) {
+        console.error('Error fetching terrariums:', error);
+        setError(error instanceof Error ? error.message : 'An error occurred while fetching terrariums');
+        notification.error({
+          message: 'Lỗi',
+          description: error instanceof Error ? error.message : 'An error occurred while fetching terrariums',
+          placement: 'topRight',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTerrariums();
   }, []);
 
-  const filteredTerrariums = terrariums.filter((terrarium) => {
-    const matchesSearch = terrarium.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory === 'all' || terrarium.category === filterCategory;
-    const matchesStatus = filterStatus === 'all' || terrarium.status === filterStatus;
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
+  const filteredTerrariums = terrariums.filter((terrarium) =>
+    terrarium.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    terrarium.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa terrarium này?')) {
-      setTerrariums(terrariums.filter((t) => t.id !== id));
+      try {
+        const response = await fetch(`https://terarium.shop/api/Terrarium/delete-terraium${id}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Remove from local state
+        setTerrariums(terrariums.filter((t) => t.terrariumId !== id));
+        notification.success({
+          message: 'Thành công',
+          description: 'Terrarium đã được xóa thành công!',
+          placement: 'topRight',
+        });
+      } catch (error) {
+        console.error('Error deleting terrarium:', error);
+        notification.error({
+          message: 'Lỗi',
+          description: 'Có lỗi xảy ra khi xóa terrarium',
+          placement: 'topRight',
+        });
+      }
     }
   };
 
@@ -77,8 +102,52 @@ const TerrariumList: React.FC = () => {
     }).format(price);
   };
 
-  // Use a local placeholder image or a reliable external service
-  const placeholderImage = '/assets/placeholder.jpg'; // Ensure this file exists in public/assets/
+  const getStatusText = (status: number) => {
+    switch (status) {
+      case 1:
+        return 'Hoạt động';
+      case 0:
+        return 'Không hoạt động';
+      default:
+        return 'Không xác định';
+    }
+  };
+
+  const getStatusColor = (status: number) => {
+    switch (status) {
+      case 1:
+        return 'text-green-600 bg-green-50';
+      case 0:
+        return 'text-red-600 bg-red-50';
+      default:
+        return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center space-x-2">
+          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-gray-600">Đang tải dữ liệu...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center space-x-2">
+          <div className="text-red-500">❌</div>
+          <div>
+            <h3 className="text-red-800 font-medium">Có lỗi xảy ra</h3>
+            <p className="text-red-600">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -99,7 +168,7 @@ const TerrariumList: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -110,25 +179,6 @@ const TerrariumList: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <select
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-          >
-            <option value="all">Tất cả danh mục</option>
-            <option value="Tropical">Nhiệt đới</option>
-            <option value="Desert">Sa mạc</option>
-            <option value="Moss">Rêu</option>
-          </select>
-          <select
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="active">Hoạt động</option>
-            <option value="inactive">Không hoạt động</option>
-          </select>
           <div className="flex items-center text-gray-600">
             Tìm thấy {filteredTerrariums.length} kết quả
           </div>
@@ -141,58 +191,48 @@ const TerrariumList: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Hình ảnh</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">ID</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Tên</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Danh mục</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Mô tả</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng tồn</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Trạng thái</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Môi trường</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Hình dạng</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Phương pháp bể</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredTerrariums.map((terrarium) => (
-                <tr key={terrarium.id} className="hover:bg-gray-50">
-                  <td className="py-3 px-4">
-                    <img
-                    //   src={terrarium.image}
-                      alt={terrarium.name}
-                      className="w-16 h-16 object-cover rounded-lg"
-                      onError={(e) => {
-                        // Prevent infinite loop by checking if the src is already the placeholder
-                        if (e.currentTarget.src !== placeholderImage) {
-                          console.warn(`Failed to load image: ${terrarium.image}`);
-                          e.currentTarget.src = placeholderImage;
-                        }
-                      }}
-                    />
-                  </td>
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="font-medium text-gray-900">{terrarium.name}</p>
-                      <p className="text-sm text-gray-500 truncate max-w-xs">
-                        {terrarium.description}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                      {terrarium.category}
-                    </span>
-                  </td>
+                <tr key={terrarium.terrariumId} className="hover:bg-gray-50">
+                  <td className="py-3 px-4 font-medium text-gray-900">{terrarium.terrariumId}</td>
+                  <td className="py-3 px-4 font-medium text-gray-900">{terrarium.name}</td>
+                  <td className="py-3 px-4 text-gray-600">{terrarium.description}</td>
                   <td className="py-3 px-4 font-medium text-gray-900">
                     {formatPrice(terrarium.price)}
                   </td>
+                  <td className="py-3 px-4 text-gray-600">{terrarium.stock}</td>
                   <td className="py-3 px-4">
-                    <span
-                      className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        terrarium.status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {terrarium.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(terrarium.status)}`}>
+                      {getStatusText(terrarium.status)}
                     </span>
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {terrarium.environments.length > 0
+                      ? terrarium.environments.join(', ')
+                      : 'Không có'}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {terrarium.shapes.length > 0
+                      ? terrarium.shapes.join(', ')
+                      : 'Không có'}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {terrarium.tankMethods.length > 0
+                      ? terrarium.tankMethods.join(', ')
+                      : 'Không có'}
                   </td>
                   <td className="py-3 px-4 text-gray-600">
                     {new Date(terrarium.createdAt).toLocaleDateString('vi-VN')}
@@ -200,21 +240,21 @@ const TerrariumList: React.FC = () => {
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
                       <Link
-                        to={`/terrarium/${terrarium.id}`}
+                        to={`/terrarium/${terrarium.terrariumId}`}
                         className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Xem chi tiết"
                       >
                         <Eye className="w-4 h-4" />
                       </Link>
                       <Link
-                        to={`/manager/terrarium/edit/${terrarium.id}`}
+                        to={`/manager/terrarium/edit/${terrarium.terrariumId}`}
                         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
                         title="Chỉnh sửa"
                       >
                         <Edit className="w-4 h-4" />
                       </Link>
                       <button
-                        onClick={() => handleDelete(terrarium.id)}
+                        onClick={() => handleDelete(terrarium.terrariumId)}
                         className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
                         title="Xóa"
                       >
@@ -228,7 +268,7 @@ const TerrariumList: React.FC = () => {
           </table>
         </div>
 
-        {filteredTerrariums.length === 0 && (
+        {filteredTerrariums.length === 0 && !loading && (
           <div className="text-center py-8 text-gray-500">
             Không tìm thấy terrarium nào phù hợp với tiêu chí tìm kiếm
           </div>

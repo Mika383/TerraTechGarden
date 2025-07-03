@@ -2,6 +2,9 @@ import { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import Loading from '../components/Loading';
+import TankMethodList from '../components/manager/TankMethodList';
+import TankMethodCreate from '../components/manager/TankMethodCreate';
+import TankMethodEdit from '../components/manager/TankMethodEdit';
 
 // Lazy-loaded components
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
@@ -11,6 +14,9 @@ const ManagerLayout = lazy(() => import('../components/manager/ManagerLayout'));
 const TerrariumList = lazy(() => import('../components/manager/TerrariumList'));
 const TerrariumCreate = lazy(() => import('../components/manager/TerrariumCreate'));
 const TerrariumEdit = lazy(() => import('../components/manager/TerrariumEdit'));
+const AccessoryList = lazy(() => import('../components/manager/AccessoryList'));
+const AccessoryCreate = lazy(() => import('../components/manager/AccessoryCreate'));
+const AccessoryEdit = lazy(() => import('../components/manager/AccessoryEdit'));
 const ShapeList = lazy(() => import('../components/manager/ShapeList'));
 const ShapeCreate = lazy(() => import('../components/manager/ShapeCreate'));
 const ShapeEdit = lazy(() => import('../components/manager/ShapeEdit'));
@@ -109,12 +115,18 @@ const AppRoutes = () => {
           <Route path="terrarium/list" element={<Suspense fallback={<Loading />}><TerrariumList /></Suspense>} />
           <Route path="terrarium/create" element={<Suspense fallback={<Loading />}><TerrariumCreate /></Suspense>} />
           <Route path="terrarium/edit/:id" element={<Suspense fallback={<Loading />}><TerrariumEdit /></Suspense>} />
+           <Route path="accessory/list" element={<Suspense fallback={<Loading />}><AccessoryList /></Suspense>} />
+          <Route path="accessory/create" element={<Suspense fallback={<Loading />}><AccessoryCreate /></Suspense>} />
+          <Route path="accessory/edit/:id" element={<Suspense fallback={<Loading />}><AccessoryEdit /></Suspense>} />
           <Route path="shape/list" element={<Suspense fallback={<Loading />}><ShapeList /></Suspense>} />
           <Route path="shape/create" element={<Suspense fallback={<Loading />}><ShapeCreate /></Suspense>} />
           <Route path="shape/edit/:id" element={<Suspense fallback={<Loading />}><ShapeEdit /></Suspense>} />
           <Route path="theme/list" element={<Suspense fallback={<Loading />}><ThemeList /></Suspense>} />
           <Route path="theme/create" element={<Suspense fallback={<Loading />}><ThemeCreate /></Suspense>} />
           <Route path="theme/edit/:id" element={<Suspense fallback={<Loading />}><ThemeEdit /></Suspense>} />
+          <Route path="tank-method/list" element={<Suspense fallback={<Loading />}><TankMethodList /></Suspense>} />
+          <Route path="tank-method/create" element={<Suspense fallback={<Loading />}><TankMethodCreate /></Suspense>} />
+          <Route path="tank-method/edit/:id" element={<Suspense fallback={<Loading />}><TankMethodEdit /></Suspense>} />
         </Route>
       </Route>
       <Route path="admin" element={<PrivateRoute allowedRoles={['Admin']} />}>

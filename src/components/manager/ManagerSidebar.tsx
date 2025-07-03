@@ -9,7 +9,7 @@ const ManagerSidebar: React.FC = () => {
     {
       title: 'Tổng quan',
       icon: Home,
-      path: '/manager-dashboard',
+      path: '/manager/dashboard',
     },
     {
       title: 'Quản lý Terrarium',
@@ -24,6 +24,22 @@ const ManagerSidebar: React.FC = () => {
           title: 'Thêm Terrarium',
           icon: Plus,
           path: '/manager/terrarium/create',
+        },
+      ],
+    },
+     {
+      title: 'Quản lý Accessory',
+      icon: Package,
+      submenu: [
+        {
+          title: 'Danh sách Accessory',
+          icon: List,
+          path: '/manager/accessory/list',
+        },
+        {
+          title: 'Thêm Accessory',
+          icon: Plus,
+          path: '/manager/accessory/create',
         },
       ],
     },
@@ -56,6 +72,22 @@ const ManagerSidebar: React.FC = () => {
           title: 'Thêm Chủ đề',
           icon: Plus,
           path: '/manager/theme/create',
+        },
+      ],
+    },
+    {
+      title: 'Quản lý loại bể',
+      icon: Palette,
+      submenu: [
+        {
+          title: 'Danh sách loại bể',
+          icon: List,
+          path: '/manager/tank-method/list',
+        },
+        {
+          title: 'Thêm Chủ đề',
+          icon: Plus,
+          path: '/manager/tank-method/create',
         },
       ],
     },

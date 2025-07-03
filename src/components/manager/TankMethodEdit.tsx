@@ -3,32 +3,32 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { notification } from 'antd';
 
-interface ThemeFormData {
-  environmentId: number;
-  environmentName: string;
-  environmentDescription: string;
+interface TankMethodFormData {
+  tankMethodId: number;
+  tankMethodType: string;
+  tankMethodDescription: string;
 }
 
-const ThemeEdit: React.FC = () => {
+const TankMethodEdit: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<ThemeFormData>({
-    environmentId: 0,
-    environmentName: '',
-    environmentDescription: '',
+  const [formData, setFormData] = useState<TankMethodFormData>({
+    tankMethodId: 0,
+    tankMethodType: '',
+    tankMethodDescription: '',
   });
 
-  // Load existing theme data
+  // Load existing tank method data
   useEffect(() => {
-    const loadTheme = async () => {
+    const loadTankMethod = async () => {
       try {
         setInitialLoading(true);
         setError(null);
         
-        const response = await fetch(`https://terarium.shop/api/Environment/${id}`);
+        const response = await fetch(`https://terarium.shop/api/TankMethod/${id}`);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -38,23 +38,23 @@ const ThemeEdit: React.FC = () => {
         
         if (result.status === 200 && result.data) {
           setFormData({
-            environmentId: result.data.environmentId,
-            environmentName: result.data.environmentName,
-            environmentDescription: result.data.environmentDescription,
+            tankMethodId: result.data.tankMethodId,
+            tankMethodType: result.data.tankMethodType,
+            tankMethodDescription: result.data.tankMethodDescription,
           });
         } else {
-          throw new Error(result.message || 'Failed to load theme');
+          throw new Error(result.message || 'Failed to load tank method');
         }
       } catch (error) {
-        console.error('Error loading theme:', error);
-        setError(error instanceof Error ? error.message : 'An error occurred while loading theme');
+        console.error('Error loading tank method:', error);
+        setError(error instanceof Error ? error.message : 'An error occurred while loading tank method');
       } finally {
         setInitialLoading(false);
       }
     };
 
     if (id) {
-      loadTheme();
+      loadTankMethod();
     }
   }, [id]);
 
@@ -72,15 +72,15 @@ const ThemeEdit: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch(`https://terarium.shop/api/Environment/${id}`, {
+      const response = await fetch(`https://terarium.shop/api/TankMethod/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          environmentId: formData.environmentId,
-          environmentName: formData.environmentName,
-          environmentDescription: formData.environmentDescription,
+          tankMethodId: formData.tankMethodId,
+          tankMethodType: formData.tankMethodType,
+          tankMethodDescription: formData.tankMethodDescription,
         }),
       });
 
@@ -93,20 +93,20 @@ const ThemeEdit: React.FC = () => {
       if (result.status === 200) {
         notification.success({
           message: 'Thành công',
-          description: 'Chủ đề đã được cập nhật thành công!',
+          description: 'Phương pháp tank đã được cập nhật thành công!',
           placement: 'topRight',
         });
-        navigate('/manager/theme/list');
+        navigate('/manager/tank-method/list');
       } else {
-        throw new Error(result.message || 'Failed to update theme');
+        throw new Error(result.message || 'Failed to update tank method');
       }
     } catch (error) {
-      console.error('Error updating theme:', error);
+      console.error('Error updating tank method:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setError(`Có lỗi xảy ra khi cập nhật chủ đề: ${errorMessage}`);
+      setError(`Có lỗi xảy ra khi cập nhật phương pháp tank: ${errorMessage}`);
       notification.error({
         message: 'Lỗi',
-        description: `Có lỗi xảy ra khi cập nhật chủ đề: ${errorMessage}`,
+        description: `Có lỗi xảy ra khi cập nhật phương pháp tank: ${errorMessage}`,
         placement: 'topRight',
       });
     } finally {
@@ -134,7 +134,7 @@ const ThemeEdit: React.FC = () => {
             <h3 className="text-red-800 font-medium">Có lỗi xảy ra</h3>
             <p className="text-red-600">{error}</p>
             <button
-              onClick={() => navigate('/manager/theme/list')}
+              onClick={() => navigate('/manager/tank-method/list')}
               className="mt-2 text-blue-600 hover:text-blue-800"
             >
               Quay lại danh sách
@@ -150,14 +150,14 @@ const ThemeEdit: React.FC = () => {
       {/* Header */}
       <div className="flex items-center space-x-4">
         <button
-          onClick={() => navigate('/manager/theme/list')}
+          onClick={() => navigate('/manager/tank-method/list')}
           className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Chỉnh sửa Chủ đề</h1>
-          <p className="text-gray-600">Cập nhật thông tin chủ đề #{formData.environmentId}</p>
+          <h1 className="text-2xl font-bold text-gray-900">Chỉnh sửa Phương pháp Tank</h1>
+          <p className="text-gray-600">Cập nhật thông tin phương pháp tank #{formData.tankMethodId}</p>
         </div>
       </div>
 
@@ -170,16 +170,16 @@ const ThemeEdit: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tên Chủ đề *
+                    Loại Phương pháp *
                   </label>
                   <input
                     type="text"
-                    name="environmentName"
+                    name="tankMethodType"
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.environmentName}
+                    value={formData.tankMethodType}
                     onChange={handleInputChange}
-                    placeholder="Nhập tên chủ đề"
+                    placeholder="Nhập loại phương pháp"
                   />
                 </div>
 
@@ -188,13 +188,13 @@ const ThemeEdit: React.FC = () => {
                     Mô tả *
                   </label>
                   <textarea
-                    name="environmentDescription"
+                    name="tankMethodDescription"
                     required
                     rows={4}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.environmentDescription}
+                    value={formData.tankMethodDescription}
                     onChange={handleInputChange}
-                    placeholder="Mô tả chi tiết về chủ đề"
+                    placeholder="Mô tả chi tiết về phương pháp tank"
                   />
                 </div>
               </div>
@@ -217,12 +217,12 @@ const ThemeEdit: React.FC = () => {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>{loading ? 'Đang cập nhật...' : 'Cập nhật Chủ đề'}</span>
+                  <span>{loading ? 'Đang cập nhật...' : 'Cập nhật Phương pháp'}</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => navigate('/manager/theme/list')}
+                  onClick={() => navigate('/manager/tank-method/list')}
                   className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
                   disabled={loading}
                 >
@@ -237,4 +237,4 @@ const ThemeEdit: React.FC = () => {
   );
 };
 
-export default ThemeEdit;
+export default TankMethodEdit;
