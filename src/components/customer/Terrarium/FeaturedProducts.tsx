@@ -19,7 +19,6 @@ const featuredProducts = [
     rating: 5,
     purchases: 120,
     image: miniForest,
-    speed: 0.8,
   },
   {
     id: '2',
@@ -30,7 +29,6 @@ const featuredProducts = [
     rating: 4,
     purchases: 85,
     image: desertOasis,
-    speed: 0.9,
   },
   {
     id: '3',
@@ -41,16 +39,16 @@ const featuredProducts = [
     rating: 5,
     purchases: 150,
     image: tropicalParadise,
-    speed: 0.7,
   },
 ];
 
 const FeaturedProducts: React.FC = () => {
   const featuredRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gsapContext = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
+    gsapContext.current = gsap.context(() => {
       gsap.fromTo(
         featuredRef.current,
         { opacity: 0, y: 50 },
@@ -90,12 +88,16 @@ const FeaturedProducts: React.FC = () => {
       });
     }, featuredRef);
 
-    return () => ctx.revert();
+    return () => {
+      gsapContext.current?.revert();
+    };
   }, []);
 
   return (
     <div ref={featuredRef} className="mb-16 font-roboto will-change-transform-opacity">
-      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">Sản Phẩm Nổi Bật</h2>
+      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">
+        Sản Phẩm Nổi Bật
+      </h2>
       <Row gutter={[24, 24]} justify="center">
         {featuredProducts.map((product, index) => (
           <Col xs={24} sm={12} md={8} key={product.id}>
@@ -114,8 +116,6 @@ const FeaturedProducts: React.FC = () => {
                 rating={product.rating}
                 purchases={product.purchases}
                 image={product.image}
-                className="parallax-img"
-                data-speed={product.speed}
               />
             </div>
           </Col>

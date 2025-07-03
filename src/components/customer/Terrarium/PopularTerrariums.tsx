@@ -19,7 +19,6 @@ const popularTerrariums = [
     rating: 4,
     purchases: 200,
     image: terrarium1,
-    speed: 0.8,
   },
   {
     id: '5',
@@ -30,7 +29,6 @@ const popularTerrariums = [
     rating: 5,
     purchases: 130,
     image: terrarium2,
-    speed: 0.9,
   },
   {
     id: '6',
@@ -41,16 +39,16 @@ const popularTerrariums = [
     rating: 4,
     purchases: 95,
     image: terrarium3,
-    speed: 0.7,
   },
 ];
 
 const PopularTerrariums: React.FC = () => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gsapContext = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
+    gsapContext.current = gsap.context(() => {
       gsap.fromTo(
         sectionRef.current,
         { opacity: 0, y: 50 },
@@ -90,12 +88,16 @@ const PopularTerrariums: React.FC = () => {
       });
     }, sectionRef);
 
-    return () => ctx.revert();
+    return () => {
+      gsapContext.current?.revert();
+    };
   }, []);
 
   return (
     <div ref={sectionRef} className="mb-16 font-roboto will-change-transform-opacity">
-      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">Terrarium Phổ Biến</h2>
+      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">
+        Terrarium Phổ Biến
+      </h2>
       <Row gutter={[24, 24]} justify="center">
         {popularTerrariums.map((terrarium, index) => (
           <Col xs={24} sm={12} md={8} key={terrarium.id}>
@@ -114,8 +116,6 @@ const PopularTerrariums: React.FC = () => {
                 rating={terrarium.rating}
                 purchases={terrarium.purchases}
                 image={terrarium.image}
-                className="parallax-img"
-                data-speed={terrarium.speed}
               />
             </div>
           </Col>
