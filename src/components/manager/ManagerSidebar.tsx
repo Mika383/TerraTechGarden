@@ -9,7 +9,7 @@ const ManagerSidebar: React.FC = () => {
     {
       title: 'Tổng quan',
       icon: Home,
-      path: '/manager-dashboard',
+      path: '/manager/dashboard',
     },
     {
       title: 'Quản lý Terrarium',
@@ -24,6 +24,22 @@ const ManagerSidebar: React.FC = () => {
           title: 'Thêm Terrarium',
           icon: Plus,
           path: '/manager/terrarium/create',
+        },
+      ],
+    },
+     {
+      title: 'Quản lý Accessory',
+      icon: Package,
+      submenu: [
+        {
+          title: 'Danh sách Accessory',
+          icon: List,
+          path: '/manager/accessory/list',
+        },
+        {
+          title: 'Thêm Accessory',
+          icon: Plus,
+          path: '/manager/accessory/create',
         },
       ],
     },
