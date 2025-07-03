@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Modal, Button, Input } from 'antd';
 import { useAuth } from '../../../hook/useAuth';
-import { useNavigate } from 'react-router-dom'; // Sử dụng useNavigate
+import { useNavigate } from 'react-router-dom';
+import { ArrowRightOutlined, SyncOutlined } from '@ant-design/icons';
 import api from '../../../api/axios';
+import type { InputRef } from 'antd';
 
 interface OTPModalProps {
   visible: boolean;
@@ -11,9 +13,9 @@ interface OTPModalProps {
 }
 
 const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
-  console.log('OTPModal rendering, visible:', visible, 'email:', email);
   const { loading, error, otp, setOtp, verifyOTP, setError, setLoading } = useAuth();
-  const navigate = useNavigate(); // Sử dụng useNavigate trong OTPModal
+  const navigate = useNavigate();
+  const inputRefs = useRef<InputRef[]>([]);
 
   const handleOTPSubmit = async () => {
     if (!otp || otp.length !== 6) {
@@ -21,24 +23,21 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
       return;
     }
     const payload = { email, otp };
-    console.log('Data sent to verify OTP:', payload);
-    setLoading(true); // Bắt đầu loading
+    setLoading(true);
     try {
       const success = await verifyOTP(otp, email);
       if (success) {
         setOtp('');
-        onCancel(); // Đóng modal
-        console.log('OTP verified successfully, navigating to /login...');
-        navigate('/login'); // Chuyển trang chỉ khi thành công
-        setError(''); // Xóa lỗi sau khi thành công
+        onCancel();
+        navigate('/login');
+        setError('');
       } else {
         setError('Xác thực OTP thất bại. Vui lòng kiểm tra lại mã OTP.');
       }
     } catch (err) {
-      console.error('OTP verification error:', err);
       setError('Lỗi khi xác thực OTP. Vui lòng thử lại.');
     } finally {
-      setLoading(false); // Kết thúc loading
+      setLoading(false);
     }
   };
 
@@ -46,54 +45,111 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
     setLoading(true);
     try {
       const response = await api.post('/api/Users/resend-otp', { email });
-      console.log('Resend OTP response:', response.data);
-      setError(response.data.message || 'OTP has been resent.');
+      setError(response.data.message || 'Mã OTP đã được gửi lại.');
     } catch (error: any) {
-      setError(error.response?.data?.message || 'Failed to resend OTP.');
+      setError(error.response?.data?.message || 'Gửi lại OTP thất bại.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleInputChange = (index: number, value: string) => {
+    const newOtp = otp.split('');
+    newOtp[index] = value.replace(/[^0-9]/g, '');
+    setOtp(newOtp.join(''));
+    if (value && index < 5 && inputRefs.current[index + 1]) {
+      inputRefs.current[index + 1].focus();
+    } else if (!value && index > 0 && inputRefs.current[index - 1]) {
+      inputRefs.current[index - 1].focus();
+    } else if (index === 5 && value && inputRefs.current[index]) {
+      inputRefs.current[index].blur();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6); // Lấy tối đa 6 số
+    if (pastedText.length > 0) {
+      const newOtp = pastedText.padEnd(6, '').split(''); // Đảm bảo đủ 6 ký tự
+      setOtp(newOtp.join(''));
+      // Focus vào ô cuối cùng hoặc ô tiếp theo nếu có
+      const lastFilledIndex = Math.min(pastedText.length - 1, 5);
+      if (inputRefs.current[lastFilledIndex]) {
+        inputRefs.current[lastFilledIndex].focus();
+      }
+    }
+  };
+
   return (
     <Modal
-      title="Xác nhận OTP"
+      title={
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '24px' }}>
+          Yêu Cầu Xác Minh Thêm
+        </div>
+      }
       visible={visible}
-      onOk={handleOTPSubmit}
       onCancel={() => {
         setOtp('');
-        setError(''); // Xóa lỗi khi hủy
+        setError('');
         onCancel();
       }}
-      footer={[
-        <Button key="resend" onClick={handleResendOTP} disabled={loading}>
-          Gửi lại OTP
-        </Button>,
-        <Button
-          key="back"
-          onClick={() => {
-            setOtp('');
-            setError(''); // Xóa lỗi khi hủy
-            onCancel();
-          }}
-        >
-          Hủy
-        </Button>,
-        <Button key="submit" type="primary" loading={loading} onClick={handleOTPSubmit} disabled={otp.length !== 6}>
-          Xác nhận
-        </Button>,
-      ]}
+      footer={null}
+      centered
+      closable={false}
+      width={400}
     >
-      <p>Vui lòng nhập mã OTP 6 chữ số được gửi đến email/số điện thoại của bạn:</p>
-      <Input
-        value={otp}
-        onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
-        maxLength={6}
-        style={{ width: '100%', marginTop: '10px' }}
-        placeholder="Nhập OTP"
-        type="text"
-      />
-      {error && <p className="text-red-500 text-center mt-2">{error}</p>}
+      <div className="text-center">
+        <p>
+          Vì lý do bảo mật, vui lòng nhập mã chúng tôi đã gửi đến {email}.
+        </p>
+        <div className="flex justify-center gap-2 my-4">
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <Input
+              key={index}
+              ref={(el) => {
+                if (el) inputRefs.current[index] = el;
+              }}
+              value={otp[index] || ''}
+              onChange={(e) => handleInputChange(index, e.target.value)}
+              onPaste={(e) => handlePaste(e, index)}
+              onKeyDown={(e) => {
+                if (e.key === 'Backspace' && !otp[index] && index > 0 && inputRefs.current[index - 1]) {
+                  e.preventDefault();
+                  inputRefs.current[index - 1].focus();
+                }
+              }}
+              maxLength={1}
+              style={{ width: '50px', height: '70px', textAlign: 'center', fontSize: '28px', fontWeight: 'bold' }}
+            />
+          ))}
+        </div>
+        {error && <p className="text-red-500 text-center mt-2">{error}</p>}
+        <Button
+          type="primary"
+          icon={<ArrowRightOutlined />}
+          onClick={handleOTPSubmit}
+          disabled={otp.length !== 6 || loading}
+          style={{ background: '#ff4d4f', borderColor: '#ff4d4f', fontSize: '20px', width: '60px', height: '60px', marginTop: '20px', borderRadius: '8px' }}
+        />
+        <div className="mt-4">
+          <Button
+            type="link"
+            icon={<SyncOutlined />}
+            onClick={handleResendOTP}
+            disabled={loading}
+            style={{ padding: '0', fontSize: '16px', color: loading ? '#ccc' : '#000' }}
+          >
+            GỬI LẠI MÃ
+          </Button>
+        </div>
+        <div className="mt-2">
+          <Button type="link" onClick={onCancel} style={{ padding: '0', fontSize: '16px', color: '#000' }}>
+            KHÔNG THỂ ĐĂNG NHẬP?
+          </Button>
+        </div>
+        {/* <div className="mt-4 text-sm text-gray-500">© mobmet.com</div>
+        <div className="mt-2 text-sm text-gray-500">2003</div> */}
+      </div>
     </Modal>
   );
 };
