@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRightOutlined, SyncOutlined } from '@ant-design/icons';
 import api from '../../../api/axios';
 import type { InputRef } from 'antd';
+import { toast } from 'react-toastify';
 
 interface OTPModalProps {
   visible: boolean;
@@ -22,7 +23,6 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
       setError('Vui lòng nhập mã OTP 6 chữ số.');
       return;
     }
-    const payload = { email, otp };
     setLoading(true);
     try {
       const success = await verifyOTP(otp, email);
@@ -30,6 +30,7 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
         setOtp('');
         onCancel();
         navigate('/login');
+        toast.success('Đăng ký thành công! Vui lòng đăng nhập.');
         setError('');
       } else {
         setError('Xác thực OTP thất bại. Vui lòng kiểm tra lại mã OTP.');
@@ -46,6 +47,7 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
     try {
       const response = await api.post('/api/Users/resend-otp', { email });
       setError(response.data.message || 'Mã OTP đã được gửi lại.');
+      toast.info('Mã OTP đã được gửi lại thành công.');
     } catch (error: any) {
       setError(error.response?.data?.message || 'Gửi lại OTP thất bại.');
     } finally {
@@ -68,11 +70,10 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
     e.preventDefault();
-    const pastedText = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6); // Lấy tối đa 6 số
+    const pastedText = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
     if (pastedText.length > 0) {
-      const newOtp = pastedText.padEnd(6, '').split(''); // Đảm bảo đủ 6 ký tự
+      const newOtp = pastedText.padEnd(6, '').split('');
       setOtp(newOtp.join(''));
-      // Focus vào ô cuối cùng hoặc ô tiếp theo nếu có
       const lastFilledIndex = Math.min(pastedText.length - 1, 5);
       if (inputRefs.current[lastFilledIndex]) {
         inputRefs.current[lastFilledIndex].focus();
@@ -124,12 +125,13 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
           ))}
         </div>
         {error && <p className="text-red-500 text-center mt-2">{error}</p>}
+        {loading }
         <Button
           type="primary"
           icon={<ArrowRightOutlined />}
           onClick={handleOTPSubmit}
           disabled={otp.length !== 6 || loading}
-          style={{ background: '#ff4d4f', borderColor: '#ff4d4f', fontSize: '20px', width: '60px', height: '60px', marginTop: '20px', borderRadius: '8px' }}
+          style={{ background: '#1890ff', borderColor: '#1890ff', fontSize: '20px', width: '60px', height: '60px', marginTop: '20px', borderRadius: '8px' }}
         />
         <div className="mt-4">
           <Button
