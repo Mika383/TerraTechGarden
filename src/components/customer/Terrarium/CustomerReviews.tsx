@@ -23,7 +23,11 @@ const reviews = [
   },
 ];
 
-const CustomerReviews: React.FC = () => {
+interface CustomerReviewsProps {
+  className?: string;
+}
+
+const CustomerReviews: React.FC<CustomerReviewsProps> = ({ className }) => {
   const reviewsRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gsapContext = useRef<gsap.Context | null>(null);
@@ -75,7 +79,7 @@ const CustomerReviews: React.FC = () => {
   }, []);
 
   return (
-    <div ref={reviewsRef} className="py-16 bg-gray-100 font-roboto will-change-transform-opacity">
+    <div ref={reviewsRef} className={`py-16 bg-gray-100 font-roboto will-change-transform-opacity ${className || ''}`}>
       <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">
         Đánh Giá Từ Khách Hàng
       </h2>

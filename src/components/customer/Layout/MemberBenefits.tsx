@@ -20,13 +20,16 @@ const benefits = [
   },
 ];
 
-const MemberBenefits: React.FC = () => {
+interface MemberBenefitsProps {
+  className?: string;
+}
+
+const MemberBenefits: React.FC<MemberBenefitsProps> = ({ className }) => {
   const benefitsRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gsapContext = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
-    gsapContext.current = gsap.context(() => {
+    const ctx = gsap.context(() => {
       gsap.fromTo(
         benefitsRef.current,
         { opacity: 0, y: 50 },
@@ -40,41 +43,38 @@ const MemberBenefits: React.FC = () => {
             start: 'top 80%',
             toggleActions: 'play none none reverse',
           },
-        }
+        },
       );
 
       cardRefs.current.forEach((card, index) => {
         if (card) {
           gsap.fromTo(
             card,
-            { opacity: 0, y: 30 },
+            { opacity: 0, y: 40, scale: 0.95 },
             {
               opacity: 1,
               y: 0,
-              duration: 1,
+              scale: 1,
+              duration: 1.2,
               delay: index * 0.3,
-              ease: 'power4.out',
+              ease: 'expo.out',
               scrollTrigger: {
                 trigger: card,
                 start: 'top 85%',
                 toggleActions: 'play none none reverse',
               },
-            }
+            },
           );
         }
       });
     }, benefitsRef);
 
-    return () => {
-      gsapContext.current?.revert();
-    };
+    return () => ctx.revert();
   }, []);
 
   return (
-    <div ref={benefitsRef} className="py-16 bg-green-50 font-roboto will-change-transform-opacity">
-      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">
-        Quyền Lợi Thành Viên
-      </h2>
+    <div ref={benefitsRef} className={`py-16 bg-green-50 font-roboto will-change-transform-opacity ${className || ''}`}>
+      <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">Quyền Lợi Thành Viên</h2>
       <div className="container mx-auto">
         <Row gutter={[24, 24]}>
           {benefits.map((benefit, index) => (
