@@ -1,8 +1,9 @@
-import { Suspense, lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Suspense, lazy, useEffect } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import Loading from '../components/Loading';
 
+// Lazy-loaded components
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
 const AdminLayout = lazy(() => import('../components/admin/AdminLayout'));
@@ -53,6 +54,17 @@ const ManagerDashboard = lazy(() => import('../pages/Manager/ManagerDashboard'))
 const StaffDashboard = lazy(() => import('../pages/Staff/StaffDashboard'));
 const Unauthorized = lazy(() => import('../pages/Unauthorized'));
 const NotFound = lazy(() => import('../pages/NotFound'));
+
+// Component để đặt lại vị trí cuộn
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+};
 
 const AppRoutes = () => {
   return (
@@ -128,6 +140,7 @@ const AppRoutes = () => {
       </Route>
       <Route path="unauthorized" element={<Suspense fallback={<Loading />}><Unauthorized /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<Loading />}><NotFound /></Suspense>} />
+      <Route element={<ScrollToTop />} /> {/* Đặt ScrollToTop ở đây để áp dụng cho tất cả các route */}
     </Routes>
   );
 };
