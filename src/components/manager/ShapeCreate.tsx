@@ -1,108 +1,94 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface ShapeFormData {
-  name: string;
-  description: string;
+  shapeName: string;
+  shapeDescription: string;
+  shapeSize: string;
+  shapeHeight: number;
+  shapeWidth: number;
+  shapeLength: number;
+  shapeVolume: number;
+  shapeMaterial: string;
 }
 
-interface ImageFile {
-  file: File;
-  preview: string;
-  loading: boolean;
-  error?: string;
+interface ShapeFormErrors {
+  shapeName?: string;
+  shapeDescription?: string;
+  shapeSize?: string;
+  shapeHeight?: string;
+  shapeWidth?: string;
+  shapeLength?: string;
+  shapeVolume?: string;
+  shapeMaterial?: string;
 }
 
 const ShapeCreate: React.FC = () => {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ShapeFormData>({
-    name: '',
-    description: '',
+    shapeName: '',
+    shapeDescription: '',
+    shapeSize: '',
+    shapeHeight: 0,
+    shapeWidth: 0,
+    shapeLength: 0,
+    shapeVolume: 0,
+    shapeMaterial: '',
   });
-  const [images, setImages] = useState<ImageFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formErrors, setFormErrors] = useState<Partial<ShapeFormData>>({});
+  const [formErrors, setFormErrors] = useState<ShapeFormErrors>({});
 
   const validateForm = useCallback((): boolean => {
-    const errors: Partial<ShapeFormData> = {};
-    if (!formData.name.trim()) {
-      errors.name = 'Tên hình dạng là bắt buộc';
+    const errors: ShapeFormErrors = {};
+    
+    if (!formData.shapeName.trim()) {
+      errors.shapeName = 'Tên hình dạng là bắt buộc';
     }
-    if (!formData.description.trim()) {
-      errors.description = 'Mô tả là bắt buộc';
+    if (!formData.shapeDescription.trim()) {
+      errors.shapeDescription = 'Mô tả là bắt buộc';
     }
+    if (!formData.shapeSize.trim()) {
+      errors.shapeSize = 'Kích thước là bắt buộc';
+    }
+    if (!formData.shapeMaterial.trim()) {
+      errors.shapeMaterial = 'Chất liệu là bắt buộc';
+    }
+    if (formData.shapeHeight <= 0) {
+      errors.shapeHeight = 'Chiều cao phải lớn hơn 0';
+    }
+    if (formData.shapeWidth <= 0) {
+      errors.shapeWidth = 'Chiều rộng phải lớn hơn 0';
+    }
+    if (formData.shapeLength <= 0) {
+      errors.shapeLength = 'Chiều dài phải lớn hơn 0';
+    }
+    if (formData.shapeVolume <= 0) {
+      errors.shapeVolume = 'Thể tích phải lớn hơn 0';
+    }
+    
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }, [formData]);
 
-  const validateImage = (file: File): { valid: boolean; error?: string } => {
-    
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
-    const maxSize = 10 * 1024 * 1024; // 10MB
-
-    if (!validTypes.includes(file.type)) {
-      return { valid: false, error: 'Chỉ hỗ trợ PNG, JPG, JPEG, GIF' };
-    }
-    if (file.size > maxSize) {
-      return { valid: false, error: 'Kích thước file không được vượt quá 10MB' };
-    }
-    return { valid: true };
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setFormErrors((prev) => ({ ...prev, [name]: '' }));
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    const newImages: ImageFile[] = [];
-
-    for (const file of files) {
-      const { valid, error } = validateImage(file);
-      if (!valid) {
-        toast.error(error);
-        continue;
-      }
-
-      const image: ImageFile = {
-        file,
-        preview: '',
-        loading: true,
-        error: undefined,
-      };
-
-      try {
-        const preview = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Failed to read file'));
-          reader.readAsDataURL(file);
-        });
-        image.preview = preview;
-        image.loading = false;
-      } catch (err) {
-        image.loading = false;
-        image.error = 'Không thể tải hình ảnh';
-        toast.error(`Không thể tải ${file.name}`);
-      }
-
-      newImages.push(image);
-    }
-
-    setImages((prev) => [...prev, ...newImages]);
-  };
-
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  };
+   const handleInputChange = (
+     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+   ) => {
+     const { name, value } = e.target;
+     
+     if (['shapeHeight', 'shapeWidth', 'shapeLength', 'shapeVolume'].includes(name)) {
+       const numericValue = value === '' ? 0 : parseFloat(value);
+       setFormData((prev) => ({ ...prev, [name]: isNaN(numericValue) ? 0 : numericValue }));
+     } else {
+       setFormData((prev) => ({ ...prev, [name]: value }));
+     }
+     
+     if (formErrors[name as keyof ShapeFormErrors]) {
+       setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+     }
+   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,15 +100,26 @@ const ShapeCreate: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      const payload = {
-        ...formData,
-        images: images.map((img) => img.file),
-      };
-      console.log('Submitting shape data:', payload);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      toast.success('Hình dạng đã được tạo thành công!');
-      navigate('/manager/shape/list');
+      const response = await fetch('https://terarium.shop/api/Shape/add-shape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.status === 200 || response.status === 200) {
+        toast.success('Hình dạng đã được tạo thành công!');
+        navigate('/manager/shape/list');
+      } else {
+        throw new Error(result.message || 'Failed to create shape');
+      }
     } catch (error) {
       console.error('Error creating shape:', error);
       toast.error('Có lỗi xảy ra khi tạo hình dạng');
@@ -149,9 +146,9 @@ const ShapeCreate: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Main Information */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-3 space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Thông tin cơ bản</h3>
               <div className="space-y-4">
@@ -161,17 +158,17 @@ const ShapeCreate: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    name="name"
-                    value={formData.name}
+                    name="shapeName"
+                    value={formData.shapeName}
                     onChange={handleInputChange}
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      formErrors.name ? 'border-red-500' : 'border-gray-300'
+                      formErrors.shapeName ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Nhập tên hình dạng"
                     disabled={isSubmitting}
                   />
-                  {formErrors.name && (
-                    <p className="mt-1 text-sm text-red-500">{formErrors.name}</p>
+                  {formErrors.shapeName && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.shapeName}</p>
                   )}
                 </div>
 
@@ -180,19 +177,154 @@ const ShapeCreate: React.FC = () => {
                     Mô tả *
                   </label>
                   <textarea
-                    name="description"
-                    value={formData.description}
+                    name="shapeDescription"
+                    value={formData.shapeDescription}
                     onChange={handleInputChange}
                     rows={4}
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      formErrors.description ? 'border-red-500' : 'border-gray-300'
+                      formErrors.shapeDescription ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Mô tả chi tiết về hình dạng"
                     disabled={isSubmitting}
                   />
-                  {formErrors.description && (
-                    <p className="mt-1 text-sm text-red-500">{formErrors.description}</p>
+                  {formErrors.shapeDescription && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.shapeDescription}</p>
                   )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Kích thước *
+                    </label>
+                    <select
+                      name="shapeSize"
+                      value={formData.shapeSize}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeSize ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      disabled={loading}
+                    >
+                      <option value="">Chọn kích thước</option>
+                      <option value="Small">Nhỏ</option>
+                      <option value="Medium">Trung bình</option>
+                      <option value="Large">Lớn</option>
+                    </select>
+                    {formErrors.shapeSize && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeSize}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chất liệu *
+                    </label>
+                    <input
+                      type="text"
+                      name="shapeMaterial"
+                      value={formData.shapeMaterial}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeMaterial ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Ví dụ: Thủy tinh, Nhựa, Gỗ"
+                      disabled={isSubmitting}
+                    />
+                    {formErrors.shapeMaterial && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeMaterial}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chiều cao * (cm)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeHeight"
+                      value={formData.shapeHeight || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeHeight ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={isSubmitting}
+                    />
+                    {formErrors.shapeHeight && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeHeight}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chiều rộng * (cm)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeWidth"
+                      value={formData.shapeWidth || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeWidth ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={isSubmitting}
+                    />
+                    {formErrors.shapeWidth && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeWidth}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chiều dài * (cm)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeLength"
+                      value={formData.shapeLength || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeLength ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={isSubmitting}
+                    />
+                    {formErrors.shapeLength && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeLength}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Thể tích * (cm³)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeVolume"
+                      value={formData.shapeVolume || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeVolume ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={isSubmitting}
+                    />
+                    {formErrors.shapeVolume && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeVolume}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -200,70 +332,9 @@ const ShapeCreate: React.FC = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Images */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Hình ảnh</h3>
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/gif"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="imageUpload"
-                    disabled={isSubmitting}
-                  />
-                  <label
-                    htmlFor="imageUpload"
-                    className={`cursor-pointer flex flex-col items-center space-y-2 ${
-                      isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    <Upload className="w-8 h-8 text-gray-400" />
-                    <span className="text-sm text-gray-600">Click để tải lên hình ảnh</span>
-                    <span className="text-xs text-gray-500">PNG, JPG, GIF tối đa 10MB</span>
-                  </label>
-                </div>
-
-                {images.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {images.map((image, index) => (
-                      <div key={index} className="relative group">
-                        {image.loading ? (
-                          <div className="w-full h-24 bg-gray-200 rounded-lg flex items-center justify-center">
-                            <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        ) : (
-                          <>
-                            <img
-                              src={image.preview}
-                              alt={`Preview ${index + 1}`}
-                              className="w-full h-24 object-cover rounded-lg"
-                            />
-                            {!isSubmitting && (
-                              <button
-                                type="button"
-                                onClick={() => removeImage(index)}
-                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {image.error && (
-                          <p className="text-xs text-red-500 mt-1">{image.error}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Actions */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Hành động</h3>
               <div className="space-y-3">
                 <button
                   type="submit"

@@ -1,36 +1,100 @@
+import React, { useEffect, useRef } from 'react';
 import { Button, Input } from 'antd';
 import { FacebookOutlined, TwitterOutlined, InstagramOutlined } from '@ant-design/icons';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const Footer: React.FC = () => {
+  const footerRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    gsap.fromTo(
+      footerRef.current,
+      { opacity: 0, y: 50 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 1,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: footerRef.current,
+          start: 'top 80%',
+        },
+      }
+    );
+    sectionRefs.current.forEach((section, index) => {
+      if (section) {
+        gsap.fromTo(
+          section,
+          { opacity: 0, y: 20 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.8,
+            delay: index * 0.2,
+            ease: 'power2.out',
+            scrollTrigger: {
+              trigger: section,
+              start: 'top 85%',
+            },
+          }
+        );
+      }
+    });
+  }, []);
+
+  const handleSubscribe = () => {
+    alert('Đã đăng ký nhận bản tin!');
+  };
+
   return (
-    <footer className="bg-gray-800 text-white py-8">
+    <footer ref={footerRef} className="bg-green-800 text-white py-12 font-roboto">
       <div className="container mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div>
-          <h3 className="text-lg font-semibold mb-4">About Us</h3>
-          <p>Phone: +84 123 456 789</p>
+        <div ref={(el) => {
+          sectionRefs.current[0] = el;
+        }}>
+          <h3 className="text-xl font-semibold mb-4 text-yellow-500">Về Chúng Tôi</h3>
+          <p>SĐT: +84 123 456 789</p>
           <p>Email: support@terratech.com</p>
-          <p>Contact Us</p>
+          <p className="cursor-pointer hover:text-yellow-500 transition-colors" onClick={() => window.location.href = 'mailto:support@terratech.com'}>
+            Liên Hệ
+          </p>
         </div>
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Follow Us</h3>
+        <div ref={(el) => {
+          sectionRefs.current[1] = el;
+        }}>
+          <h3 className="text-xl font-semibold mb-4 text-yellow-500">Theo Dõi Chúng Tôi</h3>
           <div className="flex space-x-4">
-            <FacebookOutlined className="text-2xl" />
-            <TwitterOutlined className="text-2xl" />
-            <InstagramOutlined className="text-2xl" />
+            <FacebookOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
+            <TwitterOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
+            <InstagramOutlined className="text-2xl hover:text-yellow-500 cursor-pointer transition-colors" />
           </div>
         </div>
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Newsletter</h3>
-          <p className="mb-4">Subscribe for the latest tips & offers!</p>
+        <div ref={(el) => {
+          sectionRefs.current[2] = el;
+        }}>
+          <h3 className="text-xl font-semibold mb-4 text-yellow-500">Bản Tin</h3>
+          <p className="mb-4">Đăng ký để nhận các mẹo và ưu đãi mới nhất!</p>
           <div className="flex">
-            <Input placeholder="Enter your email" className="mr-2" />
-            <Button type="primary" className="bg-yellow-500">Subscribe</Button>
+            <Input placeholder="Nhập email của bạn" className="mr-2 rounded-md" />
+            <Button type="primary" className="bg-yellow-500 hover:bg-yellow-600 rounded-md" onClick={handleSubscribe}>
+              Đăng Ký
+            </Button>
           </div>
         </div>
       </div>
       <div className="text-center mt-8">
-        <p>© 2025 TerraTech. All rights reserved.</p>
+        <p>© 2025 TerraTech. Mọi quyền được bảo lưu.</p>
       </div>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        .font-roboto {
+          font-family: 'Roboto', sans-serif;
+        }
+      `}</style>
     </footer>
   );
 };

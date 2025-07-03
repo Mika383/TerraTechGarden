@@ -3,54 +3,54 @@ import { Col, Row } from 'antd';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import TerrariumCard from './TerrariumCard';
-import terrarium1 from '../../../assets/image/4.jpg';
-import terrarium2 from '../../../assets/image/5.jpg';
-import terrarium3 from '../../../assets/image/6.jpg';
+import miniForest from '../../../assets/image/1.jpg';
+import desertOasis from '../../../assets/image/2.jpg';
+import tropicalParadise from '../../../assets/image/3.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const popularTerrariums = [
+const featuredProducts = [
   {
-    id: '4',
-    name: 'Classic Glass Terrarium',
-    description: 'Thiết kế cổ điển với cây xanh tươi mát.',
-    type: 'Classic',
-    price: 599000,
-    rating: 4,
-    purchases: 200,
-    image: terrarium1,
-  },
-  {
-    id: '5',
-    name: 'Modern Cube Terrarium',
-    description: 'Hình khối hiện đại với cây cảnh độc đáo.',
-    type: 'Modern',
-    price: 799000,
+    id: '1',
+    name: 'Mini Forest Terrarium',
+    description: 'Hệ sinh thái nhỏ gọn với cây xanh tươi tốt.',
+    type: 'Forest',
+    price: 699000,
     rating: 5,
-    purchases: 130,
-    image: terrarium2,
+    purchases: 120,
+    image: miniForest,
   },
   {
-    id: '6',
-    name: 'Eco Sphere Terrarium',
-    description: 'Hệ sinh thái tự duy trì trong lồng kính.',
-    type: 'Eco',
-    price: 999000,
+    id: '2',
+    name: 'Desert Oasis Terrarium',
+    description: 'Terrarium chủ đề sa mạc ấn tượng.',
+    type: 'Desert',
+    price: 899000,
     rating: 4,
-    purchases: 95,
-    image: terrarium3,
+    purchases: 85,
+    image: desertOasis,
+  },
+  {
+    id: '3',
+    name: 'Tropical Paradise Terrarium',
+    description: 'Cây nhiệt đới rực rỡ trong lồng kính.',
+    type: 'Tropical',
+    price: 1199000,
+    rating: 5,
+    purchases: 150,
+    image: tropicalParadise,
   },
 ];
 
-const PopularTerrariums: React.FC = () => {
-  const sectionRef = useRef<HTMLDivElement>(null);
+const FeaturedProducts: React.FC = () => {
+  const featuredRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gsapContext = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
     gsapContext.current = gsap.context(() => {
       gsap.fromTo(
-        sectionRef.current,
+        featuredRef.current,
         { opacity: 0, y: 50 },
         {
           opacity: 1,
@@ -58,7 +58,7 @@ const PopularTerrariums: React.FC = () => {
           duration: 1.3,
           ease: 'power4.out',
           scrollTrigger: {
-            trigger: sectionRef.current,
+            trigger: featuredRef.current,
             start: 'top 80%',
             toggleActions: 'play none none reverse',
           },
@@ -69,10 +69,10 @@ const PopularTerrariums: React.FC = () => {
         if (card) {
           gsap.fromTo(
             card,
-            { opacity: 0, x: index % 2 === 0 ? -40 : 40, scale: 0.95 },
+            { opacity: 0, y: 40, scale: 0.95 },
             {
               opacity: 1,
-              x: 0,
+              y: 0,
               scale: 1,
               duration: 1.2,
               delay: index * 0.3,
@@ -86,7 +86,7 @@ const PopularTerrariums: React.FC = () => {
           );
         }
       });
-    }, sectionRef);
+    }, featuredRef);
 
     return () => {
       gsapContext.current?.revert();
@@ -94,13 +94,13 @@ const PopularTerrariums: React.FC = () => {
   }, []);
 
   return (
-    <div ref={sectionRef} className="mb-16 font-roboto will-change-transform-opacity">
+    <div ref={featuredRef} className="mb-16 font-roboto will-change-transform-opacity">
       <h2 className="text-4xl font-bold text-center mb-10 text-teal-700">
-        Terrarium Phổ Biến
+        Sản Phẩm Nổi Bật
       </h2>
       <Row gutter={[24, 24]} justify="center">
-        {popularTerrariums.map((terrarium, index) => (
-          <Col xs={24} sm={12} md={8} key={terrarium.id}>
+        {featuredProducts.map((product, index) => (
+          <Col xs={24} sm={12} md={8} key={product.id}>
             <div
               ref={(el) => {
                 cardRefs.current[index] = el;
@@ -108,14 +108,14 @@ const PopularTerrariums: React.FC = () => {
               className="will-change-transform-opacity"
             >
               <TerrariumCard
-                id={terrarium.id}
-                name={terrarium.name}
-                description={terrarium.description}
-                type={terrarium.type}
-                price={terrarium.price}
-                rating={terrarium.rating}
-                purchases={terrarium.purchases}
-                image={terrarium.image}
+                id={product.id}
+                name={product.name}
+                description={product.description}
+                type={product.type}
+                price={product.price}
+                rating={product.rating}
+                purchases={product.purchases}
+                image={product.image}
               />
             </div>
           </Col>
@@ -125,4 +125,4 @@ const PopularTerrariums: React.FC = () => {
   );
 };
 
-export default PopularTerrariums;
+export default FeaturedProducts;

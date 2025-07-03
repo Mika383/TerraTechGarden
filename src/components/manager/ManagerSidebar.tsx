@@ -75,6 +75,22 @@ const ManagerSidebar: React.FC = () => {
         },
       ],
     },
+    {
+      title: 'Quản lý loại bể',
+      icon: Palette,
+      submenu: [
+        {
+          title: 'Danh sách loại bể',
+          icon: List,
+          path: '/manager/tank-method/list',
+        },
+        {
+          title: 'Thêm Chủ đề',
+          icon: Plus,
+          path: '/manager/tank-method/create',
+        },
+      ],
+    },
   ];
 
   const MenuItem = ({ item, isSubmenu = false }: { item: any; isSubmenu?: boolean }) => {

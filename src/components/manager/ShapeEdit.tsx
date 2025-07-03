@@ -1,13 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface ShapeFormData {
-  id: number;
-  name: string;
-  description: string;
-  images: File[];
-  existingImages: string[];
+  shapeId: number;
+  shapeName: string;
+  shapeDescription: string;
+  shapeSize: string;
+  shapeHeight: number;
+  shapeWidth: number;
+  shapeLength: number;
+  shapeVolume: number;
+  shapeMaterial: string;
+}
+
+interface ShapeFormErrors {
+  shapeName?: string;
+  shapeDescription?: string;
+  shapeSize?: string;
+  shapeHeight?: string;
+  shapeWidth?: string;
+  shapeLength?: string;
+  shapeVolume?: string;
+  shapeMaterial?: string;
+}
+
+interface Shape {
+  shapeId: number;
+  shapeName: string;
+  shapeDescription: string;
+  shapeSize: string;
+  shapeHeight: number;
+  shapeWidth: number;
+  shapeLength: number;
+  shapeVolume: number;
+  shapeMaterial: string;
+}
+
+interface ApiResponse {
+  status: number;
+  message: string;
+  data: Shape;
 }
 
 const ShapeEdit: React.FC = () => {
@@ -16,33 +50,82 @@ const ShapeEdit: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [formData, setFormData] = useState<ShapeFormData>({
-    id: 0,
-    name: '',
-    description: '',
-    images: [],
-    existingImages: [],
+    shapeId: 0,
+    shapeName: '',
+    shapeDescription: '',
+    shapeSize: '',
+    shapeHeight: 0,
+    shapeWidth: 0,
+    shapeLength: 0,
+    shapeVolume: 0,
+    shapeMaterial: '',
   });
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<ShapeFormErrors>({});
+
+  const validateForm = useCallback((): boolean => {
+    const errors: ShapeFormErrors = {};
+    
+    if (!formData.shapeName.trim()) {
+      errors.shapeName = 'Tên hình dạng là bắt buộc';
+    }
+    if (!formData.shapeDescription.trim()) {
+      errors.shapeDescription = 'Mô tả là bắt buộc';
+    }
+    if (!formData.shapeSize.trim()) {
+      errors.shapeSize = 'Kích thước là bắt buộc';
+    }
+    if (!formData.shapeMaterial.trim()) {
+      errors.shapeMaterial = 'Chất liệu là bắt buộc';
+    }
+    if (formData.shapeHeight <= 0) {
+      errors.shapeHeight = 'Chiều cao phải lớn hơn 0';
+    }
+    if (formData.shapeWidth <= 0) {
+      errors.shapeWidth = 'Chiều rộng phải lớn hơn 0';
+    }
+    if (formData.shapeLength <= 0) {
+      errors.shapeLength = 'Chiều dài phải lớn hơn 0';
+    }
+    if (formData.shapeVolume <= 0) {
+      errors.shapeVolume = 'Thể tích phải lớn hơn 0';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData]);
 
   // Load existing shape data
   useEffect(() => {
     const loadShape = async () => {
       try {
-        // Mock data - replace with actual API call
-        const mockData = {
-          id: Number(id),
-          name: 'Hình cầu',
-          description: 'Hình dạng tròn, phù hợp cho các terrarium nhỏ gọn',
-          existingImages: ['/images/shape1.jpg'],
-        };
-
-        setFormData({
-          ...mockData,
-          images: [],
-        });
+        setInitialLoading(true);
+        const response = await fetch(`https://terarium.shop/api/Shape/get-${id}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result: ApiResponse = await response.json();
+        
+        if (result.status === 200) {
+          const shape = result.data;
+          setFormData({
+            shapeId: shape.shapeId,
+            shapeName: shape.shapeName,
+            shapeDescription: shape.shapeDescription,
+            shapeSize: shape.shapeSize,
+            shapeHeight: shape.shapeHeight,
+            shapeWidth: shape.shapeWidth,
+            shapeLength: shape.shapeLength,
+            shapeVolume: shape.shapeVolume,
+            shapeMaterial: shape.shapeMaterial,
+          });
+        } else {
+          throw new Error(result.message || 'Failed to load shape');
+        }
       } catch (error) {
         console.error('Error loading shape:', error);
-        alert('Có lỗi xảy ra khi tải dữ liệu hình dạng');
+        toast.error('Có lỗi xảy ra khi tải dữ liệu hình dạng');
         navigate('/manager/shape/list');
       } finally {
         setInitialLoading(false);
@@ -54,59 +137,68 @@ const ShapeEdit: React.FC = () => {
     }
   }, [id, navigate]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      setFormData((prev) => ({
-        ...prev,
-        images: [...prev.images, ...files],
-      }));
-
-      files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews((prev) => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
+    
+    if (['shapeHeight', 'shapeWidth', 'shapeLength', 'shapeVolume'].includes(name)) {
+      const numericValue = value === '' ? 0 : parseFloat(value);
+      setFormData((prev) => ({ ...prev, [name]: isNaN(numericValue) ? 0 : numericValue }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
-  };
-
-  const removeNewImage = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const removeExistingImage = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      existingImages: prev.existingImages.filter((_, i) => i !== index),
-    }));
+    
+    if (formErrors[name as keyof ShapeFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      console.log('Updating shape data:', formData);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
-      alert('Hình dạng đã được cập nhật thành công!');
-      navigate('/manager/shape/list');
+      const updateData = {
+        shapeId: formData.shapeId,
+        shapeName: formData.shapeName,
+        shapeDescription: formData.shapeDescription,
+        shapeSize: formData.shapeSize,
+        shapeHeight: formData.shapeHeight,
+        shapeWidth: formData.shapeWidth,
+        shapeLength: formData.shapeLength,
+        shapeVolume: formData.shapeVolume,
+        shapeMaterial: formData.shapeMaterial,
+      };
+
+      const response = await fetch(`https://terarium.shop/api/Shape/update-shape-${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.status === 200) {
+        toast.success('Hình dạng đã được cập nhật thành công!');
+        navigate('/manager/shape/list');
+      } else {
+        throw new Error(result.message || 'Failed to update shape');
+      }
     } catch (error) {
       console.error('Error updating shape:', error);
-      alert('Có lỗi xảy ra khi cập nhật hình dạng');
+      toast.error('Có lỗi xảy ra khi cập nhật hình dạng');
     } finally {
       setLoading(false);
     }
@@ -124,25 +216,26 @@ const ShapeEdit: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center space-x-4">
         <button
           onClick={() => navigate('/manager/shape/list')}
-          className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+          className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          disabled={loading}
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Chỉnh sửa Hình dạng</h1>
-          <p className="text-gray-600">Cập nhật thông tin hình dạng #{formData.id}</p>
+          <p className="text-gray-600">Cập nhật thông tin hình dạng #{formData.shapeId}</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Main Information */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-3 space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Thông tin cơ bản</h3>
               <div className="space-y-4">
@@ -152,13 +245,18 @@ const ShapeEdit: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    name="name"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.name}
+                    name="shapeName"
+                    value={formData.shapeName}
                     onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.shapeName ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     placeholder="Nhập tên hình dạng"
+                    disabled={loading}
                   />
+                  {formErrors.shapeName && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.shapeName}</p>
+                  )}
                 </div>
 
                 <div>
@@ -166,14 +264,154 @@ const ShapeEdit: React.FC = () => {
                     Mô tả *
                   </label>
                   <textarea
-                    name="description"
-                    required
-                    rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.description}
+                    name="shapeDescription"
+                    value={formData.shapeDescription}
                     onChange={handleInputChange}
+                    rows={4}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.shapeDescription ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     placeholder="Mô tả chi tiết về hình dạng"
+                    disabled={loading}
                   />
+                  {formErrors.shapeDescription && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.shapeDescription}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Kích thước *
+                    </label>
+                    <select
+                      name="shapeSize"
+                      value={formData.shapeSize}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeSize ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      disabled={loading}
+                    >
+                      <option value="">Chọn kích thước</option>
+                      <option value="Small">Nhỏ</option>
+                      <option value="Medium">Trung bình</option>
+                      <option value="Large">Lớn</option>
+                    </select>
+                    {formErrors.shapeSize && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeSize}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chất liệu *
+                    </label>
+                    <input
+                      type="text"
+                      name="shapeMaterial"
+                      value={formData.shapeMaterial}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeMaterial ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Ví dụ: Thủy tinh, Nhựa, Gỗ"
+                      disabled={loading}
+                    />
+                    {formErrors.shapeMaterial && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeMaterial}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chiều cao * (cm)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeHeight"
+                      value={formData.shapeHeight || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeHeight ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={loading}
+                    />
+                    {formErrors.shapeHeight && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeHeight}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chiều rộng * (cm)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeWidth"
+                      value={formData.shapeWidth || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeWidth ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={loading}
+                    />
+                    {formErrors.shapeWidth && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeWidth}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chiều dài * (cm)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeLength"
+                      value={formData.shapeLength || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeLength ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={loading}
+                    />
+                    {formErrors.shapeLength && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeLength}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Thể tích * (cm³)
+                    </label>
+                    <input
+                      type="number"
+                      name="shapeVolume"
+                      value={formData.shapeVolume || ''}
+                      onChange={handleInputChange}
+                      step="0.1"
+                      min="0"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.shapeVolume ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0"
+                      disabled={loading}
+                    />
+                    {formErrors.shapeVolume && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeVolume}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -181,89 +419,14 @@ const ShapeEdit: React.FC = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Images */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Hình ảnh</h3>
-              <div className="space-y-4">
-                {formData.existingImages.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Hình ảnh hiện tại</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {formData.existingImages.map((image, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={image}
-                            alt={`Existing ${index + 1}`}
-                            className="w-full h-24 object-cover rounded-lg"
-                            onError={(e) => {
-                              e.currentTarget.src = '/assets/placeholder.jpg';
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeExistingImage(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="imageUpload"
-                  />
-                  <label
-                    htmlFor="imageUpload"
-                    className="cursor-pointer flex flex-col items-center space-y-2"
-                  >
-                    <Upload className="w-8 h-8 text-gray-400" />
-                    <span className="text-sm text-gray-600">Thêm hình ảnh mới</span>
-                    <span className="text-xs text-gray-500">PNG, JPG, GIF tối đa 10MB</span>
-                  </label>
-                </div>
-
-                {imagePreviews.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Hình ảnh mới</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {imagePreviews.map((preview, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={preview}
-                            alt={`New Preview ${index + 1}`}
-                            className="w-full h-24 object-cover rounded-lg"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeNewImage(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Actions */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Hành động</h3>
               <div className="space-y-3">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 transition-colors"
                 >
                   {loading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -276,7 +439,8 @@ const ShapeEdit: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/manager/shape/list')}
-                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  disabled={loading}
+                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Hủy
                 </button>

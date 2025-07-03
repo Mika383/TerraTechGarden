@@ -3,17 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { notification } from 'antd';
 
-interface ThemeFormData {
-  environmentName: string;
-  environmentDescription: string;
+interface TankMethodFormData {
+  tankMethodType: string;
+  tankMethodDescription: string;
 }
 
-const ThemeCreate: React.FC = () => {
+const TankMethodCreate: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<ThemeFormData>({
-    environmentName: '',
-    environmentDescription: '',
+  const [formData, setFormData] = useState<TankMethodFormData>({
+    tankMethodType: '',
+    tankMethodDescription: '',
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -29,14 +29,14 @@ const ThemeCreate: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('https://terarium.shop/api/Environment', {
+      const response = await fetch('https://terarium.shop/api/TankMethod', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          environmentName: formData.environmentName,
-          environmentDescription: formData.environmentDescription,
+          tankMethodType: formData.tankMethodType,
+          tankMethodDescription: formData.tankMethodDescription,
         }),
       });
 
@@ -49,18 +49,18 @@ const ThemeCreate: React.FC = () => {
       if (result.status === 200 || result.status === 201) {
         notification.success({
           message: 'Thành công',
-          description: 'Chủ đề đã được tạo thành công!',
+          description: 'Phương pháp tank đã được tạo thành công!',
           placement: 'topRight',
         });
-        navigate('/manager/theme/list');
+        navigate('/manager/tank-method/list');
       } else {
-        throw new Error(result.message || 'Failed to create theme');
+        throw new Error(result.message || 'Failed to create tank method');
       }
     } catch (error) {
-      console.error('Error creating theme:', error);
+      console.error('Error creating tank method:', error);
       notification.error({
         message: 'Lỗi',
-        description: `Có lỗi xảy ra khi tạo chủ đề: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        description: `Có lỗi xảy ra khi tạo phương pháp tank: ${error instanceof Error ? error.message : 'Unknown error'}`,
         placement: 'topRight',
       });
     } finally {
@@ -73,14 +73,14 @@ const ThemeCreate: React.FC = () => {
       {/* Header */}
       <div className="flex items-center space-x-4">
         <button
-          onClick={() => navigate('/manager/theme/list')}
+          onClick={() => navigate('/manager/tank-method/list')}
           className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Thêm Chủ đề Mới</h1>
-          <p className="text-gray-600">Tạo một chủ đề terrarium mới trong hệ thống</p>
+          <h1 className="text-2xl font-bold text-gray-900">Thêm Phương pháp Tank Mới</h1>
+          <p className="text-gray-600">Tạo một phương pháp tank mới trong hệ thống</p>
         </div>
       </div>
 
@@ -93,16 +93,16 @@ const ThemeCreate: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tên Chủ đề *
+                    Loại Phương pháp *
                   </label>
                   <input
                     type="text"
-                    name="environmentName"
+                    name="tankMethodType"
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.environmentName}
+                    value={formData.tankMethodType}
                     onChange={handleInputChange}
-                    placeholder="Nhập tên chủ đề"
+                    placeholder="Nhập loại phương pháp"
                   />
                 </div>
 
@@ -111,13 +111,13 @@ const ThemeCreate: React.FC = () => {
                     Mô tả *
                   </label>
                   <textarea
-                    name="environmentDescription"
+                    name="tankMethodDescription"
                     required
                     rows={4}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.environmentDescription}
+                    value={formData.tankMethodDescription}
                     onChange={handleInputChange}
-                    placeholder="Mô tả chi tiết về chủ đề"
+                    placeholder="Mô tả chi tiết về phương pháp tank"
                   />
                 </div>
               </div>
@@ -140,12 +140,12 @@ const ThemeCreate: React.FC = () => {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>{loading ? 'Đang lưu...' : 'Lưu Chủ đề'}</span>
+                  <span>{loading ? 'Đang lưu...' : 'Lưu Phương pháp'}</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => navigate('/manager/theme/list')}
+                  onClick={() => navigate('/manager/tank-method/list')}
                   className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
                 >
                   Hủy
@@ -159,4 +159,4 @@ const ThemeCreate: React.FC = () => {
   );
 };
 
-export default ThemeCreate;
+export default TankMethodCreate;

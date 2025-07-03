@@ -1,430 +1,638 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 
-interface TerrariumFormData {
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  status: 'active' | 'inactive';
-  images: File[];
-  specifications: {
-    size: string;
-    material: string;
-    weight: string;
-    maintenance: string;
-  };
-  tags: string[];
+// Type definitions from the API
+interface TankMethod {
+  tankMethodId: number;
+  tankMethodType: string;
+  tankMethodDescription: string;
+  terrariumTankMethods: any[];
 }
 
-const TerrariumCreate: React.FC = () => {
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<TerrariumFormData>({
-    name: '',
-    description: '',
-    price: 0,
-    category: '',
-    status: 'active',
-    images: [],
-    specifications: {
-      size: '',
-      material: '',
-      weight: '',
-      maintenance: ''
-    },
-    tags: []
-  });
-  const [currentTag, setCurrentTag] = useState('');
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+interface Shape {
+  shapeId: number;
+  shapeName: string;
+  shapeDescription: string;
+  shapeSize: string;
+  shapeHeight: number;
+  shapeWidth: number;
+  shapeLength: number;
+  shapeVolume: number;
+  shapeMaterial: string;
+}
 
-  const categories = [
-    { value: 'tropical', label: 'Nhiệt đới' },
-    { value: 'desert', label: 'Sa mạc' },
-    { value: 'moss', label: 'Rêu' },
-    { value: 'succulent', label: 'Sen đá' },
-    { value: 'mini', label: 'Mini' },
-    { value: 'large', label: 'Lớn' }
-  ];
+interface Environment {
+  environmentId: number;
+  environmentName: string;
+  environmentDescription: string;
+  terrariumEnvironments: any[];
+}
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    if (name.startsWith('spec_')) {
-      const specName = name.replace('spec_', '');
-      setFormData(prev => ({
-        ...prev,
-        specifications: {
-          ...prev.specifications,
-          [specName]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: name === 'price' ? Number(value) : value
-      }));
-    }
-  };
+interface ApiResponse<T> {
+  status: number;
+  message: string;
+  data: T[];
+}
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        images: [...prev.images, ...files]
-      }));
+interface ApiDropdownProps<T> {
+  apiUrl: string;
+  placeholder: string;
+  valueKey: keyof T;
+  labelKey: keyof T;
+  onSelect?: (value: T) => void;
+  className?: string;
+  disabled?: boolean;
+}
 
-      // Create previews
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews(prev => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
+// API Dropdown Component
+const ApiDropdown = <T extends Record<string, any>>({ 
+  apiUrl, 
+  placeholder, 
+  valueKey, 
+  labelKey,
+  onSelect,
+  className = '',
+  disabled = false
+}: ApiDropdownProps<T>) => {
+  const [data, setData] = useState<T[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [selectedValue, setSelectedValue] = useState<T | null>(null);
 
-  const removeImage = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index)
-    }));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
-  };
+  React.useEffect(() => {
+    fetchData();
+  }, [apiUrl]);
 
-  const addTag = () => {
-    if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, currentTag.trim()]
-      }));
-      setCurrentTag('');
-    }
-  };
-
-  const removeTag = (tagToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
+  const fetchData = async (): Promise<void> => {
     try {
-      // Simulate API call
-      console.log('Submitting terrarium data:', formData);
+      setLoading(true);
+      setError(null);
       
-      // Here you would make the actual API call
-      // await createTerrarium(formData);
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
+      const result: ApiResponse<T> = await response.json();
       
-      alert('Terrarium đã được tạo thành công!');
-      navigate('/manager/terrarium/list');
-    } catch (error) {
-      console.error('Error creating terrarium:', error);
-      alert('Có lỗi xảy ra khi tạo terrarium');
+      if (result.status === 200 && result.data) {
+        setData(result.data);
+      } else {
+        throw new Error(result.message || 'Failed to fetch data');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSelect = (item: T): void => {
+    setSelectedValue(item);
+    setIsOpen(false);
+    if (onSelect) {
+      onSelect(item);
+    }
+  };
+
+  const getDisplayValue = (item: T): string => {
+    const value = item[labelKey];
+    return typeof value === 'string' ? value : String(value || 'Unknown');
+  };
+
+  const getItemValue = (item: T): any => {
+    return item[valueKey];
+  };
+
+  const toggleDropdown = (): void => {
+    if (!disabled && !loading) {
+      setIsOpen(!isOpen);
+    }
+  };
+
+  const getDescriptionKey = (labelKey: keyof T): keyof T => {
+    const labelStr = String(labelKey);
+    const descriptionKey = labelStr.replace('Name', 'Description').replace('Type', 'Description');
+    return descriptionKey as keyof T;
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center space-x-4">
-        <button
-          onClick={() => navigate('/manager/terrarium/list')}
-          className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Thêm Terrarium Mới</h1>
-          <p className="text-gray-600">Tạo một terrarium mới trong hệ thống</p>
+    <div className={`relative ${className}`}>
+      <button
+        onClick={toggleDropdown}
+        disabled={disabled || loading}
+        className={`
+          w-full px-4 py-3 text-left bg-white border border-gray-300 rounded-lg
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          hover:bg-gray-50 transition-colors duration-200
+          ${disabled || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          ${error ? 'border-red-300' : ''}
+        `}
+      >
+        <div className="flex items-center justify-between">
+          <span className={`block truncate ${selectedValue ? 'text-gray-900' : 'text-gray-500'}`}>
+            {loading ? 'Đang tải...' : 
+             selectedValue ? getDisplayValue(selectedValue) : 
+             placeholder}
+          </span>
+          <div className="flex items-center space-x-2">
+            {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+            {error && <AlertCircle className="w-4 h-4 text-red-400" />}
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
         </div>
-      </div>
+      </button>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Information */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Basic Info */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Thông tin cơ bản</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tên Terrarium *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="Nhập tên terrarium"
-                  />
-                </div>
+      {error && (
+        <div className="mt-1 text-sm text-red-600 flex items-center">
+          <AlertCircle className="w-4 h-4 mr-1" />
+          {error}
+          <button
+            onClick={fetchData}
+            className="ml-2 text-blue-600 hover:text-blue-800 underline"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mô tả *
-                  </label>
-                  <textarea
-                    name="description"
-                    required
-                    rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    placeholder="Mô tả chi tiết về terrarium"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Giá (VNĐ) *
-                    </label>
-                    <input
-                      type="number"
-                      name="price"
-                      required
-                      min="0"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={formData.price}
-                      onChange={handleInputChange}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Danh mục *
-                    </label>
-                    <select
-                      name="category"
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={formData.category}
-                      onChange={handleInputChange}
-                    >
-                      <option value="">Chọn danh mục</option>
-                      {categories.map(cat => (
-                        <option key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
+      {isOpen && !loading && !error && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {data.length === 0 ? (
+            <div className="px-4 py-3 text-gray-500 text-center">
+              Không có dữ liệu
             </div>
-
-            {/* Specifications */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Thông số kỹ thuật</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kích thước
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_size"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.size}
-                    onChange={handleInputChange}
-                    placeholder="VD: 20x15x25 cm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Chất liệu
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_material"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.material}
-                    onChange={handleInputChange}
-                    placeholder="VD: Thủy tinh, gỗ"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Trọng lượng
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_weight"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.weight}
-                    onChange={handleInputChange}
-                    placeholder="VD: 2.5 kg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bảo trì
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_maintenance"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.maintenance}
-                    onChange={handleInputChange}
-                    placeholder="VD: Tưới 1 lần/tuần"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tags */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Tags</h3>
-              <div className="space-y-4">
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={currentTag}
-                    onChange={(e) => setCurrentTag(e.target.value)}
-                    placeholder="Nhập tag"
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                  />
-                  <button
-                    type="button"
-                    onClick={addTag}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Thêm
-                  </button>
-                </div>
-                
-                {formData.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {formData.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() => removeTag(tag)}
-                          className="ml-2 text-blue-600 hover:text-blue-800"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
+          ) : (
+            data.map((item) => (
+              <button
+                key={String(getItemValue(item))}
+                onClick={() => handleSelect(item)}
+                className={`
+                  w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors duration-150
+                  ${selectedValue && getItemValue(selectedValue) === getItemValue(item) 
+                    ? 'bg-blue-100 text-blue-900' 
+                    : 'text-gray-900'}
+                `}
+              >
+                <div className="font-medium">{getDisplayValue(item)}</div>
+                {item[getDescriptionKey(labelKey)] && (
+                  <div className="text-sm text-gray-500 mt-1">
+                    {String(item[getDescriptionKey(labelKey)])}
                   </div>
                 )}
-              </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Updated form data interface
+interface TerrariumFormData {
+  terrariumName: string;
+  description: string;
+  price: number;
+  stock: number;
+  status: number;
+  bodyHTML: string;
+  tankMethodType: string;
+  shape: string;
+  environment: string;
+}
+
+interface ApiSelections {
+  tankMethod: TankMethod | null;
+  shape: Shape | null;
+  environment: Environment | null;
+}
+
+const TerrariumCreate: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState<TerrariumFormData>({
+    terrariumName: '',
+    description: '',
+    price: 0,
+    stock: 0,
+    status: 1, // 1 for active, 0 for inactive
+    bodyHTML: '',
+    tankMethodType: '',
+    shape: '',
+    environment: ''
+  });
+
+  const [apiSelections, setApiSelections] = useState<ApiSelections>({
+    tankMethod: null,
+    shape: null,
+    environment: null
+  });
+
+  const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'price' || name === 'stock' || name === 'status' ? Number(value) : value
+    }));
+  };
+
+  const handleApiSelection = (type: keyof ApiSelections, value: TankMethod | Shape | Environment): void => {
+    setApiSelections(prev => ({
+      ...prev,
+      [type]: value
+    }));
+
+    // Update form data with selected values
+    if (type === 'tankMethod') {
+      setFormData(prev => ({
+        ...prev,
+        tankMethodType: (value as TankMethod).tankMethodType
+      }));
+    } else if (type === 'shape') {
+      setFormData(prev => ({
+        ...prev,
+        shape: (value as Shape).shapeName
+      }));
+    } else if (type === 'environment') {
+      setFormData(prev => ({
+        ...prev,
+        environment: (value as Environment).environmentName
+      }));
+    }
+  };
+
+  const validateForm = (): boolean => {
+    if (!formData.terrariumName.trim()) {
+      setSubmitMessage({ type: 'error', text: 'Vui lòng nhập tên terrarium' });
+      return false;
+    }
+    if (!formData.description.trim()) {
+      setSubmitMessage({ type: 'error', text: 'Vui lòng nhập mô tả' });
+      return false;
+    }
+    if (!formData.tankMethodType) {
+      setSubmitMessage({ type: 'error', text: 'Vui lòng chọn phương pháp tank' });
+      return false;
+    }
+    if (!formData.shape) {
+      setSubmitMessage({ type: 'error', text: 'Vui lòng chọn hình dạng' });
+      return false;
+    }
+    if (!formData.environment) {
+      setSubmitMessage({ type: 'error', text: 'Vui lòng chọn môi trường' });
+      return false;
+    }
+    if (formData.price <= 0) {
+      setSubmitMessage({ type: 'error', text: 'Vui lòng nhập giá hợp lệ' });
+      return false;
+    }
+    if (formData.stock < 0) {
+      setSubmitMessage({ type: 'error', text: 'Số lượng tồn kho không thể âm' });
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Clear previous messages
+    setSubmitMessage(null);
+    
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Prepare data for API
+      const apiData = {
+        tankMethodType: formData.tankMethodType,
+        shape: formData.shape,
+        environment: formData.environment,
+        terrariumName: formData.terrariumName,
+        description: formData.description,
+        price: formData.price,
+        stock: formData.stock,
+        status: formData.status,
+        bodyHTML: formData.bodyHTML || formData.description // Use description as bodyHTML if not provided
+      };
+
+      console.log('Submitting terrarium data:', apiData);
+
+      const response = await fetch('https://terarium.shop/api/Terrarium/add-terrarium', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(apiData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('API Response:', result);
+
+      // Check if the operation was successful
+      // The API returns "Save data success" as the message, so we check for that
+      if (result.status === 200 || result.message === "Save data success") {
+        setSubmitMessage({ type: 'success', text: 'Terrarium đã được tạo thành công!' });
+        
+        // Reset form after successful submission
+        setTimeout(() => {
+          setFormData({
+            terrariumName: '',
+            description: '',
+            price: 0,
+            stock: 0,
+            status: 1,
+            bodyHTML: '',
+            tankMethodType: '',
+            shape: '',
+            environment: ''
+          });
+          setApiSelections({
+            tankMethod: null,
+            shape: null,
+            environment: null
+          });
+          setSubmitMessage(null);
+        }, 2000);
+      } else {
+        throw new Error(result.message || 'Có lỗi xảy ra khi tạo terrarium');
+      }
+    } catch (error) {
+      console.error('Error creating terrarium:', error);
+      setSubmitMessage({ 
+        type: 'error', 
+        text: 'Có lỗi xảy ra khi tạo terrarium: ' + (error instanceof Error ? error.message : 'Unknown error')
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goBack = () => {
+    // Navigate back logic here
+    console.log('Navigate back');
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center space-x-4">
+            <button
+              type="button"
+              onClick={goBack}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Thêm Terrarium Mới</h1>
+              <p className="text-gray-600">Tạo một terrarium mới trong hệ thống</p>
             </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Status */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Trạng thái</h3>
-              <select
-                name="status"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={formData.status}
-                onChange={handleInputChange}
-              >
-                <option value="active">Hoạt động</option>
-                <option value="inactive">Không hoạt động</option>
-              </select>
-            </div>
-
-            {/* Images */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Hình ảnh</h3>
-              
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="imageUpload"
-                  />
-                  <label
-                    htmlFor="imageUpload"
-                    className="cursor-pointer flex flex-col items-center space-y-2"
-                  >
-                    <Upload className="w-8 h-8 text-gray-400" />
-                    <span className="text-sm text-gray-600">
-                      Click để tải lên hình ảnh
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      PNG, JPG, GIF tối đa 10MB
-                    </span>
-                  </label>
-                </div>
-
-                {imagePreviews.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {imagePreviews.map((preview, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+          {/* Submit Message */}
+          {submitMessage && (
+            <div className={`p-4 rounded-lg ${
+              submitMessage.type === 'success' 
+                ? 'bg-green-50 border border-green-200 text-green-800' 
+                : 'bg-red-50 border border-red-200 text-red-800'
+            }`}>
+              <div className="flex items-center">
+                {submitMessage.type === 'success' ? (
+                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center mr-3">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
                   </div>
+                ) : (
+                  <AlertCircle className="w-5 h-5 mr-3" />
                 )}
+                {submitMessage.text}
               </div>
             </div>
+          )}
 
-            {/* Actions */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <div className="space-y-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                >
-                  {loading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  <span>{loading ? 'Đang lưu...' : 'Lưu Terrarium'}</span>
-                </button>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Main Information */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* API Selection Section */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Cấu hình Terrarium</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phương pháp Tank *
+                      </label>
+                      <ApiDropdown<TankMethod>
+                        apiUrl="https://terarium.shop/api/TankMethod"
+                        placeholder="Chọn phương pháp tank"
+                        valueKey="tankMethodId"
+                        labelKey="tankMethodType"
+                        onSelect={(value) => handleApiSelection('tankMethod', value)}
+                        className="w-full"
+                      />
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={() => navigate('/manager/terrarium/list')}
-                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
-                >
-                  Hủy
-                </button>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Hình dạng *
+                      </label>
+                      <ApiDropdown<Shape>
+                        apiUrl="https://terarium.shop/api/Shape/get-all"
+                        placeholder="Chọn hình dạng"
+                        valueKey="shapeId"
+                        labelKey="shapeName"
+                        onSelect={(value) => handleApiSelection('shape', value)}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Môi trường *
+                      </label>
+                      <ApiDropdown<Environment>
+                        apiUrl="https://terarium.shop/api/Environment"
+                        placeholder="Chọn môi trường"
+                        valueKey="environmentId"
+                        labelKey="environmentName"
+                        onSelect={(value) => handleApiSelection('environment', value)}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Basic Info */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Thông tin cơ bản</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tên Terrarium *
+                      </label>
+                      <input
+                        type="text"
+                        name="terrariumName"
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={formData.terrariumName}
+                        onChange={handleInputChange}
+                        placeholder="Nhập tên terrarium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Mô tả *
+                      </label>
+                      <textarea
+                        name="description"
+                        required
+                        rows={4}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        placeholder="Mô tả chi tiết về terrarium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Nội dung HTML (Tùy chọn)
+                      </label>
+                      <textarea
+                        name="bodyHTML"
+                        rows={3}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={formData.bodyHTML}
+                        onChange={handleInputChange}
+                        placeholder="Nội dung HTML chi tiết (nếu có)"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Giá (VNĐ) *
+                        </label>
+                        <input
+                          type="number"
+                          name="price"
+                          required
+                          min="0"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={formData.price}
+                          onChange={handleInputChange}
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Tồn kho *
+                        </label>
+                        <input
+                          type="number"
+                          name="stock"
+                          required
+                          min="0"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={formData.stock}
+                          onChange={handleInputChange}
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Trạng thái *
+                        </label>
+                        <select
+                          name="status"
+                          required
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={formData.status}
+                          onChange={handleInputChange}
+                        >
+                          <option value={1}>Hoạt động</option>
+                          <option value={2}>Không hoạt động</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sidebar */}
+              <div className="space-y-6">
+                {/* Selection Summary */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Lựa chọn hiện tại</h3>
+                  <div className="space-y-3">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="font-medium text-gray-700 text-sm">Tank Method</div>
+                      <div className="text-sm text-gray-600">
+                        {apiSelections.tankMethod?.tankMethodType || 'Chưa chọn'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="font-medium text-gray-700 text-sm">Shape</div>
+                      <div className="text-sm text-gray-600">
+                        {apiSelections.shape?.shapeName || 'Chưa chọn'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="font-medium text-gray-700 text-sm">Environment</div>
+                      <div className="text-sm text-gray-600">
+                        {apiSelections.environment?.environmentName || 'Chưa chọn'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <div className="space-y-3">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                    >
+                      {loading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>{loading ? 'Đang lưu...' : 'Lưu Terrarium'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={goBack}
+                      className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

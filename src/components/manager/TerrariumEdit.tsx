@@ -1,24 +1,250 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
-interface TerrariumFormData {
-  id: number;
+// Type definitions for API responses
+interface TerrariumData {
+  terrariumId: number;
   name: string;
   description: string;
   price: number;
-  category: string;
-  status: 'active' | 'inactive';
-  images: File[];
-  existingImages: string[];
-  specifications: {
-    size: string;
-    material: string;
-    weight: string;
-    maintenance: string;
-  };
-  tags: string[];
+  stock: number;
+  status: number;
+  environments: string[];
+  shapes: string[];
+  tankMethods: string[];
+  createdAt: string;
+  updatedAt: string;
+  bodyHTML: string;
 }
+
+interface TerrariumApiResponse {
+  status: number;
+  message: string;
+  data: TerrariumData;
+}
+
+interface TankMethod {
+  tankMethodId: number;
+  tankMethodType: string;
+  tankMethodDescription: string;
+}
+
+interface Shape {
+  shapeId: number;
+  shapeName: string;
+  shapeDescription: string;
+  shapeSize: string;
+  shapeHeight: number;
+  shapeWidth: number;
+  shapeLength: number;
+  shapeVolume: number;
+  shapeMaterial: string;
+}
+
+interface Environment {
+  environmentId: number;
+  environmentName: string;
+  environmentDescription: string;
+}
+
+interface ApiResponse<T> {
+  status: number;
+  message: string;
+  data: T[];
+}
+
+interface TerrariumFormData {
+  terrariumId: number;
+  tankMethodType: string;
+  shape: string;
+  environment: string;
+  terrariumName: string;
+  description: string;
+  price: number;
+  stock: number;
+  status: number; // Changed from string to number
+  bodyHTML: string;
+}
+
+// API Update payload interface
+interface TerrariumUpdatePayload {
+  terrariumId: number;
+  tankMethodType: string;
+  shape: string;
+  environment: string;
+  terrariumName: string;
+  description: string;
+  price: number;
+  stock: number;
+  status: number;
+  bodyHTML: string;
+}
+
+// Reusable API Dropdown Component
+interface ApiDropdownProps<T> {
+  apiUrl: string;
+  placeholder: string;
+  valueKey: keyof T;
+  labelKey: keyof T;
+  onSelect?: (value: T) => void;
+  className?: string;
+  disabled?: boolean;
+  selectedValue?: string;
+}
+
+const ApiDropdown = <T extends Record<string, any>>({ 
+  apiUrl, 
+  placeholder, 
+  valueKey, 
+  labelKey,
+  onSelect,
+  className = '',
+  disabled = false,
+  selectedValue = ''
+}: ApiDropdownProps<T>) => {
+  const [data, setData] = useState<T[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [selected, setSelected] = useState<T | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, [apiUrl]);
+
+  useEffect(() => {
+    if (selectedValue && data.length > 0) {
+      const found = data.find(item => String(item[labelKey]) === selectedValue);
+      if (found) {
+        setSelected(found);
+      }
+    }
+  }, [selectedValue, data, labelKey]);
+
+  const fetchData = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse<T> = await response.json();
+      
+      if (result.status === 200 && result.data) {
+        setData(result.data);
+      } else {
+        throw new Error(result.message || 'Failed to fetch data');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      console.error('Error fetching data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelect = (item: T): void => {
+    setSelected(item);
+    setIsOpen(false);
+    if (onSelect) {
+      onSelect(item);
+    }
+  };
+
+  const getDisplayValue = (item: T): string => {
+    const value = item[labelKey];
+    return typeof value === 'string' ? value : String(value || 'Unknown');
+  };
+
+  const toggleDropdown = (): void => {
+    if (!disabled && !loading) {
+      setIsOpen(!isOpen);
+    }
+  };
+
+  const getDescriptionKey = (labelKey: keyof T): keyof T => {
+    const labelStr = String(labelKey);
+    const descriptionKey = labelStr.replace('Name', 'Description').replace('Type', 'Description');
+    return descriptionKey as keyof T;
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <button
+        onClick={toggleDropdown}
+        disabled={disabled || loading}
+        className={`
+          w-full px-4 py-3 text-left bg-white border border-gray-300 rounded-lg
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          hover:bg-gray-50 transition-colors duration-200
+          ${disabled || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          ${error ? 'border-red-300' : ''}
+        `}
+      >
+        <div className="flex items-center justify-between">
+          <span className={`block truncate ${selected ? 'text-gray-900' : 'text-gray-500'}`}>
+            {loading ? 'Đang tải...' : 
+             selected ? getDisplayValue(selected) : 
+             placeholder}
+          </span>
+          <div className="flex items-center space-x-2">
+            {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+            {error && <AlertCircle className="w-4 h-4 text-red-400" />}
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </div>
+      </button>
+
+      {error && (
+        <div className="mt-1 text-sm text-red-600 flex items-center">
+          <AlertCircle className="w-4 h-4 mr-1" />
+          {error}
+          <button
+            onClick={fetchData}
+            className="ml-2 text-blue-600 hover:text-blue-800 underline"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {isOpen && !loading && !error && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {data.length === 0 ? (
+            <div className="px-4 py-3 text-gray-500 text-center">
+              Không có dữ liệu
+            </div>
+          ) : (
+            data.map((item) => (
+              <button
+                key={String(item[valueKey])}
+                onClick={() => handleSelect(item)}
+                className={`
+                  w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors duration-150
+                  ${selected && item[valueKey] === selected[valueKey]
+                    ? 'bg-blue-100 text-blue-900' 
+                    : 'text-gray-900'}
+                `}
+              >
+                <div className="font-medium">{getDisplayValue(item)}</div>
+                {item[getDescriptionKey(labelKey)] && (
+                  <div className="text-sm text-gray-500 mt-1">
+                    {String(item[getDescriptionKey(labelKey)])}
+                  </div>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const TerrariumEdit: React.FC = () => {
   const navigate = useNavigate();
@@ -26,63 +252,46 @@ const TerrariumEdit: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [formData, setFormData] = useState<TerrariumFormData>({
-    id: 0,
-    name: '',
+    terrariumId: 0,
+    tankMethodType: '',
+    shape: '',
+    environment: '',
+    terrariumName: '',
     description: '',
     price: 0,
-    category: '',
-    status: 'active',
-    images: [],
-    existingImages: [],
-    specifications: {
-      size: '',
-      material: '',
-      weight: '',
-      maintenance: ''
-    },
-    tags: []
+    stock: 0,
+    status: 1, // Changed to number with default value 1 (active)
+    bodyHTML: ''
   });
-  const [currentTag, setCurrentTag] = useState('');
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-
-  const categories = [
-    { value: 'tropical', label: 'Nhiệt đới' },
-    { value: 'desert', label: 'Sa mạc' },
-    { value: 'moss', label: 'Rêu' },
-    { value: 'succulent', label: 'Sen đá' },
-    { value: 'mini', label: 'Mini' },
-    { value: 'large', label: 'Lớn' }
-  ];
 
   // Load existing terrarium data
   useEffect(() => {
     const loadTerrarium = async () => {
       try {
-        // Mock data - replace with actual API call
-        const mockData = {
-          id: Number(id),
-          name: 'Terrarium Rừng Nhiệt Đới',
-          description: 'Terrarium mô phỏng rừng nhiệt đới với thực vật xanh tươi và hệ sinh thái đa dạng.',
-          price: 250000,
-          category: 'tropical',
-          status: 'active' as const,
-          existingImages: [
-            '/images/terrarium1.jpg',
-            '/images/terrarium1-2.jpg'
-          ],
-          specifications: {
-            size: '20x15x25 cm',
-            material: 'Thủy tinh, gỗ tự nhiên',
-            weight: '2.5 kg',
-            maintenance: 'Tưới 1 lần/tuần'
-          },
-          tags: ['nhiệt đới', 'xanh', 'dễ chăm sóc']
-        };
-
-        setFormData({
-          ...mockData,
-          images: []
-        });
+        const response = await fetch(`https://terarium.shop/api/Terrarium/get-${id}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result: TerrariumApiResponse = await response.json();
+        
+        if (result.status === 200 && result.data) {
+          const data = result.data;
+          setFormData({
+            terrariumId: data.terrariumId,
+            tankMethodType: data.tankMethods[0] || '',
+            shape: data.shapes[0] || '',
+            environment: data.environments[0] || '',
+            terrariumName: data.name,
+            description: data.description,
+            price: data.price,
+            stock: data.stock,
+            status: data.status, // Keep as number
+            bodyHTML: data.bodyHTML
+          });
+        } else {
+          throw new Error(result.message || 'Failed to load terrarium data');
+        }
       } catch (error) {
         console.error('Error loading terrarium:', error);
         alert('Có lỗi xảy ra khi tải dữ liệu terrarium');
@@ -99,71 +308,25 @@ const TerrariumEdit: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    if (name.startsWith('spec_')) {
-      const specName = name.replace('spec_', '');
-      setFormData(prev => ({
-        ...prev,
-        specifications: {
-          ...prev.specifications,
-          [specName]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: name === 'price' ? Number(value) : value
-      }));
-    }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        images: [...prev.images, ...files]
-      }));
-
-      // Create previews for new images
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews(prev => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const removeNewImage = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      images: prev.images.filter((_, i) => i !== index)
-    }));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const removeExistingImage = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      existingImages: prev.existingImages.filter((_, i) => i !== index)
+      [name]: name === 'price' || name === 'stock' || name === 'status' ? Number(value) : value
     }));
   };
 
-  const addTag = () => {
-    if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, currentTag.trim()]
-      }));
-      setCurrentTag('');
+  const handleDropdownSelect = (type: 'tankMethodType' | 'shape' | 'environment', item: any) => {
+    let value = '';
+    if (type === 'tankMethodType') {
+      value = item.tankMethodType;
+    } else if (type === 'shape') {
+      value = item.shapeName;
+    } else if (type === 'environment') {
+      value = item.environmentName;
     }
-  };
-
-  const removeTag = (tagToRemove: string) => {
+    
     setFormData(prev => ({
       ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
+      [type]: value
     }));
   };
 
@@ -172,19 +335,52 @@ const TerrariumEdit: React.FC = () => {
     setLoading(true);
 
     try {
-      // Simulate API call
-      console.log('Updating terrarium data:', formData);
+      // Validate required fields
+      if (!formData.terrariumName || !formData.description || !formData.tankMethodType || !formData.shape || !formData.environment) {
+        throw new Error('Vui lòng điền đầy đủ thông tin bắt buộc');
+      }
+
+      // Prepare update payload exactly as API expects
+      const updateData: TerrariumUpdatePayload = {
+        terrariumId: formData.terrariumId,
+        tankMethodType: formData.tankMethodType,
+        shape: formData.shape,
+        environment: formData.environment,
+        terrariumName: formData.terrariumName,
+        description: formData.description,
+        price: formData.price,
+        stock: formData.stock,
+        status: formData.status,
+        bodyHTML: formData.bodyHTML
+      };
+
+      console.log('Sending update data:', updateData); // Debug log
+
+      const response = await fetch(`https://terarium.shop/api/Terrarium/update-terrarium-${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       
-      // Here you would make the actual API call
-      // await updateTerrarium(formData);
-      
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
-      
-      alert('Terrarium đã được cập nhật thành công!');
-      navigate('/manager/terrarium/list');
+      if (result.status === 200) {
+        alert('Terrarium đã được cập nhật thành công!');
+        navigate('/manager/terrarium/list');
+      } else {
+        throw new Error(result.message || 'Failed to update terrarium');
+      }
     } catch (error) {
       console.error('Error updating terrarium:', error);
-      alert('Có lỗi xảy ra khi cập nhật terrarium');
+      alert(error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật terrarium');
     } finally {
       setLoading(false);
     }
@@ -213,7 +409,7 @@ const TerrariumEdit: React.FC = () => {
         </button>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Chỉnh sửa Terrarium</h1>
-          <p className="text-gray-600">Cập nhật thông tin terrarium #{formData.id}</p>
+          <p className="text-gray-600">Cập nhật thông tin terrarium #{formData.terrariumId}</p>
         </div>
       </div>
 
@@ -231,10 +427,10 @@ const TerrariumEdit: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    name="name"
+                    name="terrariumName"
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.name}
+                    value={formData.terrariumName}
                     onChange={handleInputChange}
                     placeholder="Nhập tên terrarium"
                   />
@@ -252,6 +448,20 @@ const TerrariumEdit: React.FC = () => {
                     value={formData.description}
                     onChange={handleInputChange}
                     placeholder="Mô tả chi tiết về terrarium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nội dung HTML
+                  </label>
+                  <textarea
+                    name="bodyHTML"
+                    rows={6}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={formData.bodyHTML}
+                    onChange={handleInputChange}
+                    placeholder="Nội dung HTML mô tả chi tiết"
                   />
                 </div>
 
@@ -274,130 +484,71 @@ const TerrariumEdit: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Danh mục *
+                      Số lượng *
                     </label>
-                    <select
-                      name="category"
+                    <input
+                      type="number"
+                      name="stock"
                       required
+                      min="0"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={formData.category}
+                      value={formData.stock}
                       onChange={handleInputChange}
-                    >
-                      <option value="">Chọn danh mục</option>
-                      {categories.map(cat => (
-                        <option key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="0"
+                    />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Specifications */}
+            {/* Configuration */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Thông số kỹ thuật</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kích thước
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_size"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.size}
-                    onChange={handleInputChange}
-                    placeholder="VD: 20x15x25 cm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Chất liệu
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_material"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.material}
-                    onChange={handleInputChange}
-                    placeholder="VD: Thủy tinh, gỗ"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Trọng lượng
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_weight"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.weight}
-                    onChange={handleInputChange}
-                    placeholder="VD: 2.5 kg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bảo trì
-                  </label>
-                  <input
-                    type="text"
-                    name="spec_maintenance"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.specifications.maintenance}
-                    onChange={handleInputChange}
-                    placeholder="VD: Tưới 1 lần/tuần"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tags */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Tags</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Cấu hình Terrarium</h3>
               <div className="space-y-4">
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={currentTag}
-                    onChange={(e) => setCurrentTag(e.target.value)}
-                    placeholder="Nhập tag"
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phương pháp Tank *
+                  </label>
+                  <ApiDropdown<TankMethod>
+                    apiUrl="https://terarium.shop/api/TankMethod"
+                    placeholder="Chọn phương pháp tank"
+                    valueKey="tankMethodId"
+                    labelKey="tankMethodType"
+                    selectedValue={formData.tankMethodType}
+                    onSelect={(value) => handleDropdownSelect('tankMethodType', value)}
+                    className="w-full"
                   />
-                  <button
-                    type="button"
-                    onClick={addTag}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Thêm
-                  </button>
                 </div>
-                
-                {formData.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {formData.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() => removeTag(tag)}
-                          className="ml-2 text-blue-600 hover:text-blue-800"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Hình dạng *
+                  </label>
+                  <ApiDropdown<Shape>
+                    apiUrl="https://terarium.shop/api/Shape/get-all"
+                    placeholder="Chọn hình dạng"
+                    valueKey="shapeId"
+                    labelKey="shapeName"
+                    selectedValue={formData.shape}
+                    onSelect={(value) => handleDropdownSelect('shape', value)}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Môi trường *
+                  </label>
+                  <ApiDropdown<Environment>
+                    apiUrl="https://terarium.shop/api/Environment"
+                    placeholder="Chọn môi trường"
+                    valueKey="environmentId"
+                    labelKey="environmentName"
+                    selectedValue={formData.environment}
+                    onSelect={(value) => handleDropdownSelect('environment', value)}
+                    className="w-full"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -413,92 +564,33 @@ const TerrariumEdit: React.FC = () => {
                 value={formData.status}
                 onChange={handleInputChange}
               >
-                <option value="active">Hoạt động</option>
-                <option value="inactive">Không hoạt động</option>
+                <option value={1}>Hoạt động</option>
+                <option value={0}>Không hoạt động</option>
               </select>
             </div>
 
-            {/* Images */}
+            {/* Current Selection Summary */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Hình ảnh</h3>
-              
-              <div className="space-y-4">
-                {/* Existing Images */}
-                {formData.existingImages.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Hình ảnh hiện tại</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {formData.existingImages.map((image, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={image}
-                            alt={`Existing ${index + 1}`}
-                            className="w-full h-24 object-cover rounded-lg"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://via.placeholder.com/96x96?text=No+Image';
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeExistingImage(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Upload new images */}
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="imageUpload"
-                  />
-                  <label
-                    htmlFor="imageUpload"
-                    className="cursor-pointer flex flex-col items-center space-y-2"
-                  >
-                    <Upload className="w-8 h-8 text-gray-400" />
-                    <span className="text-sm text-gray-600">
-                      Thêm hình ảnh mới
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      PNG, JPG, GIF tối đa 10MB
-                    </span>
-                  </label>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Cấu hình hiện tại</h3>
+              <div className="space-y-3">
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-700 text-sm">Tank Method</h4>
+                  <p className="text-sm text-gray-600">
+                    {formData.tankMethodType || 'Chưa chọn'}
+                  </p>
                 </div>
-
-                {/* New image previews */}
-                {imagePreviews.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Hình ảnh mới</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {imagePreviews.map((preview, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={preview}
-                            alt={`New Preview ${index + 1}`}
-                            className="w-full h-24 object-cover rounded-lg"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeNewImage(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-700 text-sm">Shape</h4>
+                  <p className="text-sm text-gray-600">
+                    {formData.shape || 'Chưa chọn'}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-700 text-sm">Environment</h4>
+                  <p className="text-sm text-gray-600">
+                    {formData.environment || 'Chưa chọn'}
+                  </p>
+                </div>
               </div>
             </div>
 
