@@ -4,6 +4,7 @@ import { Button, Dropdown, MenuProps } from 'antd';
 import { HomeOutlined, ShopOutlined, TeamOutlined, ReadOutlined, InfoCircleOutlined, SearchOutlined, ShoppingCartOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import logo from '../../../assets/Logo.png'; // Đảm bảo đường dẫn đúng đến logo
 // Note: Ensure 'getRoleFromToken' is defined in '../../../utils/jwt' or implement it as shown below
 import { getRoleFromToken } from '../../../utils/jwt';
 
@@ -13,25 +14,42 @@ const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const navbarRef = useRef<HTMLDivElement>(null);
-  const logoRef = useRef<HTMLDivElement>(null);
+  const logoContainerRef = useRef<HTMLDivElement>(null); // Đổi tên ref để rõ ràng
+  const logoImageRef = useRef<HTMLImageElement>(null); // Ref cho hình ảnh logo
+  const logoTextRef = useRef<HTMLSpanElement>(null); // Ref cho tên website
   const menuRef = useRef<HTMLDivElement>(null);
   const gsapContext = useRef<gsap.Context | null>(null);
-  // Fallback to null if getRoleFromToken is undefined; replace with actual implementation
   const userRole = getRoleFromToken ? getRoleFromToken() : null;
   const isAuthenticated = !!userRole;
 
   useEffect(() => {
     gsapContext.current = gsap.context(() => {
+      // Animation cho toàn bộ navbar
       gsap.fromTo(
         navbarRef.current,
         { y: -100, opacity: 0 },
         { y: 0, opacity: 1, duration: 1.2, ease: 'power4.out' }
       );
-      gsap.fromTo(
-        logoRef.current,
-        { opacity: 0, x: -20 },
-        { opacity: 1, x: 0, duration: 1, delay: 0.3, ease: 'power4.out' }
-      );
+
+      // Animation cho logo (hình ảnh)
+      if (logoImageRef.current) {
+        gsap.fromTo(
+          logoImageRef.current,
+          { opacity: 0, x: -20 },
+          { opacity: 1, x: 0, duration: 1, delay: 0.3, ease: 'power4.out' }
+        );
+      }
+
+      // Animation cho tên website
+      if (logoTextRef.current) {
+        gsap.fromTo(
+          logoTextRef.current,
+          { opacity: 0, x: -20 },
+          { opacity: 1, x: 0, duration: 1, delay: 0.4, ease: 'power4.out' }
+        );
+      }
+
+      // Animation cho menu items
       if (menuRef.current) {
         const menuItems = Array.from(menuRef.current.children);
         gsap.fromTo(
@@ -113,10 +131,22 @@ const Navbar: React.FC = () => {
     >
       <div className="container mx-auto flex justify-between items-center">
         <div
-          ref={logoRef}
-          className="text-3xl font-bold text-green-600 cursor-pointer hover:text-green-700 transition-colors will-change-transform-opacity"
+          ref={logoContainerRef}
+          className="flex items-center space-x-3 cursor-pointer hover:text-green-700 transition-colors will-change-transform-opacity"
+          onClick={() => handleNavigate('/')}
         >
-          TerraTech
+          <img
+            ref={logoImageRef}
+            src={logo}
+            alt="GreenHaven Logo"
+            className="h-10 object-contain"
+          />
+          <span
+            ref={logoTextRef}
+            className="text-3xl font-bold text-green-600"
+          >
+            TerraTech
+          </span>
         </div>
         <div ref={menuRef} className="flex space-x-6">
           <Button

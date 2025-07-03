@@ -11,11 +11,7 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({ selectedType, setSelected
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 3000000]);
   const [size, setSize] = useState<string>('');
 
-  const categories = [
-    'Terrarium',
-    'Phụ kiện',
-  ];
-
+  const categories = ['Terrarium', 'Phụ kiện'];
   const types = ['Nước', 'Cạn', 'Bán Cạn', 'Dụng Cụ', 'Khác'];
 
   return (
@@ -55,19 +51,23 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({ selectedType, setSelected
             {children}
           </div>
         )}
-        renderThumb={({ props }) => (
-          <div
-            {...props}
-            style={{
-              ...props.style,
-              height: '16px',
-              width: '16px',
-              backgroundColor: '#90EE90',
-              borderRadius: '50%',
-              outline: 'none',
-            }}
-          />
-        )}
+        renderThumb={({ props }) => {
+          const { key, ...otherProps } = props; // Destructure key
+          return (
+            <div
+              key={key}
+              {...otherProps}
+              style={{
+                ...otherProps.style,
+                height: '16px',
+                width: '16px',
+                backgroundColor: '#90EE90',
+                borderRadius: '50%',
+                outline: 'none',
+              }}
+            />
+          );
+        }}
       />
       <div className="flex justify-between mt-2">
         <span>{priceRange[0].toLocaleString()} VNĐ</span>

@@ -7,32 +7,32 @@ import forestImg from '../../../assets/image/1.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const CallToAction: React.FC = () => {
+interface CallToActionProps {
+  className?: string;
+}
+
+const CallToAction: React.FC<CallToActionProps> = ({ className }) => {
   const navigate = useNavigate();
   const ctaRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
-  const gsapContext = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
-    gsapContext.current = gsap.context(() => {
+    const ctx = gsap.context(() => {
       // Parallax background
-      gsap.fromTo(
-        bgRef.current,
-        { y: 0 },
-        {
-          y: 80,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: ctaRef.current,
-            start: 'top bottom',
-            end: 'bottom top',
-            scrub: 1,
-          },
-        }
-      );
-      // Container
+      gsap.to(bgRef.current, {
+        y: 80,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: ctaRef.current,
+          start: 'top bottom',
+          end: 'bottom top',
+          scrub: true,
+        },
+      });
+
+      // Container animation
       gsap.fromTo(
         ctaRef.current,
         { opacity: 0, scale: 0.95 },
@@ -46,9 +46,10 @@ const CallToAction: React.FC = () => {
             start: 'top 80%',
             toggleActions: 'play none none reverse',
           },
-        }
+        },
       );
-      // Text
+
+      // Text animation
       gsap.fromTo(
         textRef.current,
         { y: 30, opacity: 0 },
@@ -63,9 +64,10 @@ const CallToAction: React.FC = () => {
             start: 'top 85%',
             toggleActions: 'play none none reverse',
           },
-        }
+        },
       );
-      // Button
+
+      // Button animation
       gsap.fromTo(
         buttonRef.current,
         { y: 20, opacity: 0 },
@@ -80,24 +82,23 @@ const CallToAction: React.FC = () => {
             start: 'top 85%',
             toggleActions: 'play none none reverse',
           },
-        }
+        },
       );
     }, ctaRef);
 
-    return () => {
-      gsapContext.current?.revert();
-    };
+    return () => ctx.revert();
   }, []);
 
   return (
     <div
       ref={ctaRef}
-      className="relative py-20 mt-16 overflow-hidden rounded-xl will-change-transform-opacity font-roboto"
+      className={`relative py-20 mt-16 overflow-hidden rounded-xl will-change-transform-opacity font-roboto ${className || ''}`}
     >
       <div
         ref={bgRef}
-        className="absolute inset-0 bg-cover bg-center"
+        className="absolute inset-0 bg-cover bg-center parallax-bg"
         style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url(${forestImg})` }}
+        data-speed="0.6"
       />
       <div className="relative text-center text-white z-10">
         <div ref={textRef}>
