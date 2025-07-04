@@ -69,7 +69,7 @@ const TerrariumList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa terrarium này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/Terrarium/delete-terraium${id}`, {
+        const response = await fetch(`https://terarium.shop/api/Terrarium/delete-terraium-${id}`, {
           method: 'DELETE',
         });
 
