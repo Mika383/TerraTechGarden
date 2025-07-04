@@ -98,7 +98,7 @@ const Personalize: React.FC = () => {
       title: 'Chào mừng bạn!',
       content: (
         <div className="text-center">
-          <h2 className="text-4xl font-bold text-green-900 mb-6">Chào mừng bạn đến với hành trình Terrarium!</h2>
+          <h2 className="text-4xl font-bold text-green-900 mb-6">Chào bạn đến với TerraTechGarden!</h2>
           <p className="text-xl text-gray-800 mb-8">
             Để mang đến trải nghiệm tốt nhất, chúng tôi muốn tìm hiểu thêm về sở thích của bạn. 
             Hãy dành chút thời gian trả lời các câu hỏi sau nhé!

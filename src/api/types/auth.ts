@@ -1,15 +1,14 @@
-// api/types/auth.ts
 export interface LoginRequest {
   username: string;
   password: string;
 }
 
 export interface LoginResponse {
-  status?: number;           // Cho đăng nhập Google
-  message?: string;         // Cho đăng nhập Google
-  data?: string;            // Token cho đăng nhập Google
-  token?: string;           // Token cho đăng nhập bình thường
-  refreshToken?: string;    // Refresh token cho đăng nhập bình thường
+  status?: number;
+  message?: string;
+  data?: string;
+  token?: string;
+  refreshToken?: string;
 }
 
 export interface RegisterRequest {
@@ -37,4 +36,21 @@ export interface VerifyOTPResponse {
   success: boolean;
   message?: string;
   token?: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
 }

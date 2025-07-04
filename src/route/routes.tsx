@@ -6,7 +6,6 @@ import TankMethodList from '../components/manager/TankMethodList';
 import TankMethodCreate from '../components/manager/TankMethodCreate';
 import TankMethodEdit from '../components/manager/TankMethodEdit';
 
-// Lazy-loaded components
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
 const AdminLayout = lazy(() => import('../components/admin/AdminLayout'));
@@ -31,6 +30,8 @@ const BlogDetails = lazy(() => import('../pages/Customer/BlogDetails'));
 const About = lazy(() => import('../pages/Customer/About'));
 const Login = lazy(() => import('../pages/Customer/Login'));
 const Register = lazy(() => import('../pages/Customer/Register'));
+const ForgotPassword = lazy(() => import('../pages/Customer/ForgotPassword'));
+const ResetPassword = lazy(() => import('../pages/Customer/ResetPassword'));
 const Detail = lazy(() => import('../pages/Customer/Detail'));
 const Cart = lazy(() => import('../pages/Customer/Cart'));
 const Checkout = lazy(() => import('../pages/Customer/Checkout'));
@@ -62,7 +63,6 @@ const StaffDashboard = lazy(() => import('../pages/Staff/StaffDashboard'));
 const Unauthorized = lazy(() => import('../pages/Unauthorized'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 
-// Component để đặt lại vị trí cuộn
 const ScrollToTop = () => {
   const { pathname } = useLocation();
 
@@ -85,6 +85,8 @@ const AppRoutes = () => {
         <Route path="about" element={<Suspense fallback={<Loading />}><About /></Suspense>} />
         <Route path="login" element={<Suspense fallback={<Loading />}><Login /></Suspense>} />
         <Route path="register" element={<Suspense fallback={<Loading />}><Register /></Suspense>} />
+        <Route path="forgot-password" element={<Suspense fallback={<Loading />}><ForgotPassword /></Suspense>} />
+        <Route path="reset-password" element={<Suspense fallback={<Loading />}><ResetPassword /></Suspense>} />
         <Route path="cart" element={<Suspense fallback={<Loading />}><Cart /></Suspense>} />
         <Route path="checkout" element={<Suspense fallback={<Loading />}><Checkout /></Suspense>} />
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
@@ -105,7 +107,6 @@ const AppRoutes = () => {
             <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
             <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
             <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
-            
           </Route>
         </Route>
       </Route>
@@ -118,7 +119,7 @@ const AppRoutes = () => {
           <Route path="terrarium/list" element={<Suspense fallback={<Loading />}><TerrariumList /></Suspense>} />
           <Route path="terrarium/create" element={<Suspense fallback={<Loading />}><TerrariumCreate /></Suspense>} />
           <Route path="terrarium/edit/:id" element={<Suspense fallback={<Loading />}><TerrariumEdit /></Suspense>} />
-           <Route path="accessory/list" element={<Suspense fallback={<Loading />}><AccessoryList /></Suspense>} />
+          <Route path="accessory/list" element={<Suspense fallback={<Loading />}><AccessoryList /></Suspense>} />
           <Route path="accessory/create" element={<Suspense fallback={<Loading />}><AccessoryCreate /></Suspense>} />
           <Route path="accessory/edit/:id" element={<Suspense fallback={<Loading />}><AccessoryEdit /></Suspense>} />
           <Route path="shape/list" element={<Suspense fallback={<Loading />}><ShapeList /></Suspense>} />

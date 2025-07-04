@@ -1,7 +1,8 @@
 import React from 'react';
-import { ToastContainer } from 'react-toastify';
+import { ToastContainer, Slide  } from 'react-toastify';
 import AppRoutes from './route/routes';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import 'react-toastify/dist/ReactToastify.css';
 
 const App: React.FC = () => {
   return (
@@ -17,6 +18,10 @@ const App: React.FC = () => {
           pauseOnHover
           draggable
           theme="light"
+          transition={Slide}
+          className="mt-12" 
+          toastClassName="rounded-xl shadow-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 font-semibold"
+          progressClassName="bg-white opacity-80"
         />
       </>
     </GoogleOAuthProvider>
