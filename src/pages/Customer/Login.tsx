@@ -1,4 +1,3 @@
-// src/pages/Customer/Login.tsx
 import React from 'react';
 import { Form, Input, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
@@ -28,7 +27,7 @@ const Login: React.FC = () => {
             pauseOnHover: true,
             draggable: true,
           });
-          navigate('/');
+          navigate('/personalize');
         }
       } catch (err) {
         console.error('Đăng nhập Google thất bại:', err);
@@ -64,7 +63,7 @@ const Login: React.FC = () => {
           pauseOnHover: true,
           draggable: true,
         });
-        navigate('/');
+        navigate('/personalize');
       }
     } catch (err) {
       toast.error('Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin!', {

@@ -43,6 +43,7 @@ const SavedLayouts = lazy(() => import('../pages/Customer/SavedLayouts'));
 const ChatWithStaff = lazy(() => import('../pages/Customer/ChatWithStaff'));
 const MyReviews = lazy(() => import('../pages/Customer/MyReviews'));
 const EditProfile = lazy(() => import('../pages/Customer/EditProfile'));
+const Personalize = lazy(() => import('../pages/Customer/Personalize'));
 const AdminDashboard = lazy(() => import('../pages/Admin/AdminDashboard'));
 const ShiftManagement = lazy(() => import('../pages/Admin/ShiftManagement'));
 const CustomerManagement = lazy(() => import('../pages/Admin/CustomerManagement'));
@@ -87,6 +88,7 @@ const AppRoutes = () => {
         <Route path="cart" element={<Suspense fallback={<Loading />}><Cart /></Suspense>} />
         <Route path="checkout" element={<Suspense fallback={<Loading />}><Checkout /></Suspense>} />
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
+        <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
@@ -103,6 +105,7 @@ const AppRoutes = () => {
             <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
             <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
             <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
+            
           </Route>
         </Route>
       </Route>
@@ -152,7 +155,7 @@ const AppRoutes = () => {
       </Route>
       <Route path="unauthorized" element={<Suspense fallback={<Loading />}><Unauthorized /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<Loading />}><NotFound /></Suspense>} />
-      <Route element={<ScrollToTop />} /> {/* Đặt ScrollToTop ở đây để áp dụng cho tất cả các route */}
+      <Route element={<ScrollToTop />} />
     </Routes>
   );
 };
