@@ -1,4 +1,3 @@
-// api/index.ts
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, VerifyOTPRequest, VerifyOTPResponse } from './types/auth';
 
@@ -13,7 +12,7 @@ const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('authToken'); // Sử dụng 'authToken' để đồng bộ với useAuth
+    const token = localStorage.getItem('authToken');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,7 +31,6 @@ api.interceptors.response.use(
   }
 );
 
-// Đăng ký người dùng
 export const register = async (data: RegisterRequest): Promise<RegisterResponse> => {
   try {
     const response = await api.post('/api/Users/register', data);
@@ -47,7 +45,6 @@ export const register = async (data: RegisterRequest): Promise<RegisterResponse>
   }
 };
 
-// Đăng nhập
 export const login = async (data: LoginRequest): Promise<LoginResponse> => {
   try {
     const response = await api.post('/api/Users/login', data);
@@ -58,7 +55,6 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
   }
 };
 
-// Đăng nhập bằng Google
 export const loginWithGoogle = async (accessToken: string): Promise<LoginResponse> => {
   try {
     const response = await api.post('/api/Users/login-google', { accessToken });
@@ -69,7 +65,6 @@ export const loginWithGoogle = async (accessToken: string): Promise<LoginRespons
   }
 };
 
-// Xác minh OTP
 export const verifyOTP = async (data: VerifyOTPRequest): Promise<VerifyOTPResponse> => {
   try {
     const response = await api.post('/api/Users/verify-otp', data);
@@ -82,7 +77,26 @@ export const verifyOTP = async (data: VerifyOTPRequest): Promise<VerifyOTPRespon
   }
 };
 
-// Kiểm tra tính khả dụng
+export const forgotPassword = async (email: string): Promise<{ message: string }> => {
+  try {
+    const response = await api.post('/api/Users/forgot-password', { email });
+    return response.data;
+  } catch (error: any) {
+    const message = error.response?.data?.message || 'Gửi yêu cầu khôi phục mật khẩu thất bại.';
+    throw new Error(message);
+  }
+};
+
+export const resetPassword = async (token: string, newPassword: string): Promise<{ message: string }> => {
+  try {
+    const response = await api.post('/api/Users/reset-password', { token, newPassword });
+    return response.data;
+  } catch (error: any) {
+    const message = error.response?.data?.message || 'Đặt lại mật khẩu thất bại.';
+    throw new Error(message);
+  }
+};
+
 export const checkAvailability = async (field: 'username' | 'email' | 'phoneNumber', value: string): Promise<boolean> => {
   try {
     const response = await api.post('/api/Users/check-availability', { [field]: value });

@@ -1,0 +1,25 @@
+   /* toast.css */
+
+   .custom-toast-container {
+       font-family: 'Arial', sans-serif;
+       z-index: 9999; /* Đảm bảo toast hiển thị trên cùng */
+   }
+
+   .custom-toast {
+       background-color: #f8f9fa; /* Màu nền */
+       color: #333; /* Màu chữ */
+       border-radius: 8px; /* Bo góc */
+       padding: 16px; /* Padding */
+       display: flex; /* Để có thể căn chỉnh icon và text */
+       align-items: center; /* Căn giữa theo chiều dọc */
+   }
+
+   .custom-toast .custom-progress {
+       background-color: #007bff; /* Màu cho progress bar */
+   }
+
+   .custom-toast .toast-icon {
+       margin-right: 10px; /* Khoảng cách giữa icon và text */
+       font-size: 20px; /* Kích thước icon */
+   }
+   

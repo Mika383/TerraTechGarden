@@ -101,6 +101,15 @@ const Login: React.FC = () => {
               <Input.Password placeholder="Nhập mật khẩu" />
             </Form.Item>
 
+            <div className="text-right mb-4">
+              <span
+                className="text-blue-500 cursor-pointer hover:underline"
+                onClick={() => navigate('/forgot-password')}
+              >
+                Quên mật khẩu?
+              </span>
+            </div>
+
             <Form.Item>
               <Button
                 type="primary"
