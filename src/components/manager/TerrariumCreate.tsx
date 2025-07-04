@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
+import { Editor } from '@tinymce/tinymce-react';
 
-// Type definitions from the API
 interface TankMethod {
   tankMethodId: number;
   tankMethodType: string;
@@ -42,17 +42,18 @@ interface ApiDropdownProps<T> {
   onSelect?: (value: T) => void;
   className?: string;
   disabled?: boolean;
+  customRenderer?: (item: T) => React.ReactNode;
 }
 
-// API Dropdown Component
-const ApiDropdown = <T extends Record<string, any>>({ 
-  apiUrl, 
-  placeholder, 
-  valueKey, 
+const ApiDropdown = <T extends Record<string, any>>({
+  apiUrl,
+  placeholder,
+  valueKey,
   labelKey,
   onSelect,
   className = '',
-  disabled = false
+  disabled = false,
+  customRenderer
 }: ApiDropdownProps<T>) => {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -177,10 +178,14 @@ const ApiDropdown = <T extends Record<string, any>>({
                     : 'text-gray-900'}
                 `}
               >
-                <div className="font-medium">{getDisplayValue(item)}</div>
-                {item[getDescriptionKey(labelKey)] && (
-                  <div className="text-sm text-gray-500 mt-1">
-                    {String(item[getDescriptionKey(labelKey)])}
+                {customRenderer ? customRenderer(item) : (
+                  <div>
+                    <div className="font-medium">{getDisplayValue(item)}</div>
+                    {item[getDescriptionKey(labelKey)] && (
+                      <div className="text-sm text-gray-500 mt-1">
+                        {String(item[getDescriptionKey(labelKey)])}
+                      </div>
+                    )}
                   </div>
                 )}
               </button>
@@ -192,7 +197,6 @@ const ApiDropdown = <T extends Record<string, any>>({
   );
 };
 
-// Updated form data interface
 interface TerrariumFormData {
   terrariumName: string;
   description: string;
@@ -218,7 +222,7 @@ const TerrariumCreate: React.FC = () => {
     description: '',
     price: 0,
     stock: 0,
-    status: 1, // 1 for active, 0 for inactive
+    status: 1,
     bodyHTML: '',
     tankMethodType: '',
     shape: '',
@@ -241,13 +245,19 @@ const TerrariumCreate: React.FC = () => {
     }));
   };
 
+  const handleEditorChange = (content: string) => {
+    setFormData(prev => ({
+      ...prev,
+      bodyHTML: content
+    }));
+  };
+
   const handleApiSelection = (type: keyof ApiSelections, value: TankMethod | Shape | Environment): void => {
     setApiSelections(prev => ({
       ...prev,
       [type]: value
     }));
 
-    // Update form data with selected values
     if (type === 'tankMethod') {
       setFormData(prev => ({
         ...prev,
@@ -301,10 +311,8 @@ const TerrariumCreate: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Clear previous messages
     setSubmitMessage(null);
     
-    // Validate form
     if (!validateForm()) {
       return;
     }
@@ -312,7 +320,6 @@ const TerrariumCreate: React.FC = () => {
     setLoading(true);
 
     try {
-      // Prepare data for API
       const apiData = {
         tankMethodType: formData.tankMethodType,
         shape: formData.shape,
@@ -322,7 +329,7 @@ const TerrariumCreate: React.FC = () => {
         price: formData.price,
         stock: formData.stock,
         status: formData.status,
-        bodyHTML: formData.bodyHTML || formData.description // Use description as bodyHTML if not provided
+        bodyHTML: formData.bodyHTML || formData.description
       };
 
       console.log('Submitting terrarium data:', apiData);
@@ -343,12 +350,9 @@ const TerrariumCreate: React.FC = () => {
       const result = await response.json();
       console.log('API Response:', result);
 
-      // Check if the operation was successful
-      // The API returns "Save data success" as the message, so we check for that
       if (result.status === 200 || result.message === "Save data success") {
         setSubmitMessage({ type: 'success', text: 'Terrarium đã được tạo thành công!' });
         
-        // Reset form after successful submission
         setTimeout(() => {
           setFormData({
             terrariumName: '',
@@ -383,15 +387,25 @@ const TerrariumCreate: React.FC = () => {
   };
 
   const goBack = () => {
-    // Navigate back logic here
     console.log('Navigate back');
   };
+
+  // Custom renderer for Shape dropdown
+  const renderShapeOption = (shape: Shape) => (
+    <div>
+      <div className="font-medium">{shape.shapeName}</div>
+      <div className="text-sm text-gray-500 mt-1 space-y-1">
+        <div>Kích thước: {shape.shapeSize}</div>
+        <div>Kích thước: {shape.shapeHeight} x {shape.shapeWidth} x {shape.shapeLength}</div>
+        <div>Thể tích: {shape.shapeVolume}</div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
       <form onSubmit={handleSubmit}>
         <div className="space-y-6">
-          {/* Header */}
           <div className="flex items-center space-x-4">
             <button
               type="button"
@@ -406,7 +420,6 @@ const TerrariumCreate: React.FC = () => {
             </div>
           </div>
 
-          {/* Submit Message */}
           {submitMessage && (
             <div className={`p-4 rounded-lg ${
               submitMessage.type === 'success' 
@@ -430,9 +443,7 @@ const TerrariumCreate: React.FC = () => {
 
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Main Information */}
               <div className="lg:col-span-2 space-y-6">
-                {/* API Selection Section */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Cấu hình Terrarium</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -461,6 +472,7 @@ const TerrariumCreate: React.FC = () => {
                         labelKey="shapeName"
                         onSelect={(value) => handleApiSelection('shape', value)}
                         className="w-full"
+                        customRenderer={renderShapeOption}
                       />
                     </div>
 
@@ -480,7 +492,6 @@ const TerrariumCreate: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Basic Info */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Thông tin cơ bản</h3>
                   <div className="space-y-4">
@@ -518,13 +529,23 @@ const TerrariumCreate: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Nội dung HTML (Tùy chọn)
                       </label>
-                      <textarea
-                        name="bodyHTML"
-                        rows={3}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      <Editor
+                        apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
                         value={formData.bodyHTML}
-                        onChange={handleInputChange}
-                        placeholder="Nội dung HTML chi tiết (nếu có)"
+                        onEditorChange={handleEditorChange}
+                        init={{
+                          height: 300,
+                          menubar: false,
+                          plugins: [
+                            'advlist autolink lists link image charmap print preview anchor',
+                            'searchreplace visualblocks code fullscreen',
+                            'insertdatetime media table paste code help wordcount'
+                          ],
+                          toolbar:
+                            'undo redo | formatselect | bold italic backcolor | \
+                            alignleft aligncenter alignright alignjustify | \
+                            bullist numlist outdent indent | removeformat | help'
+                        }}
                       />
                     </div>
 
@@ -581,9 +602,7 @@ const TerrariumCreate: React.FC = () => {
                 </div>
               </div>
 
-              {/* Sidebar */}
               <div className="space-y-6">
-                {/* Selection Summary */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Lựa chọn hiện tại</h3>
                   <div className="space-y-3">
@@ -598,6 +617,13 @@ const TerrariumCreate: React.FC = () => {
                       <div className="text-sm text-gray-600">
                         {apiSelections.shape?.shapeName || 'Chưa chọn'}
                       </div>
+                      {apiSelections.shape && (
+                        <div className="text-xs text-gray-500 mt-1 space-y-1">
+                          <div>Kích thước: {apiSelections.shape.shapeSize}</div>
+                          <div>Kích thước: {apiSelections.shape.shapeHeight} x {apiSelections.shape.shapeWidth} x {apiSelections.shape.shapeLength}</div>
+                          <div>Thể tích: {apiSelections.shape.shapeVolume}</div>
+                        </div>
+                      )}
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="font-medium text-gray-700 text-sm">Environment</div>
@@ -608,7 +634,6 @@ const TerrariumCreate: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                   <div className="space-y-3">
                     <button
