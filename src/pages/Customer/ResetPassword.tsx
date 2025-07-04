@@ -1,4 +1,5 @@
 import React from 'react';
+import { useParams } from 'react-router-dom';
 import { Form, Input, Button } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
@@ -10,7 +11,7 @@ const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
-  const token = searchParams.get('token');
+  const { token } = useParams<{ token?: string }>();
 
   const onFinish = async (values: { password: string; confirmPassword: string }) => {
     if (!token) {
