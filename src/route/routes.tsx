@@ -87,6 +87,7 @@ const AppRoutes = () => {
         <Route path="register" element={<Suspense fallback={<Loading />}><Register /></Suspense>} />
         <Route path="forgot-password" element={<Suspense fallback={<Loading />}><ForgotPassword /></Suspense>} />
         <Route path="reset-password" element={<Suspense fallback={<Loading />}><ResetPassword /></Suspense>} />
+        <Route path="reset-password/:token?" element={<Suspense fallback={<Loading />}><ResetPassword /></Suspense>} />
         <Route path="cart" element={<Suspense fallback={<Loading />}><Cart /></Suspense>} />
         <Route path="checkout" element={<Suspense fallback={<Loading />}><Checkout /></Suspense>} />
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
