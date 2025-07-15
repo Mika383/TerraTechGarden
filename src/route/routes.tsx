@@ -5,6 +5,7 @@ import Loading from '../components/Loading';
 import TankMethodList from '../components/manager/TankMethodList';
 import TankMethodCreate from '../components/manager/TankMethodCreate';
 import TankMethodEdit from '../components/manager/TankMethodEdit';
+import AccountManagement from '../pages/Admin/AccountManagement';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -47,10 +48,6 @@ const EditProfile = lazy(() => import('../pages/Customer/EditProfile'));
 const Personalize = lazy(() => import('../pages/Customer/Personalize'));
 const AdminDashboard = lazy(() => import('../pages/Admin/AdminDashboard'));
 const ShiftManagement = lazy(() => import('../pages/Admin/ShiftManagement'));
-const CustomerManagement = lazy(() => import('../pages/Admin/CustomerManagement'));
-const StaffManagement = lazy(() => import('../pages/Admin/StaffManagement'));
-const ManagerManagement = lazy(() => import('../pages/Admin/ManagerManagement'));
-const ShipperManagement = lazy(() => import('../pages/Admin/ShipperManagement'));
 const AllOrders = lazy(() => import('../pages/Admin/AllOrders'));
 const PreparingOrders = lazy(() => import('../pages/Admin/PreparingOrders'));
 const ShippingOrders = lazy(() => import('../pages/Admin/ShippingOrders'));
@@ -140,10 +137,7 @@ const AppRoutes = () => {
           <Route path="dashboard" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
           <Route path="shift-management" element={<Suspense fallback={<Loading />}><ShiftManagement /></Suspense>} />
           <Route path="overview" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
-          <Route path="accounts/customer" element={<Suspense fallback={<Loading />}><CustomerManagement /></Suspense>} />
-          <Route path="accounts/staff" element={<Suspense fallback={<Loading />}><StaffManagement /></Suspense>} />
-          <Route path="accounts/manager" element={<Suspense fallback={<Loading />}><ManagerManagement /></Suspense>} />
-          <Route path="accounts/shipper" element={<Suspense fallback={<Loading />}><ShipperManagement /></Suspense>} />
+          <Route path="/admin/accounts" element={<AccountManagement />} />
           <Route path="orders/all" element={<Suspense fallback={<Loading />}><AllOrders /></Suspense>} />
           <Route path="orders/preparing" element={<Suspense fallback={<Loading />}><PreparingOrders /></Suspense>} />
           <Route path="orders/shipping" element={<Suspense fallback={<Loading />}><ShippingOrders /></Suspense>} />
