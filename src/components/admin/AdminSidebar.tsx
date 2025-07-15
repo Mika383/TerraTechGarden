@@ -1,7 +1,6 @@
-// src/components/admin/AdminSidebar.tsx
 import { useNavigate } from 'react-router-dom';
-import { HomeIcon, UsersIcon, CurrencyDollarIcon, CogIcon, ChartBarIcon, ChevronDownIcon, ShoppingCartIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { HomeIcon, UsersIcon, CurrencyDollarIcon, CogIcon, ChartBarIcon, ChevronDownIcon, ShoppingCartIcon, CalendarDaysIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { useState } from 'react'; 
 
 const AdminSidebar: React.FC = () => {
   const navigate = useNavigate();
@@ -27,92 +26,57 @@ const AdminSidebar: React.FC = () => {
           <HomeIcon className="h-6 w-6" />
           <span>Tổng quan</span>
         </li>
-        <li>
-          <div
-            className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-            onClick={toggleAccountDropdown}
-          >
-            <UsersIcon className="h-6 w-6" />
-            <span>Quản lý tài khoản</span>
-            <ChevronDownIcon
-              className={`h-5 w-5 ml-auto transition-transform ${isAccountDropdownOpen ? 'rotate-180' : ''}`}
-            />
-          </div>
-          {isAccountDropdownOpen && (
-            <ul className="ml-8 mt-1 space-y-1">
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/accounts/customer')}
-              >
-                Customer
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/accounts/staff')}
-              >
-                Staff
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/accounts/manager')}
-              >
-                Manager
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/accounts/shipper')}
-              >
-                Shipper
-              </li>
-            </ul>
-          )}
+        <li
+          className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+          onClick={() => navigate('/admin/accounts')}
+        >
+          <UsersIcon className="w-6 h-6" />
+          <span>Quản lý tài khoản</span>
         </li>
-        <li>
-          <div
-            className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-            onClick={toggleOrderDropdown}
-          >
-            <ShoppingCartIcon className="h-6 w-6" />
-            <span>Quản lý đơn hàng</span>
-            <ChevronDownIcon
-              className={`h-5 w-5 ml-auto transition-transform ${isOrderDropdownOpen ? 'rotate-180' : ''}`}
-            />
-          </div>
-          {isOrderDropdownOpen && (
-            <ul className="ml-8 mt-1 space-y-1">
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/orders/all')}
-              >
-                Tổng đơn
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/orders/preparing')}
-              >
-                Đang chuẩn bị hàng
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/orders/shipping')}
-              >
-                Đang vận chuyển
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/orders/completed')}
-              >
-                Đã hoàn thành
-              </li>
-              <li
-                className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
-                onClick={() => navigate('/admin/orders/canceled')}
-              >
-                Đã hủy
-              </li>
-            </ul>
-          )}
+        <li
+          className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+          onClick={toggleOrderDropdown}
+        >
+          <ShoppingCartIcon className="h-6 w-6" />
+          <span>Quản lý đơn hàng</span>
+          <ChevronDownIcon
+            className={`h-5 w-5 ml-auto transition-transform ${isOrderDropdownOpen ? 'rotate-180' : ''}`}
+          />
         </li>
+        {isOrderDropdownOpen && (
+          <ul className="ml-8 mt-1 space-y-1">
+            <li
+              className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+              onClick={() => navigate('/admin/orders/all')}
+            >
+              Tổng đơn
+            </li>
+            <li
+              className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+              onClick={() => navigate('/admin/orders/preparing')}
+            >
+              Đang chuẩn bị hàng
+            </li>
+            <li
+              className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+              onClick={() => navigate('/admin/orders/shipping')}
+            >
+              Đang vận chuyển
+            </li>
+            <li
+              className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+              onClick={() => navigate('/admin/orders/completed')}
+            >
+              Đã hoàn thành
+            </li>
+            <li
+              className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
+              onClick={() => navigate('/admin/orders/canceled')}
+            >
+              Đã hủy
+            </li>
+          </ul>
+        )}
         <li
           className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
           onClick={() => navigate('/admin/revenue')}
@@ -138,7 +102,7 @@ const AdminSidebar: React.FC = () => {
           className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors cursor-pointer"
           onClick={() => navigate('/admin/shift-management')}
         >
-          <span>📅</span>
+          <CalendarIcon className="h-6 w-6" />
           <span>Quản lý ca làm</span>
         </li>
         <li className="mt-8">

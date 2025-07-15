@@ -1,4 +1,3 @@
-// hook/useAuth.ts
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register, login, loginWithGoogle, verifyOTP } from '../api';
@@ -10,6 +9,7 @@ interface AuthHook {
   handleLogin: (data: LoginRequest) => Promise<boolean>;
   handleGoogleLogin: (accessToken: string) => Promise<boolean>;
   verifyOTP: (otp: string, email: string) => Promise<boolean>;
+  handleLogout: () => void;
   loading: boolean;
   error: string | null;
   showOTP: boolean;
@@ -28,6 +28,18 @@ export const useAuth = (): AuthHook => {
   const [otp, setOtp] = useState('');
   const [registeredEmail, setRegisteredEmail] = useState<string>('');
   const navigate = useNavigate();
+
+  const saveTokens = (token: string, refreshToken: string) => {
+    localStorage.setItem('authToken', token);
+    localStorage.setItem('refreshToken', refreshToken);
+    window.dispatchEvent(new Event('tokenRefreshed'));
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    navigate('/login');
+  };
 
   const handleRegister = async (data: RegisterRequest) => {
     setLoading(true);
@@ -54,27 +66,23 @@ export const useAuth = (): AuthHook => {
     setError(null);
     try {
       const response: LoginResponse = await login(data);
-      let token: string | undefined;
-      if (response.token) {
-        // Trường hợp đăng nhập bình thường
-        token = response.token;
-      } else if (response.status === 200 && response.data) {
-        // Trường hợp đăng nhập thất bại (nếu có)
-        setError('Đăng nhập thất bại: Không nhận được token.');
-        return false;
-      }
-      if (token) {
-        localStorage.setItem('authToken', token);
+      const token = response.token;
+      const refreshToken = response.refreshToken;
+
+      if (token && refreshToken) {
+        saveTokens(token, refreshToken);
+
         const role = getRoleFromToken();
         if (!role) {
           setError('Đăng nhập thất bại: Không tìm thấy vai trò trong token.');
-          localStorage.removeItem('authToken');
+          handleLogout();
           return false;
         }
         navigate('/');
         return true;
       }
-      setError('Đăng nhập thất bại: Không nhận được token.');
+
+      setError('Đăng nhập thất bại: Không nhận được token hoặc refreshToken.');
       return false;
     } catch (error: any) {
       setError(error.message);
@@ -88,25 +96,23 @@ export const useAuth = (): AuthHook => {
     setLoading(true);
     setError(null);
     try {
-      const response: LoginResponse = await loginWithGoogle(accessToken);
-      let token: string | undefined;
-      if (response.status === 200 && response.data) {
-        // Trường hợp đăng nhập Google
-        token = response.data;
-      }
-      if (token) {
-        console.log('Google Login Token từ API:', token);
-        localStorage.setItem('authToken', token);
+      const response: any = await loginWithGoogle(accessToken);
+      const { token, refreshToken } = response.data;
+
+      if (token && refreshToken) {
+        saveTokens(token, refreshToken);
+
         const role = getRoleFromToken();
         if (!role) {
           setError('Đăng nhập Google thất bại: Không tìm thấy vai trò trong token.');
-          localStorage.removeItem('authToken');
+          handleLogout();
           return false;
         }
         navigate('/');
         return true;
       }
-      setError('Đăng nhập Google thất bại: Không nhận được token.');
+
+      setError('Đăng nhập Google thất bại: Không nhận được token hoặc refreshToken.');
       return false;
     } catch (error: any) {
       setError(error.message);
@@ -124,10 +130,11 @@ export const useAuth = (): AuthHook => {
       if (response.success || (response.message && response.message.includes('thành công'))) {
         if (response.token) {
           localStorage.setItem('authToken', response.token);
+          window.dispatchEvent(new Event('tokenRefreshed'));
           const role = getRoleFromToken();
           if (!role) {
             setError('Xác minh OTP thành công nhưng không tìm thấy vai trò trong token.');
-            localStorage.removeItem('authToken');
+            handleLogout();
             return false;
           }
         }
@@ -151,6 +158,7 @@ export const useAuth = (): AuthHook => {
     handleLogin,
     handleGoogleLogin,
     verifyOTP: verifyOTPHandler,
+    handleLogout,
     loading,
     error,
     showOTP,
