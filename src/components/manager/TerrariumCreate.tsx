@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle, X, Check } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
+import axios from 'axios';
+
 
 interface TankMethod {
   tankMethodId: number;
@@ -52,7 +54,8 @@ interface ApiDropdownProps<T> {
   disabled?: boolean;
   customRenderer?: (item: T) => React.ReactNode;
 }
-
+const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
+const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
 const ApiDropdown = <T extends Record<string, any>>({
   apiUrl,
   placeholder,
@@ -747,23 +750,42 @@ const TerrariumCreate: React.FC = () => {
                         Nội dung HTML (Tùy chọn)
                       </label>
                       <Editor
-                        apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
-                        value={formData.bodyHTML}
-                        onEditorChange={handleEditorChange}
-                        init={{
-                          height: 300,
-                          menubar: false,
-                          plugins: [
-                            'advlist autolink lists link image charmap print preview anchor',
-                            'searchreplace visualblocks code fullscreen',
-                            'insertdatetime media table paste code help wordcount'
-                          ],
-                          toolbar:
-                            'undo redo | formatselect | bold italic backcolor | \
-                            alignleft aligncenter alignright alignjustify | \
-                            bullist numlist outdent indent | removeformat | help'
-                        }}
-                      />
+                            apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
+                            value={formData.bodyHTML}
+                            init={{
+                              height: 500,
+                              resize: true,
+                              plugins: [
+                                'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'print', 'preview', 'anchor',
+                                'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                                'insertdatetime', 'media', 'table', 'paste', 'help', 'wordcount'
+                              ],
+                              toolbar:
+                                'undo redo | formatselect | bold italic backcolor | ' +
+                                'alignleft aligncenter alignright alignjustify | ' +
+                                'bullist numlist outdent indent | removeformat | image | help',
+                              images_upload_handler: async (blobInfo: any, success: (url: string) => void, failure: (err: string) => void) => {
+                                const formDataUpload = new FormData();
+                                formDataUpload.append('file', blobInfo.blob());
+                                formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                                try {
+                                  const res = await axios.post(CLOUDINARY_UPLOAD_URL, formDataUpload);
+                                  if (res.data.secure_url) {
+                                    success(res.data.secure_url);
+                                  } else {
+                                    failure('Không lấy được URL từ Cloudinary');
+                                  }
+                                } catch {
+                                  failure('Upload ảnh thất bại');
+                                }
+                              },
+                              content_style: 'img { max-width: 400px; height: auto; }'
+                            }}
+                            onEditorChange={handleEditorChange}
+                          />
+
+
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -6,6 +6,8 @@ import TankMethodList from '../components/manager/TankMethodList';
 import TankMethodCreate from '../components/manager/TankMethodCreate';
 import TankMethodEdit from '../components/manager/TankMethodEdit';
 import AccountManagement from '../pages/Admin/AccountManagement';
+import BlogCategoryManagement from '../pages/Admin/BlogCategoryManagement';
+import BlogManagement from '../pages/Admin/BlogManagement';
 import CategoryList from '../components/manager/CategoryList';
 import CategoryCreate from '../components/manager/CategoryCreate';
 import CategoryEdit from '../components/manager/CategoryEdit';
@@ -153,6 +155,9 @@ const AppRoutes = () => {
           <Route path="statistics" element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
           <Route path="settings" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
           <Route path="reports" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="blog-categories" element={<Suspense fallback={<Loading />}><BlogCategoryManagement /></Suspense>} />
+          <Route path="blogs" element={<Suspense fallback={<Loading />}><BlogManagement /></Suspense>} />
+
         </Route>
       </Route>
       <Route path="unauthorized" element={<Suspense fallback={<Loading />}><Unauthorized /></Suspense>} />

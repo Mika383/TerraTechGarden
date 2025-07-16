@@ -129,18 +129,18 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
   );
 
   return (
-    <Card
-      ref={cardRef}
-      className="shadow-lg rounded-lg transition-transform hover:scale-105"
-      cover={
-        <img
-          ref={imageRef}
-          src={image}
-          alt={name}
-          className="w-full h-48 object-cover rounded-t-lg"
-        />
-      }
-    >
+              <Card
+            ref={cardRef}
+            className="shadow-lg rounded-lg transition-transform hover:scale-105 flex flex-col h-full"
+            cover={
+              <img
+                ref={imageRef}
+                src={image}
+                alt={name}
+                className="w-full h-48 object-cover rounded-t-lg"
+              />
+            }
+          >
       <Button
         icon={isInWishlist ? <HeartFilled /> : <HeartOutlined />}
         className={`absolute top-4 right-4 ${
@@ -148,9 +148,9 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
         } border-none hover:text-pink-500 transition duration-200`}
         onClick={handleAddToWishlist}
       />
-      <div ref={contentRef}>
+      <div ref={contentRef} className="flex-1 flex flex-col">
         <h3 className="text-xl font-semibold mt-4 font-roboto">{name}</h3>
-        <p className="text-gray-600 text-sm mt-1">{description}</p>
+        <p className="text-gray-600 text-sm mt-1">{description.length > 50 ? `${description.slice(0, 50)}...` : description}</p>
         <p className="text-gray-600 text-sm mt-1">Loại bể: {type}</p>
         <p className="text-gray-800 font-semibold mt-1">{price.toLocaleString('vi-VN')} VND</p>
         <div className="flex items-center mt-1">
