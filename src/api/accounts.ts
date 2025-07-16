@@ -3,14 +3,14 @@ import { Account } from './types';
 
 export const getAccounts = async () => {
   const response = await api.get('/api/Accounts');
-  return response.data;
+  return response.data.data || [];
 };
 
 export const getAccountsByRole = async (role: string, page = 1, pageSize = 20) => {
   const response = await api.get(`/api/Accounts/role/${role}`, {
     params: { page, pageSize },
   });
-  return response.data;
+  return response.data.data || [];
 };
 
 export const getAccountById = async (id: number) => {

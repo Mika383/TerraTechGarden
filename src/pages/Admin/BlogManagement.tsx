@@ -151,6 +151,8 @@ const BlogManagement: React.FC = () => {
         <Switch
           checked={record.status === 'Active'}
           onChange={() => toggleStatus(record)}
+          checkedChildren="Active"
+          unCheckedChildren="Inactive"
         />
       ),
     },
@@ -199,7 +201,7 @@ const BlogManagement: React.FC = () => {
       >
         <Select
           value={formState.blogCategoryId}
-          onChange={ EngineerValue => setFormState({ ...formState, blogCategoryId: EngineerValue })}
+          onChange={value => setFormState({ ...formState, blogCategoryId: value })}
           className="w-full mb-2"
           placeholder="Chọn danh mục"
         >
