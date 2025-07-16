@@ -43,6 +43,22 @@ const ManagerSidebar: React.FC = () => {
         },
       ],
     },
+     {
+      title: 'Quản lý Category',
+      icon: Package,
+      submenu: [
+        {
+          title: 'Danh sách Category',
+          icon: List,
+          path: '/manager/category/list',
+        },
+        {
+          title: 'Thêm Category',
+          icon: Plus,
+          path: '/manager/category/create',
+        },
+      ],
+    },
     {
       title: 'Quản lý Hình dạng',
       icon: Shapes,

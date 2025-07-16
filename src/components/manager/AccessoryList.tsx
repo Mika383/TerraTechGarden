@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
-import { notification, Modal } from 'antd';
-import axios, { AxiosError } from 'axios';
+import { notification } from 'antd';
+import axios from 'axios';
 
 interface Accessory {
   accessoryId: number;
@@ -14,22 +14,36 @@ interface Accessory {
   createdAt: string;
   updatedAt: string;
   status: string;
+  size: string;
+}
+
+interface Category {
+  categoryId: number;
+  categoryName: string;
+  description: string;
 }
 
 const AccessoryList: React.FC = () => {
   const [accessories, setAccessories] = useState<Accessory[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchAccessories = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('https://terarium.shop/api/Accessory/get-all');
-        if (response.data.status === 200) {
-          setAccessories(response.data.data);
+        
+        // Fetch accessories
+        const accessoryResponse = await axios.get('https://terarium.shop/api/Accessory/get-all');
+        
+        // Fetch categories
+        const categoryResponse = await axios.get('https://terarium.shop/api/Category');
+        
+        if (accessoryResponse.data.status === 200) {
+          setAccessories(accessoryResponse.data.data);
         } else {
           notification.error({
             message: 'Lỗi',
@@ -37,8 +51,18 @@ const AccessoryList: React.FC = () => {
             placement: 'topRight',
           });
         }
+
+        if (categoryResponse.data.status === 200) {
+          setCategories(categoryResponse.data.data);
+        } else {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Không thể tải danh sách danh mục',
+            placement: 'topRight',
+          });
+        }
       } catch (error) {
-        console.error('Error fetching accessories:', error);
+        console.error('Error fetching data:', error);
         notification.error({
           message: 'Lỗi',
           description: 'Có lỗi xảy ra khi tải dữ liệu',
@@ -49,7 +73,7 @@ const AccessoryList: React.FC = () => {
       }
     };
 
-    fetchAccessories();
+    fetchData();
   }, []);
 
   const filteredAccessories = accessories.filter((accessory) => {
@@ -63,19 +87,24 @@ const AccessoryList: React.FC = () => {
     if (window.confirm('Bạn có chắc chắn muốn xóa phụ kiện này?')) {
       try {
         const response = await axios.delete(`https://terarium.shop/api/Accessory/delete-accessory${id}`);
-        console.log('Delete response:', response); // Debug: Log full response
-        console.log('Delete response data:', response.data); // Debug: Log response data
 
-        // Check for success based on status code (200 OK or 204 No Content)
-        if (response.status === 200 || response.status === 204) {
+        if (response.data.status === 200 || response.status === 204) {
           setAccessories(accessories.filter((a) => a.accessoryId !== id));
-          alert('Phụ kiện đã được xóa thành công!');
+          notification.success({
+            message: 'Thành công',
+            description: 'Phụ kiện đã được xóa thành công!',
+            placement: 'topRight',
+          });
         } else {
-          throw new Error(response.data.message || `Unexpected status code: ${response.status}`);
+          throw new Error(response.data?.message || 'Không thể xóa phụ kiện');
         }
       } catch (error: any) {
-        console.error('Error deleting accessory:', error.response || error); // Debug: Log error details
-        alert(`Có lỗi xảy ra khi xóa phụ kiện: ${error.message || 'Unknown error'}`);
+        console.error('Error deleting accessory:', error);
+        notification.error({
+          message: 'Lỗi',
+          description: error.response?.data?.message || 'Không thể xóa phụ kiện',
+          placement: 'topRight',
+        });
       }
     }
   };
@@ -85,6 +114,11 @@ const AccessoryList: React.FC = () => {
       style: 'currency',
       currency: 'VND',
     }).format(price);
+  };
+
+  const getCategoryName = (categoryId: number) => {
+    const category = categories.find(cat => cat.categoryId === categoryId);
+    return category ? category.categoryName : `Danh mục ${categoryId}`;
   };
 
   if (loading) {
@@ -134,9 +168,11 @@ const AccessoryList: React.FC = () => {
             onChange={(e) => setFilterCategory(e.target.value)}
           >
             <option value="all">Tất cả danh mục</option>
-            <option value="1">Danh mục 1</option>
-            <option value="2">Danh mục 2</option>
-            {/* Add more categories as needed */}
+            {categories.map((category) => (
+              <option key={category.categoryId} value={category.categoryId.toString()}>
+                {category.categoryName}
+              </option>
+            ))}
           </select>
           <select
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -163,6 +199,7 @@ const AccessoryList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Danh mục</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Kích thước</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Trạng thái</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
@@ -181,7 +218,7 @@ const AccessoryList: React.FC = () => {
                   </td>
                   <td className="py-3 px-4">
                     <span className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                      {`Danh mục ${accessory.categoryId}`}
+                      {getCategoryName(accessory.categoryId)}
                     </span>
                   </td>
                   <td className="py-3 px-4 font-medium text-gray-900">
@@ -189,6 +226,9 @@ const AccessoryList: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-gray-600">
                     {accessory.stock}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {accessory.size}
                   </td>
                   <td className="py-3 px-4">
                     <span
