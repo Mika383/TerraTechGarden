@@ -93,34 +93,36 @@ export const useAuth = (): AuthHook => {
   };
 
   const handleGoogleLogin = async (accessToken: string): Promise<boolean> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response: any = await loginWithGoogle(accessToken);
-      const { token, refreshToken } = response.data;
+  setLoading(true);
+  setError(null);
+  try {
+    const response: any = await loginWithGoogle(accessToken);
+    const token = response.data;
 
-      if (token && refreshToken) {
-        saveTokens(token, refreshToken);
+    if (token) {
+      localStorage.setItem('authToken', token);
+      window.dispatchEvent(new Event('tokenRefreshed'));
 
-        const role = getRoleFromToken();
-        if (!role) {
-          setError('Đăng nhập Google thất bại: Không tìm thấy vai trò trong token.');
-          handleLogout();
-          return false;
-        }
-        navigate('/');
-        return true;
+      const role = getRoleFromToken();
+      if (!role) {
+        setError('Đăng nhập Google thất bại: Không tìm thấy vai trò trong token.');
+        handleLogout();
+        return false;
       }
-
-      setError('Đăng nhập Google thất bại: Không nhận được token hoặc refreshToken.');
-      return false;
-    } catch (error: any) {
-      setError(error.message);
-      return false;
-    } finally {
-      setLoading(false);
+      navigate('/');
+      return true;
     }
-  };
+
+    setError('Đăng nhập Google thất bại: Không nhận được token.');
+    return false;
+  } catch (error: any) {
+    setError(error.message);
+    return false;
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const verifyOTPHandler = async (otp: string, email: string) => {
     setLoading(true);
