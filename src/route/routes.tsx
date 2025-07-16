@@ -6,6 +6,9 @@ import TankMethodList from '../components/manager/TankMethodList';
 import TankMethodCreate from '../components/manager/TankMethodCreate';
 import TankMethodEdit from '../components/manager/TankMethodEdit';
 import AccountManagement from '../pages/Admin/AccountManagement';
+import CategoryList from '../components/manager/CategoryList';
+import CategoryCreate from '../components/manager/CategoryCreate';
+import CategoryEdit from '../components/manager/CategoryEdit';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -120,6 +123,9 @@ const AppRoutes = () => {
           <Route path="accessory/list" element={<Suspense fallback={<Loading />}><AccessoryList /></Suspense>} />
           <Route path="accessory/create" element={<Suspense fallback={<Loading />}><AccessoryCreate /></Suspense>} />
           <Route path="accessory/edit/:id" element={<Suspense fallback={<Loading />}><AccessoryEdit /></Suspense>} />
+          <Route path="category/list" element={<Suspense fallback={<Loading />}><CategoryList /></Suspense>} />
+          <Route path="category/create" element={<Suspense fallback={<Loading />}><CategoryCreate /></Suspense>} />
+          <Route path="category/edit/:id" element={<Suspense fallback={<Loading />}><CategoryEdit /></Suspense>} />
           <Route path="shape/list" element={<Suspense fallback={<Loading />}><ShapeList /></Suspense>} />
           <Route path="shape/create" element={<Suspense fallback={<Loading />}><ShapeCreate /></Suspense>} />
           <Route path="shape/edit/:id" element={<Suspense fallback={<Loading />}><ShapeEdit /></Suspense>} />

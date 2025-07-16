@@ -1,7 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon } from 'lucide-react';
 import { notification } from 'antd';
+
+interface Accessory {
+  accessoryId: number;
+  name: string;
+  description: string;
+  price: number;
+}
+
+interface TerrariumImage {
+  terrariumImageId: number;
+  terrariumId: number;
+  imageUrl: string;
+  altText: string;
+  isPrimary: boolean;
+}
 
 interface Terrarium {
   terrariumId: number;
@@ -9,13 +24,15 @@ interface Terrarium {
   price: number;
   description: string;
   stock: number;
-  status: number;
+  status: string;
   environments: string[];
   shapes: string[];
   tankMethods: string[];
+  accessories: Accessory[];
   createdAt: string;
   updatedAt: string;
   bodyHTML: string;
+  terrariumImages: TerrariumImage[];
 }
 
 const TerrariumList: React.FC = () => {
@@ -40,7 +57,6 @@ const TerrariumList: React.FC = () => {
         const result = await response.json();
         
         if (result.status === 200 && result.data) {
-          // Data structure matches the API response directly
           setTerrariums(result.data);
         } else {
           throw new Error(result.message || 'Failed to fetch terrariums');
@@ -102,26 +118,30 @@ const TerrariumList: React.FC = () => {
     }).format(price);
   };
 
-  const getStatusText = (status: number) => {
-    switch (status) {
-      case 1:
+  const getStatusText = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'active':
         return 'Hoạt động';
-      case 0:
+      case 'inactive':
         return 'Không hoạt động';
       default:
-        return 'Không xác định';
+        return status;
     }
   };
 
-  const getStatusColor = (status: number) => {
-    switch (status) {
-      case 1:
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'active':
         return 'text-green-600 bg-green-50';
-      case 0:
+      case 'inactive':
         return 'text-red-600 bg-red-50';
       default:
         return 'text-gray-600 bg-gray-50';
     }
+  };
+
+  const getPrimaryImage = (images: TerrariumImage[]) => {
+    return images.find(img => img.isPrimary) || images[0];
   };
 
   if (loading) {
@@ -192,6 +212,7 @@ const TerrariumList: React.FC = () => {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">ID</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Hình ảnh</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Tên</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Mô tả</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
@@ -200,70 +221,108 @@ const TerrariumList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Môi trường</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Hình dạng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Phương pháp bể</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Phụ kiện</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredTerrariums.map((terrarium) => (
-                <tr key={terrarium.terrariumId} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium text-gray-900">{terrarium.terrariumId}</td>
-                  <td className="py-3 px-4 font-medium text-gray-900">{terrarium.name}</td>
-                  <td className="py-3 px-4 text-gray-600">{terrarium.description}</td>
-                  <td className="py-3 px-4 font-medium text-gray-900">
-                    {formatPrice(terrarium.price)}
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">{terrarium.stock}</td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(terrarium.status)}`}>
-                      {getStatusText(terrarium.status)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">
-                    {terrarium.environments.length > 0
-                      ? terrarium.environments.join(', ')
-                      : 'Không có'}
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">
-                    {terrarium.shapes.length > 0
-                      ? terrarium.shapes.join(', ')
-                      : 'Không có'}
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">
-                    {terrarium.tankMethods.length > 0
-                      ? terrarium.tankMethods.join(', ')
-                      : 'Không có'}
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">
-                    {new Date(terrarium.createdAt).toLocaleDateString('vi-VN')}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center justify-center space-x-2">
-                      <Link
-                        to={`/terrarium/${terrarium.terrariumId}`}
-                        className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                        title="Xem chi tiết"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Link>
-                      <Link
-                        to={`/manager/terrarium/edit/${terrarium.terrariumId}`}
-                        className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
-                        title="Chỉnh sửa"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(terrarium.terrariumId)}
-                        className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                        title="Xóa"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredTerrariums.map((terrarium) => {
+                const primaryImage = getPrimaryImage(terrarium.terrariumImages);
+                return (
+                  <tr key={terrarium.terrariumId} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 font-medium text-gray-900">{terrarium.terrariumId}</td>
+                    <td className="py-3 px-4">
+                      {primaryImage ? (
+                        <img
+                          src={primaryImage.imageUrl}
+                          alt={primaryImage.altText}
+                          className="w-12 h-12 object-cover rounded-lg"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                          <ImageIcon className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 font-medium text-gray-900">{terrarium.name}</td>
+                    <td className="py-3 px-4 text-gray-600 max-w-xs truncate">{terrarium.description}</td>
+                    <td className="py-3 px-4 font-medium text-gray-900">
+                      {formatPrice(terrarium.price)}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">{terrarium.stock}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(terrarium.status)}`}>
+                        {getStatusText(terrarium.status)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {terrarium.environments.length > 0
+                        ? terrarium.environments.join(', ')
+                        : 'Không có'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {terrarium.shapes.length > 0
+                        ? terrarium.shapes.join(', ')
+                        : 'Không có'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {terrarium.tankMethods.length > 0
+                        ? terrarium.tankMethods.join(', ')
+                        : 'Không có'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {terrarium.accessories.length > 0 ? (
+                        <div className="space-y-1">
+                          {terrarium.accessories.slice(0, 2).map((accessory) => (
+                            <div key={accessory.accessoryId} className="text-xs">
+                              {accessory.name}
+                            </div>
+                          ))}
+                          {terrarium.accessories.length > 2 && (
+                            <div className="text-xs text-gray-500">
+                              +{terrarium.accessories.length - 2} khác
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        'Không có'
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {new Date(terrarium.createdAt).toLocaleDateString('vi-VN')}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Link
+                          to={`/terrarium/${terrarium.terrariumId}`}
+                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                          title="Xem chi tiết"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                        <Link
+                          to={`/manager/terrarium/edit/${terrarium.terrariumId}`}
+                          className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
+                          title="Chỉnh sửa"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(terrarium.terrariumId)}
+                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                          title="Xóa"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

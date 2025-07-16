@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
-import { message } from 'antd';
+import { notification } from 'antd';
 import axios from 'axios';
 
 interface AccessoryFormData {
   name: string;
+  size: string;
   description: string;
   price: number;
   stock: number;
@@ -13,11 +14,20 @@ interface AccessoryFormData {
   status: string;
 }
 
+interface Category {
+  categoryId: number;
+  categoryName: string;
+  description: string;
+}
+
 const AccessoryCreate: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState<AccessoryFormData>({
     name: '',
+    size: '',
     description: '',
     price: 0,
     stock: 0,
@@ -25,11 +35,34 @@ const AccessoryCreate: React.FC = () => {
     status: 'active',
   });
 
-  const categories = [
-    { value: 1, label: 'Danh mục 1' },
-    { value: 2, label: 'Danh mục 2' },
-    // Add more categories as needed
-  ];
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        const response = await axios.get('https://terarium.shop/api/Category');
+        if (response.data.status === 200) {
+          setCategories(response.data.data);
+        } else {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Không thể tải danh sách danh mục',
+            placement: 'topRight',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        notification.error({
+          message: 'Lỗi',
+          description: 'Có lỗi xảy ra khi tải danh mục',
+          placement: 'topRight',
+        });
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -49,20 +82,41 @@ const AccessoryCreate: React.FC = () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      
       const response = await axios.post('https://terarium.shop/api/Accessory/add-accessory', payload);
-      if (response.data.status === 200) {
-        message.success('Phụ kiện đã được tạo thành công!');
+      
+      if (response.data.status === 200 || response.status === 200 || response.status === 201) {
+        notification.success({
+          message: 'Thành công',
+          description: 'Phụ kiện đã được tạo thành công!',
+          placement: 'topRight',
+        });
         navigate('/manager/accessory/list');
       } else {
-        throw new Error(response.data.message);
+        throw new Error(response.data?.message || 'Có lỗi xảy ra');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating accessory:', error);
-      message.error('Có lỗi xảy ra khi tạo phụ kiện');
+      notification.error({
+        message: 'Lỗi',
+        description: error.response?.data?.message || 'Có lỗi xảy ra khi tạo phụ kiện',
+        placement: 'topRight',
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  if (loadingCategories) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center space-x-2">
+          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-gray-600">Đang tải danh mục...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -100,6 +154,21 @@ const AccessoryCreate: React.FC = () => {
                     value={formData.name}
                     onChange={handleInputChange}
                     placeholder="Nhập tên phụ kiện"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Kích thước *
+                  </label>
+                  <input
+                    type="text"
+                    name="size"
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={formData.size}
+                    onChange={handleInputChange}
+                    placeholder="Nhập kích thước phụ kiện"
                   />
                 </div>
 
@@ -164,9 +233,9 @@ const AccessoryCreate: React.FC = () => {
                     onChange={handleInputChange}
                   >
                     <option value="">Chọn danh mục</option>
-                    {categories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
+                    {categories.map((category) => (
+                      <option key={category.categoryId} value={category.categoryId}>
+                        {category.categoryName}
                       </option>
                     ))}
                   </select>

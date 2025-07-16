@@ -7,10 +7,6 @@ interface ShapeFormData {
   shapeName: string;
   shapeDescription: string;
   shapeSize: string;
-  shapeHeight: number;
-  shapeWidth: number;
-  shapeLength: number;
-  shapeVolume: number;
   shapeMaterial: string;
 }
 
@@ -18,24 +14,15 @@ interface ShapeFormErrors {
   shapeName?: string;
   shapeDescription?: string;
   shapeSize?: string;
-  shapeHeight?: string;
-  shapeWidth?: string;
-  shapeLength?: string;
-  shapeVolume?: string;
   shapeMaterial?: string;
 }
 
 const ShapeCreate: React.FC = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ShapeFormData>({
     shapeName: '',
     shapeDescription: '',
     shapeSize: '',
-    shapeHeight: 0,
-    shapeWidth: 0,
-    shapeLength: 0,
-    shapeVolume: 0,
     shapeMaterial: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,39 +43,21 @@ const ShapeCreate: React.FC = () => {
     if (!formData.shapeMaterial.trim()) {
       errors.shapeMaterial = 'Chất liệu là bắt buộc';
     }
-    if (formData.shapeHeight <= 0) {
-      errors.shapeHeight = 'Chiều cao phải lớn hơn 0';
-    }
-    if (formData.shapeWidth <= 0) {
-      errors.shapeWidth = 'Chiều rộng phải lớn hơn 0';
-    }
-    if (formData.shapeLength <= 0) {
-      errors.shapeLength = 'Chiều dài phải lớn hơn 0';
-    }
-    if (formData.shapeVolume <= 0) {
-      errors.shapeVolume = 'Thể tích phải lớn hơn 0';
-    }
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }, [formData]);
 
-   const handleInputChange = (
-     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-   ) => {
-     const { name, value } = e.target;
-     
-     if (['shapeHeight', 'shapeWidth', 'shapeLength', 'shapeVolume'].includes(name)) {
-       const numericValue = value === '' ? 0 : parseFloat(value);
-       setFormData((prev) => ({ ...prev, [name]: isNaN(numericValue) ? 0 : numericValue }));
-     } else {
-       setFormData((prev) => ({ ...prev, [name]: value }));
-     }
-     
-     if (formErrors[name as keyof ShapeFormErrors]) {
-       setFormErrors((prev) => ({ ...prev, [name]: undefined }));
-     }
-   };
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    if (formErrors[name as keyof ShapeFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,20 +166,17 @@ const ShapeCreate: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Kích thước *
                     </label>
-                    <select
+                    <input
+                      type="text"
                       name="shapeSize"
                       value={formData.shapeSize}
                       onChange={handleInputChange}
                       className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                         formErrors.shapeSize ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      disabled={loading}
-                    >
-                      <option value="">Chọn kích thước</option>
-                      <option value="Small">Nhỏ</option>
-                      <option value="Medium">Trung bình</option>
-                      <option value="Large">Lớn</option>
-                    </select>
+                      placeholder="Ví dụ: 20x15x10 cm"
+                      disabled={isSubmitting}
+                    />
                     {formErrors.shapeSize && (
                       <p className="mt-1 text-sm text-red-500">{formErrors.shapeSize}</p>
                     )}
@@ -233,96 +199,6 @@ const ShapeCreate: React.FC = () => {
                     />
                     {formErrors.shapeMaterial && (
                       <p className="mt-1 text-sm text-red-500">{formErrors.shapeMaterial}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Chiều cao * (cm)
-                    </label>
-                    <input
-                      type="number"
-                      name="shapeHeight"
-                      value={formData.shapeHeight || ''}
-                      onChange={handleInputChange}
-                      step="0.1"
-                      min="0"
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        formErrors.shapeHeight ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="0"
-                      disabled={isSubmitting}
-                    />
-                    {formErrors.shapeHeight && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeHeight}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Chiều rộng * (cm)
-                    </label>
-                    <input
-                      type="number"
-                      name="shapeWidth"
-                      value={formData.shapeWidth || ''}
-                      onChange={handleInputChange}
-                      step="0.1"
-                      min="0"
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        formErrors.shapeWidth ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="0"
-                      disabled={isSubmitting}
-                    />
-                    {formErrors.shapeWidth && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeWidth}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Chiều dài * (cm)
-                    </label>
-                    <input
-                      type="number"
-                      name="shapeLength"
-                      value={formData.shapeLength || ''}
-                      onChange={handleInputChange}
-                      step="0.1"
-                      min="0"
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        formErrors.shapeLength ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="0"
-                      disabled={isSubmitting}
-                    />
-                    {formErrors.shapeLength && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeLength}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Thể tích * (cm³)
-                    </label>
-                    <input
-                      type="number"
-                      name="shapeVolume"
-                      value={formData.shapeVolume || ''}
-                      onChange={handleInputChange}
-                      step="0.1"
-                      min="0"
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        formErrors.shapeVolume ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="0"
-                      disabled={isSubmitting}
-                    />
-                    {formErrors.shapeVolume && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeVolume}</p>
                     )}
                   </div>
                 </div>
