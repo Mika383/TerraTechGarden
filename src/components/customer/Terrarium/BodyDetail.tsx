@@ -1,32 +1,18 @@
-// src/components/customer/Terrarium/BodyDetail.tsx
 import React from 'react';
 import Slider from 'react-slick';
-import 'slick-carousel/slick/slick.css'; // Import CSS của react-slick
-import 'slick-carousel/slick/slick-theme.css'; // Import theme CSS
-import forestImg from '../../../assets/image/1.jpg';
-import desertImg from '../../../assets/image/2.jpg';
-import tropicalImg from '../../../assets/image/3.jpg';
-import succulentImg from '../../../assets/image/4.jpg';
-import mossyImg from '../../../assets/image/5.jpg';
-import fairyImg from '../../../assets/image/6.jpg';
+import 'slick-carousel/slick/slick.css';
+import 'slick-carousel/slick/slick-theme.css';
 
 interface BodyDetailProps {
   id: string;
   name: string;
   type: string;
   image: string;
+  bodyHTML: string;
+  images: { url: string }[];
 }
 
-const BodyDetail: React.FC<BodyDetailProps> = ({ id, name, type, image }) => {
-  const additionalImages = [
-    { id: 'img1', src: forestImg, caption: 'Hình ảnh góc 1' },
-    { id: 'img2', src: desertImg, caption: 'Hình ảnh góc 2' },
-    { id: 'img3', src: tropicalImg, caption: 'Hình ảnh góc 3' },
-    { id: 'img4', src: succulentImg, caption: 'Hình ảnh góc 4' },
-    { id: 'img5', src: mossyImg, caption: 'Hình ảnh góc 5' },
-    { id: 'img6', src: fairyImg, caption: 'Hình ảnh góc 6' },
-  ].filter(img => img.src !== image); // Loại bỏ hình ảnh chính
-
+const BodyDetail: React.FC<BodyDetailProps> = ({ id, name, type, image, bodyHTML, images = [] }) => {
   const settings = {
     dots: true,
     infinite: true,
@@ -59,31 +45,30 @@ const BodyDetail: React.FC<BodyDetailProps> = ({ id, name, type, image }) => {
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
       <h3 className="text-2xl font-semibold text-gray-800 mb-4">Chi tiết sản phẩm</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="w-full">
           <h4 className="text-xl font-medium text-gray-700 mb-2">Hình ảnh bổ sung</h4>
-          <Slider {...settings}>
-            {additionalImages.length > 0 ? (
-              additionalImages.map((img) => (
-                <div key={img.id} className="p-2">
+          {images?.length > 0 ? (
+            <Slider {...settings}>
+              {images.map((img, index) => (
+                <div key={index} className="p-2">
                   <img
-                    src={img.src}
-                    alt={`${name} - ${img.caption}`}
+                    src={img.url}
+                    alt={`Ảnh ${index + 1}`}
                     className="w-full h-64 object-cover rounded-lg shadow-md"
                     onError={(e) => {
-                      e.currentTarget.src = 'https://via.placeholder.com/400x300'; // Placeholder nếu ảnh lỗi
+                      e.currentTarget.src = 'https://via.placeholder.com/400x300';
                     }}
                   />
-                  <p className="text-center text-gray-600 mt-2">{img.caption}</p>
                 </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-500">
-                Không có hình ảnh bổ sung
-              </div>
-            )}
-          </Slider>
+              ))}
+            </Slider>
+          ) : (
+            <p className="text-gray-500">Không có hình ảnh bổ sung.</p>
+          )}
         </div>
+
         <div className="w-full">
           <h4 className="text-xl font-medium text-gray-700 mb-2">Thông số kỹ thuật</h4>
           <table className="w-full text-left border-collapse">
@@ -97,6 +82,11 @@ const BodyDetail: React.FC<BodyDetailProps> = ({ id, name, type, image }) => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="prose max-w-none">
+        <h4 className="text-xl font-medium text-gray-700 mb-2">Mô Tả Chi Tiết</h4>
+        <div dangerouslySetInnerHTML={{ __html: bodyHTML }} />
       </div>
     </div>
   );

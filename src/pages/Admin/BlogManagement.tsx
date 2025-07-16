@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getAllBlogs, createBlog, updateBlog, deleteBlog } from '../../api/Blog';
+import { getAllBlogs, createBlog, updateBlog, deleteBlog } from '../../api/blog';
 import { getAllCategories } from '../../api/blogCategory';
-import { Blog } from '../../api/types/Blog';
+import { Blog } from '../../api/types/blog';
 import { Table, Button, Space, Modal, Input, Select, Popconfirm, Pagination, Upload, Radio, Switch } from 'antd';
 import { EditOutlined, DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { Editor } from '@tinymce/tinymce-react';
@@ -31,16 +31,23 @@ const BlogManagement: React.FC = () => {
   const [imageInputType, setImageInputType] = useState<'upload' | 'url'>('upload');
 
   const fetchBlogs = async () => {
-    setLoading(true);
-    try {
-      const data = await getAllBlogs();
-      setBlogs(data);
-    } catch {
-      toast.error('Lỗi khi tải danh sách blog');
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  try {
+    const data = await getAllBlogs();
+    // Map để đổi bodyHtml thành bodyHTML
+    const mappedData = data.map((blog: any) => ({
+      ...blog,
+      bodyHTML: blog.bodyHtml,   // map đúng với type
+    }));
+    setBlogs(mappedData);
+  } catch {
+    toast.error('Lỗi khi tải danh sách blog');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   const fetchCategories = async () => {
     try {
@@ -57,25 +64,27 @@ const BlogManagement: React.FC = () => {
   }, []);
 
   const openModal = (blog: Blog | null = null) => {
-    setEditingBlog(blog);
-    setFormState(blog ? {
-      blogCategoryId: blog.blogCategoryId,
-      title: blog.title,
-      content: blog.content,
-      urlImage: blog.urlImage || '',
-      bodyHTML: blog.bodyHTML,
-      status: blog.status,
-    } : {
-      blogCategoryId: 0,
-      title: '',
-      content: '',
-      urlImage: '',
-      bodyHTML: '',
-      status: 'Active',
-    });
-    setImageInputType('upload');
-    setIsModalVisible(true);
-  };
+  setEditingBlog(blog);
+  setFormState(blog ? {
+    blogCategoryId: blog.blogCategoryId,
+    title: blog.title,
+    content: blog.content,
+    urlImage: blog.urlImage || '',
+    bodyHTML: (blog as any).bodyHtml || blog.bodyHTML || '', // fallback nếu là bodyHtml
+    status: blog.status,
+  } : {
+    blogCategoryId: 0,
+    title: '',
+    content: '',
+    urlImage: '',
+    bodyHTML: '',
+    status: 'Active',
+  });
+  setImageInputType('upload');
+  setIsModalVisible(true);
+};
+
+
 
   const handleUpload = async (file: any) => {
     const formData = new FormData();
@@ -251,30 +260,37 @@ const BlogManagement: React.FC = () => {
         )}
 
         <Editor
-          apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
-          value={formState.bodyHTML}
-          init={{
-            height: 300,
-            images_upload_handler: async (
-              blobInfo: any,
-              success: (url: string) => void,
-              failure: (err: string) => void
-            ) => {
-              const formData = new FormData();
-              formData.append('file', blobInfo.blob());
-              formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-              try {
-                const res = await axios.post(CLOUDINARY_UPLOAD_URL, formData);
-                toast.success('Ảnh đã được upload lên Cloudinary');
-                success(res.data.secure_url);
-              } catch {
-                toast.error('Upload ảnh thất bại');
-                failure('Upload thất bại');
-              }
-            }
-          }}
-          onEditorChange={(content) => setFormState({ ...formState, bodyHTML: content })}
-        />
+            apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
+            value={formState.bodyHTML}
+            init={{
+                height: 500, // kích thước khung mặc định
+                resize: true, // cho phép resize khung editor
+                images_upload_handler: async (
+                    blobInfo: any,
+                    success: (url: string) => void,
+                    failure: (err: string) => void
+                    ) => {
+                    const formData = new FormData();
+                    formData.append('file', blobInfo.blob());
+                    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                    try {
+                        const res = await axios.post(CLOUDINARY_UPLOAD_URL, formData);
+                            if (res.data.secure_url) {
+                            success(res.data.secure_url);
+                            toast.success('Ảnh đã được upload lên Cloudinary');
+                            } else {
+                            failure('Không lấy được URL từ Cloudinary');
+                            }
+                    } catch {
+                        toast.error('Upload ảnh thất bại');
+                        failure('Upload thất bại');
+                    }
+                    },
+                content_style: 'img { max-width: 400px; height: auto; }' 
+            }}
+            onEditorChange={(content) => setFormState({ ...formState, bodyHTML: content })}
+            />
 
         <Select
           value={formState.status}

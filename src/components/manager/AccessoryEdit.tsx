@@ -12,6 +12,13 @@ interface AccessoryFormData {
   stock: number;
   categoryId: number;
   status: string;
+  size?: string;
+}
+
+interface Category {
+  categoryId: number;
+  categoryName: string;
+  description: string;
 }
 
 const AccessoryEdit: React.FC = () => {
@@ -19,6 +26,7 @@ const AccessoryEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState<AccessoryFormData>({
     accessoryId: 0,
     name: '',
@@ -27,27 +35,49 @@ const AccessoryEdit: React.FC = () => {
     stock: 0,
     categoryId: 0,
     status: 'active',
+    size: '',
   });
 
-  const categories = [
-    { value: 1, label: 'Danh mục 1' },
-    { value: 2, label: 'Danh mục 2' },
-    // Add more categories as needed
-  ];
+  // Fetch categories
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const response = await axios.get('https://terarium.shop/api/Category');
+        if (response.data.status === 200) {
+          setCategories(response.data.data);
+        } else {
+          throw new Error(response.data.message);
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        notification.error({
+          message: 'Lỗi',
+          description: 'Không thể tải danh sách danh mục',
+          placement: 'topRight',
+        });
+      }
+    };
 
+    loadCategories();
+  }, []);
+
+  // Fetch accessory data
   useEffect(() => {
     const loadAccessory = async () => {
       try {
-        const response = await axios.get('https://terarium.shop/api/Accessory/get-all');
+        const response = await axios.get(`https://terarium.shop/api/Accessory/get-${id}`);
         if (response.data.status === 200) {
-          const accessory = response.data.data.find((a: AccessoryFormData) => a.accessoryId === Number(id));
-          if (accessory) {
-            setFormData({
-              ...accessory,
-            });
-          } else {
-            throw new Error('Accessory not found');
-          }
+          const accessory = response.data.data;
+          setFormData({
+            accessoryId: accessory.accessoryId,
+            name: accessory.name,
+            description: accessory.description,
+            price: accessory.price,
+            stock: accessory.stock,
+            categoryId: accessory.categoryId,
+            status: accessory.status,
+            size: accessory.size || '',
+          });
         } else {
           throw new Error(response.data.message);
         }
@@ -83,9 +113,18 @@ const AccessoryEdit: React.FC = () => {
 
     try {
       const payload = {
-        ...formData,
+        accessoryId: formData.accessoryId,
+        name: formData.name,
+        size: formData.size || '',
+        description: formData.description,
+        price: formData.price,
+        stock: formData.stock,
+        categoryId: formData.categoryId,
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        status: formData.status,
       };
+
       const response = await axios.put(`https://terarium.shop/api/Accessory/update-accessory${id}`, payload);
       if (response.data.status === 200) {
         notification.success({
@@ -140,7 +179,6 @@ const AccessoryEdit: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Information */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Basic Info */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Thông tin cơ bản</h3>
               <div className="space-y-4">
@@ -156,6 +194,20 @@ const AccessoryEdit: React.FC = () => {
                     value={formData.name}
                     onChange={handleInputChange}
                     placeholder="Nhập tên phụ kiện"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Kích thước
+                  </label>
+                  <input
+                    type="text"
+                    name="size"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={formData.size}
+                    onChange={handleInputChange}
+                    placeholder="Nhập kích thước"
                   />
                 </div>
 
@@ -221,8 +273,8 @@ const AccessoryEdit: React.FC = () => {
                   >
                     <option value="">Chọn danh mục</option>
                     {categories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
+                      <option key={cat.categoryId} value={cat.categoryId}>
+                        {cat.categoryName}
                       </option>
                     ))}
                   </select>
@@ -233,9 +285,8 @@ const AccessoryEdit: React.FC = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Status */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Trạng thái</h3>
+              <h3 className="ntext-lg font-medium text-gray-900 mb-4">Trạng thái</h3>
               <select
                 name="status"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -247,7 +298,6 @@ const AccessoryEdit: React.FC = () => {
               </select>
             </div>
 
-            {/* Actions */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="space-y-3">
                 <button

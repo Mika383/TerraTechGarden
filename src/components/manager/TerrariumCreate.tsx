@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle, X, Check } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
+import axios from 'axios';
+
 
 interface TankMethod {
   tankMethodId: number;
@@ -13,11 +15,6 @@ interface Shape {
   shapeId: number;
   shapeName: string;
   shapeDescription: string;
-  shapeSize: string;
-  shapeHeight: number;
-  shapeWidth: number;
-  shapeLength: number;
-  shapeVolume: number;
   shapeMaterial: string;
 }
 
@@ -26,6 +23,19 @@ interface Environment {
   environmentName: string;
   environmentDescription: string;
   terrariumEnvironments: any[];
+}
+
+interface Accessory {
+  accessoryId: number;
+  name: string;
+  size: string;
+  description: string;
+  price: number;
+  stock: number;
+  categoryId: number;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
 }
 
 interface ApiResponse<T> {
@@ -44,7 +54,8 @@ interface ApiDropdownProps<T> {
   disabled?: boolean;
   customRenderer?: (item: T) => React.ReactNode;
 }
-
+const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
+const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
 const ApiDropdown = <T extends Record<string, any>>({
   apiUrl,
   placeholder,
@@ -197,22 +208,203 @@ const ApiDropdown = <T extends Record<string, any>>({
   );
 };
 
+interface AccessoryMultiSelectProps {
+  apiUrl: string;
+  placeholder: string;
+  selectedAccessories: Accessory[];
+  onSelectionChange: (accessories: Accessory[]) => void;
+  className?: string;
+  disabled?: boolean;
+}
+
+const AccessoryMultiSelect: React.FC<AccessoryMultiSelectProps> = ({
+  apiUrl,
+  placeholder,
+  selectedAccessories,
+  onSelectionChange,
+  className = '',
+  disabled = false
+}) => {
+  const [data, setData] = useState<Accessory[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [apiUrl]);
+
+  const fetchData = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse<Accessory> = await response.json();
+      
+      if (result.status === 200 && result.data) {
+        setData(result.data);
+      } else {
+        throw new Error(result.message || 'Failed to fetch data');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      console.error('Error fetching accessories:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleAccessory = (accessory: Accessory): void => {
+    const isSelected = selectedAccessories.some(a => a.accessoryId === accessory.accessoryId);
+    
+    if (isSelected) {
+      const newSelection = selectedAccessories.filter(a => a.accessoryId !== accessory.accessoryId);
+      onSelectionChange(newSelection);
+    } else {
+      const newSelection = [...selectedAccessories, accessory];
+      onSelectionChange(newSelection);
+    }
+  };
+
+  const removeAccessory = (accessoryId: number): void => {
+    const newSelection = selectedAccessories.filter(a => a.accessoryId !== accessoryId);
+    onSelectionChange(newSelection);
+  };
+
+  const toggleDropdown = (): void => {
+    if (!disabled && !loading) {
+      setIsOpen(!isOpen);
+    }
+  };
+
+  const isAccessorySelected = (accessory: Accessory): boolean => {
+    return selectedAccessories.some(a => a.accessoryId === accessory.accessoryId);
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <div
+        onClick={toggleDropdown}
+        className={`
+          w-full px-4 py-3 bg-white border border-gray-300 rounded-lg
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          hover:bg-gray-50 transition-colors duration-200 cursor-pointer
+          ${disabled || loading ? 'opacity-50 cursor-not-allowed' : ''}
+          ${error ? 'border-red-300' : ''}
+        `}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex-1 min-w-0">
+            {selectedAccessories.length === 0 ? (
+              <span className="text-gray-500">{placeholder}</span>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {selectedAccessories.map((accessory) => (
+                  <div
+                    key={accessory.accessoryId}
+                    className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
+                  >
+                    <span className="truncate max-w-20">{accessory.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeAccessory(accessory.accessoryId);
+                      }}
+                      className="ml-1 inline-flex items-center p-0.5 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center space-x-2 ml-2">
+            {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+            {error && <AlertCircle className="w-4 h-4 text-red-400" />}
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-1 text-sm text-red-600 flex items-center">
+          <AlertCircle className="w-4 h-4 mr-1" />
+          {error}
+          <button
+            onClick={fetchData}
+            className="ml-2 text-blue-600 hover:text-blue-800 underline"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {isOpen && !loading && !error && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {data.length === 0 ? (
+            <div className="px-4 py-3 text-gray-500 text-center">
+              Không có phụ kiện
+            </div>
+          ) : (
+            data.map((accessory) => (
+              <div
+                key={accessory.accessoryId}
+                onClick={() => handleToggleAccessory(accessory)}
+                className={`
+                  px-4 py-3 hover:bg-blue-50 transition-colors duration-150 cursor-pointer
+                  ${isAccessorySelected(accessory) ? 'bg-blue-100' : ''}
+                `}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-900">{accessory.name}</div>
+                    <div className="text-sm text-gray-500 mt-1 space-y-1">
+                      <div>Mô tả: {accessory.description}</div>
+                      <div>Kích thước: {accessory.size}</div>
+                      <div>Giá: {accessory.price.toLocaleString()} VNĐ</div>
+                      <div>Tồn kho: {accessory.stock}</div>
+                    </div>
+                  </div>
+                  <div className="ml-3">
+                    {isAccessorySelected(accessory) && (
+                      <Check className="w-5 h-5 text-blue-600" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface TerrariumFormData {
   terrariumName: string;
   description: string;
   price: number;
   stock: number;
-  status: number;
+  status: string;
   bodyHTML: string;
   tankMethodType: string;
   shape: string;
   environment: string;
+  accessoryNames: string[];
 }
 
 interface ApiSelections {
   tankMethod: TankMethod | null;
   shape: Shape | null;
   environment: Environment | null;
+  accessories: Accessory[];
 }
 
 const TerrariumCreate: React.FC = () => {
@@ -222,17 +414,19 @@ const TerrariumCreate: React.FC = () => {
     description: '',
     price: 0,
     stock: 0,
-    status: 1,
+    status: 'active',
     bodyHTML: '',
     tankMethodType: '',
     shape: '',
-    environment: ''
+    environment: '',
+    accessoryNames: []
   });
 
   const [apiSelections, setApiSelections] = useState<ApiSelections>({
     tankMethod: null,
     shape: null,
-    environment: null
+    environment: null,
+    accessories: []
   });
 
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -241,7 +435,7 @@ const TerrariumCreate: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'price' || name === 'stock' || name === 'status' ? Number(value) : value
+      [name]: name === 'price' || name === 'stock' ? Number(value) : value
     }));
   };
 
@@ -274,6 +468,18 @@ const TerrariumCreate: React.FC = () => {
         environment: (value as Environment).environmentName
       }));
     }
+  };
+
+  const handleAccessorySelection = (accessories: Accessory[]): void => {
+    setApiSelections(prev => ({
+      ...prev,
+      accessories
+    }));
+
+    setFormData(prev => ({
+      ...prev,
+      accessoryNames: accessories.map(accessory => accessory.name)
+    }));
   };
 
   const validateForm = (): boolean => {
@@ -324,6 +530,7 @@ const TerrariumCreate: React.FC = () => {
         tankMethodType: formData.tankMethodType,
         shape: formData.shape,
         environment: formData.environment,
+        accessoryNames: formData.accessoryNames,
         terrariumName: formData.terrariumName,
         description: formData.description,
         price: formData.price,
@@ -359,16 +566,18 @@ const TerrariumCreate: React.FC = () => {
             description: '',
             price: 0,
             stock: 0,
-            status: 1,
+            status: 'active',
             bodyHTML: '',
             tankMethodType: '',
             shape: '',
-            environment: ''
+            environment: '',
+            accessoryNames: []
           });
           setApiSelections({
             tankMethod: null,
             shape: null,
-            environment: null
+            environment: null,
+            accessories: []
           });
           setSubmitMessage(null);
         }, 2000);
@@ -390,14 +599,12 @@ const TerrariumCreate: React.FC = () => {
     console.log('Navigate back');
   };
 
-  // Custom renderer for Shape dropdown
   const renderShapeOption = (shape: Shape) => (
     <div>
       <div className="font-medium">{shape.shapeName}</div>
       <div className="text-sm text-gray-500 mt-1 space-y-1">
-        <div>Kích thước: {shape.shapeSize}</div>
-        <div>Kích thước: {shape.shapeHeight} x {shape.shapeWidth} x {shape.shapeLength}</div>
-        <div>Thể tích: {shape.shapeVolume}</div>
+        <div>Mô tả: {shape.shapeDescription}</div>
+        <div>Chất liệu: {shape.shapeMaterial}</div>
       </div>
     </div>
   );
@@ -446,7 +653,7 @@ const TerrariumCreate: React.FC = () => {
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Cấu hình Terrarium</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Phương pháp Tank *
@@ -486,6 +693,19 @@ const TerrariumCreate: React.FC = () => {
                         valueKey="environmentId"
                         labelKey="environmentName"
                         onSelect={(value) => handleApiSelection('environment', value)}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phụ kiện (Tùy chọn)
+                      </label>
+                      <AccessoryMultiSelect
+                        apiUrl="https://terarium.shop/api/Accessory/get-all"
+                        placeholder="Chọn phụ kiện"
+                        selectedAccessories={apiSelections.accessories}
+                        onSelectionChange={handleAccessorySelection}
                         className="w-full"
                       />
                     </div>
@@ -530,23 +750,42 @@ const TerrariumCreate: React.FC = () => {
                         Nội dung HTML (Tùy chọn)
                       </label>
                       <Editor
-                        apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
-                        value={formData.bodyHTML}
-                        onEditorChange={handleEditorChange}
-                        init={{
-                          height: 300,
-                          menubar: false,
-                          plugins: [
-                            'advlist autolink lists link image charmap print preview anchor',
-                            'searchreplace visualblocks code fullscreen',
-                            'insertdatetime media table paste code help wordcount'
-                          ],
-                          toolbar:
-                            'undo redo | formatselect | bold italic backcolor | \
-                            alignleft aligncenter alignright alignjustify | \
-                            bullist numlist outdent indent | removeformat | help'
-                        }}
-                      />
+                            apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
+                            value={formData.bodyHTML}
+                            init={{
+                              height: 500,
+                              resize: true,
+                              plugins: [
+                                'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'print', 'preview', 'anchor',
+                                'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                                'insertdatetime', 'media', 'table', 'paste', 'help', 'wordcount'
+                              ],
+                              toolbar:
+                                'undo redo | formatselect | bold italic backcolor | ' +
+                                'alignleft aligncenter alignright alignjustify | ' +
+                                'bullist numlist outdent indent | removeformat | image | help',
+                              images_upload_handler: async (blobInfo: any, success: (url: string) => void, failure: (err: string) => void) => {
+                                const formDataUpload = new FormData();
+                                formDataUpload.append('file', blobInfo.blob());
+                                formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                                try {
+                                  const res = await axios.post(CLOUDINARY_UPLOAD_URL, formDataUpload);
+                                  if (res.data.secure_url) {
+                                    success(res.data.secure_url);
+                                  } else {
+                                    failure('Không lấy được URL từ Cloudinary');
+                                  }
+                                } catch {
+                                  failure('Upload ảnh thất bại');
+                                }
+                              },
+                              content_style: 'img { max-width: 400px; height: auto; }'
+                            }}
+                            onEditorChange={handleEditorChange}
+                          />
+
+
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -593,8 +832,8 @@ const TerrariumCreate: React.FC = () => {
                           value={formData.status}
                           onChange={handleInputChange}
                         >
-                          <option value={1}>Hoạt động</option>
-                          <option value={2}>Không hoạt động</option>
+                          <option value="active">Hoạt động</option>
+                          <option value="inactive">Không hoạt động</option>
                         </select>
                       </div>
                     </div>
@@ -619,9 +858,8 @@ const TerrariumCreate: React.FC = () => {
                       </div>
                       {apiSelections.shape && (
                         <div className="text-xs text-gray-500 mt-1 space-y-1">
-                          <div>Kích thước: {apiSelections.shape.shapeSize}</div>
-                          <div>Kích thước: {apiSelections.shape.shapeHeight} x {apiSelections.shape.shapeWidth} x {apiSelections.shape.shapeLength}</div>
-                          <div>Thể tích: {apiSelections.shape.shapeVolume}</div>
+                          <div>Mô tả: {apiSelections.shape.shapeDescription}</div>
+                          <div>Chất liệu: {apiSelections.shape.shapeMaterial}</div>
                         </div>
                       )}
                     </div>
@@ -630,6 +868,23 @@ const TerrariumCreate: React.FC = () => {
                       <div className="text-sm text-gray-600">
                         {apiSelections.environment?.environmentName || 'Chưa chọn'}
                       </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="font-medium text-gray-700 text-sm">Phụ kiện</div>
+                      <div className="text-sm text-gray-600">
+                        {apiSelections.accessories.length === 0 ? 'Chưa chọn' : 
+                         `${apiSelections.accessories.length} phụ kiện đã chọn`}
+                      </div>
+                      {apiSelections.accessories.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1 space-y-1">
+                          {apiSelections.accessories.map(accessory => (
+                            <div key={accessory.accessoryId} className="flex justify-between">
+                              <span>{accessory.name}</span>
+                              <span>{accessory.price.toLocaleString()} VNĐ</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

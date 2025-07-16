@@ -1,5 +1,5 @@
 import axios from './axios';
-import { Blog } from './types/Blog';
+import { Blog } from './types/blog';
 
 export const getAllBlogs = async (): Promise<Blog[]> => {
   const res = await axios.get('/api/Blog/get-all');

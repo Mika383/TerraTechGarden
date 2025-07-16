@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getAllBlogs, createBlog, updateBlog, deleteBlog } from '../../api/Blog';
+import { getAllBlogs, createBlog, updateBlog, deleteBlog } from '../../api/blog';
 import { getAllCategories } from '../../api/blogCategory';
-import { Blog } from '../../api/types/Blog';
+import { Blog } from '../../api/types/blog';
 import { Table, Button, Space, Modal, Input, Select, Popconfirm, Pagination, Upload, Radio, Switch } from 'antd';
 import { EditOutlined, DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { Editor } from '@tinymce/tinymce-react';

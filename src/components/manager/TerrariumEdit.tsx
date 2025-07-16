@@ -35,11 +35,6 @@ interface Shape {
   shapeId: number;
   shapeName: string;
   shapeDescription: string;
-  shapeSize: string;
-  shapeHeight: number;
-  shapeWidth: number;
-  shapeLength: number;
-  shapeVolume: number;
   shapeMaterial: string;
 }
 
@@ -258,9 +253,8 @@ const ShapeRenderer: React.FC<{ item: Shape }> = ({ item }) => (
   <div>
     <div className="font-medium">{item.shapeName}</div>
     <div className="text-sm text-gray-500 mt-1 space-y-1">
-      <div>Kích thước: {item.shapeSize}</div>
-      <div>Kích thước: {item.shapeHeight} x {item.shapeWidth} x {item.shapeLength} cm</div>
-      <div>Thể tích: {item.shapeVolume} L</div>
+      <div>Mô tả: {item.shapeDescription}</div>
+      <div>Chất liệu: {item.shapeMaterial}</div>
     </div>
   </div>
 );

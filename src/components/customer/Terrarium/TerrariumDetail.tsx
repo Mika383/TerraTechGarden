@@ -1,7 +1,7 @@
 // src/components/customer/Terrarium/TerrariumDetail.tsx
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
-
+import miniForest from '../../../assets/image/1.jpg';
 interface TerrariumDetailProps {
   id: string;
   name: string;
@@ -86,7 +86,7 @@ const TerrariumDetail: React.FC<TerrariumDetailProps> = ({
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             onError={(e) => {
-              e.currentTarget.style.backgroundImage = `url(https://via.placeholder.com/400x300)`; // Placeholder nếu ảnh lỗi
+              e.currentTarget.style.backgroundImage = miniForest; // Placeholder nếu ảnh lỗi
             }}
           />
         </div>
