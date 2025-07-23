@@ -9,18 +9,35 @@ interface Accessory {
   name: string;
   description: string;
   price: number;
-  stock: number;
+  stockQuantity: number;
   categoryId: number;
   createdAt: string;
   updatedAt: string;
   status: string;
   size: string;
+  accessoryImages: { accessoryImageId: number; accessoryId: number; imageUrl: string }[];
 }
 
 interface Category {
   categoryId: number;
   categoryName: string;
   description: string;
+}
+
+interface AccessoryApiResponse {
+  results: Accessory[];
+  includeProperties: string[] | null;
+  totalPages: number;
+  totalRecords: number;
+  pageNumber: number;
+  pageSize: number;
+  isPagination: boolean;
+}
+
+interface ApiResponse<T> {
+  status: number;
+  message: string;
+  data: T;
 }
 
 const AccessoryList: React.FC = () => {
@@ -37,13 +54,13 @@ const AccessoryList: React.FC = () => {
         setLoading(true);
         
         // Fetch accessories
-        const accessoryResponse = await axios.get('https://terarium.shop/api/Accessory/get-all');
+        const accessoryResponse = await axios.get<ApiResponse<AccessoryApiResponse>>('https://terarium.shop/api/Accessory/get-all?IncludeProperties=AccessoryImages');
         
         // Fetch categories
-        const categoryResponse = await axios.get('https://terarium.shop/api/Category');
+        const categoryResponse = await axios.get<ApiResponse<Category[]>>('https://terarium.shop/api/Category');
         
         if (accessoryResponse.data.status === 200) {
-          setAccessories(accessoryResponse.data.data);
+          setAccessories(accessoryResponse.data.data.results);
         } else {
           notification.error({
             message: 'Lỗi',
@@ -200,6 +217,7 @@ const AccessoryList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Kích thước</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Hình ảnh</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Trạng thái</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
@@ -225,10 +243,13 @@ const AccessoryList: React.FC = () => {
                     {formatPrice(accessory.price)}
                   </td>
                   <td className="py-3 px-4 text-gray-600">
-                    {accessory.stock}
+                    {accessory.stockQuantity}
                   </td>
                   <td className="py-3 px-4 text-gray-600">
                     {accessory.size}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {accessory.accessoryImages.length} hình
                   </td>
                   <td className="py-3 px-4">
                     <span

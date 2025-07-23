@@ -11,6 +11,7 @@ import BlogManagement from '../pages/Admin/BlogManagement';
 import CategoryList from '../components/manager/CategoryList';
 import CategoryCreate from '../components/manager/CategoryCreate';
 import CategoryEdit from '../components/manager/CategoryEdit';
+import TerrariumVariants from '../components/manager/TerrariumVariants';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -120,6 +121,7 @@ const AppRoutes = () => {
         <Route element={<Suspense fallback={<Loading />}><ManagerLayout /></Suspense>}>
           <Route path="dashboard" element={<Suspense fallback={<Loading />}><ManagerDashboard /></Suspense>} />
           <Route path="terrarium/list" element={<Suspense fallback={<Loading />}><TerrariumList /></Suspense>} />
+          <Route path="terrarium/:id/variants" element={<Suspense fallback={<Loading />}><TerrariumVariants /></Suspense>} />
           <Route path="terrarium/create" element={<Suspense fallback={<Loading />}><TerrariumCreate /></Suspense>} />
           <Route path="terrarium/edit/:id" element={<Suspense fallback={<Loading />}><TerrariumEdit /></Suspense>} />
           <Route path="accessory/list" element={<Suspense fallback={<Loading />}><AccessoryList /></Suspense>} />
