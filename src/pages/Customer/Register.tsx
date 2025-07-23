@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Checkbox, Select, DatePicker } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hook/useAuth';
-import { RegisterRequest } from '../../api/types/auth';
+import { RegisterRequest } from '@/types';
 import OTPModal from '../../components/customer/Layout/OTPModal';
 import moment from 'moment';
 

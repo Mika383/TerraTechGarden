@@ -11,3 +11,9 @@ export interface Blog {
   updatedAt: string;
   image?: string; // Dự phòng ảnh bìa
 }
+export interface BlogCategory {
+  blogCategoryId: number;
+  categoryName: string;
+  description: string;
+  blogs: any[]; 
+}

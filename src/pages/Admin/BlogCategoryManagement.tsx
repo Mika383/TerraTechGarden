@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { getAllCategories, createCategory, updateCategory, deleteCategory } from '../../api/blogCategory';
-import { BlogCategory } from '../../api/types/blogCategory';
+import { getAllCategories, createCategory, updateCategory, deleteCategory } from '@/api';
+import { BlogCategory } from '@/types';
 import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { Modal, Input, Button, Table, Space, Popconfirm, message, Pagination } from 'antd';
 
