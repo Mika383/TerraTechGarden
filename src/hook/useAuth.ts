@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register, login, loginWithGoogle, verifyOTP } from '../api';
-import { RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, VerifyOTPRequest, VerifyOTPResponse } from '../api/types/auth';
+import { RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, VerifyOTPRequest, VerifyOTPResponse } from '@/types';
 import { getRoleFromToken } from '../utils/jwt';
 
 interface AuthHook {

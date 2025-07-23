@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTerrariumById } from '../../api/terrarium';
-import { getAllTerrariumVariants } from '../../api/terrariumVariant';
+import { getTerrariumById, getAllTerrariumVariants } from '@/api';
 import TerrariumDetail from '../../components/customer/Terrarium/TerrariumDetail';
 import BodyDetail from '../../components/customer/Terrarium/BodyDetail';
 import TerrariumReviews from '../../components/customer/Terrarium/TerrariumReviews';

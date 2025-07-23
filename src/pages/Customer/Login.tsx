@@ -2,7 +2,7 @@ import React from 'react';
 import { Form, Input, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hook/useAuth';
-import { LoginRequest } from '../../api/types/auth';
+import { LoginRequest } from '@/types';
 import { GoogleOutlined } from '@ant-design/icons';
 import { useGoogleLogin } from '@react-oauth/google';
 import { ToastContainer, toast } from 'react-toastify';

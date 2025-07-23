@@ -4,7 +4,7 @@ import { getAllTerrariums } from '../../../api/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import TerrariumCard from './TerrariumCard';
-import { Terrarium } from '../../../api/types/terrarium';
+import { Terrarium } from '@/types';
 
 // Ảnh fallback
 import miniForest from '../../../assets/image/1.jpg';
