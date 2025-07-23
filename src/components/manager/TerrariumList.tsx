@@ -1,38 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { notification } from 'antd';
-
-interface Accessory {
-  accessoryId: number;
-  name: string;
-  description: string;
-  price: number;
-}
 
 interface TerrariumImage {
   terrariumImageId: number;
   terrariumId: number;
   imageUrl: string;
-  altText: string;
-  isPrimary: boolean;
 }
 
 interface Terrarium {
   terrariumId: number;
-  name: string;
-  price: number;
+  environmentId: number;
+  shapeId: number;
+  tankMethodId: number;
+  terrariumName: string;
   description: string;
+  minPrice: number;
+  maxPrice: number;
   stock: number;
   status: string;
-  environments: string[];
-  shapes: string[];
-  tankMethods: string[];
-  accessories: Accessory[];
-  createdAt: string;
-  updatedAt: string;
-  bodyHTML: string;
   terrariumImages: TerrariumImage[];
+}
+
+interface ApiResponse {
+  status: number;
+  message: string;
+  data: {
+    results: Terrarium[];
+    includeProperties: string[];
+    totalPages: number;
+    totalRecords: number;
+    pageNumber: number;
+    pageSize: number;
+    isPagination: boolean;
+  };
 }
 
 const TerrariumList: React.FC = () => {
@@ -40,45 +42,59 @@ const TerrariumList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingImages, setUploadingImages] = useState<{ [key: number]: boolean }>({});
+  const [showImageModal, setShowImageModal] = useState<{ terrariumId: number; images: TerrariumImage[] } | null>(null);
+  const [pagination, setPagination] = useState({
+    totalPages: 1,
+    totalRecords: 0,
+    pageNumber: 1,
+    pageSize: 10,
+  });
 
   // Fetch terrariums from API
   useEffect(() => {
-    const fetchTerrariums = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch('https://terarium.shop/api/Terrarium/get-all');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.status === 200 && result.data) {
-          setTerrariums(result.data);
-        } else {
-          throw new Error(result.message || 'Failed to fetch terrariums');
-        }
-      } catch (error) {
-        console.error('Error fetching terrariums:', error);
-        setError(error instanceof Error ? error.message : 'An error occurred while fetching terrariums');
-        notification.error({
-          message: 'Lỗi',
-          description: error instanceof Error ? error.message : 'An error occurred while fetching terrariums',
-          placement: 'topRight',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTerrariums();
   }, []);
 
+  const fetchTerrariums = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch('https://terarium.shop/api/Terrarium/get-all?IncludeProperties=TerrariumImages');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse = await response.json();
+      
+      if (result.status === 200 && result.data) {
+        setTerrariums(result.data.results);
+        setPagination({
+          totalPages: result.data.totalPages,
+          totalRecords: result.data.totalRecords,
+          pageNumber: result.data.pageNumber,
+          pageSize: result.data.pageSize,
+        });
+      } else {
+        throw new Error(result.message || 'Failed to fetch terrariums');
+      }
+    } catch (error) {
+      console.error('Error fetching terrariums:', error);
+      setError(error instanceof Error ? error.message : 'An error occurred while fetching terrariums');
+      notification.error({
+        message: 'Lỗi',
+        description: error instanceof Error ? error.message : 'An error occurred while fetching terrariums',
+        placement: 'topRight',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredTerrariums = terrariums.filter((terrarium) =>
-    terrarium.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    terrarium.terrariumName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     terrarium.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -111,11 +127,104 @@ const TerrariumList: React.FC = () => {
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('vi-VN', {
+  const handleImageUpload = async (terrariumId: number, file: File) => {
+    try {
+      setUploadingImages(prev => ({ ...prev, [terrariumId]: true }));
+
+      const formData = new FormData();
+      formData.append('TerrariumId', terrariumId.toString());
+      formData.append('ImageFile', file);
+
+      const response = await fetch('https://terarium.shop/api/TerrariumImage/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.status === 200) {
+        // Refresh the terrarium list to get updated images
+        await fetchTerrariums();
+        notification.success({
+          message: 'Thành công',
+          description: 'Hình ảnh đã được tải lên thành công!',
+          placement: 'topRight',
+        });
+      } else {
+        throw new Error(result.message || 'Failed to upload image');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      notification.error({
+        message: 'Lỗi',
+        description: 'Có lỗi xảy ra khi tải lên hình ảnh',
+        placement: 'topRight',
+      });
+    } finally {
+      setUploadingImages(prev => ({ ...prev, [terrariumId]: false }));
+    }
+  };
+
+  const handleImageDelete = async (imageId: number) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa hình ảnh này?')) {
+      try {
+        const response = await fetch(`https://terarium.shop/api/TerrariumImage/delete-terrariumImage-${imageId}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Refresh the terrarium list to get updated images
+        await fetchTerrariums();
+        notification.success({
+          message: 'Thành công',
+          description: 'Hình ảnh đã được xóa thành công!',
+          placement: 'topRight',
+        });
+
+        // Update modal if it's open
+        if (showImageModal) {
+          const updatedTerrariums = terrariums.map(t => 
+            t.terrariumId === showImageModal.terrariumId 
+              ? { ...t, terrariumImages: t.terrariumImages.filter(img => img.terrariumImageId !== imageId) }
+              : t
+          );
+          const updatedTerrarium = updatedTerrariums.find(t => t.terrariumId === showImageModal.terrariumId);
+          if (updatedTerrarium) {
+            setShowImageModal({
+              terrariumId: updatedTerrarium.terrariumId,
+              images: updatedTerrarium.terrariumImages
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error deleting image:', error);
+        notification.error({
+          message: 'Lỗi',
+          description: 'Có lỗi xảy ra khi xóa hình ảnh',
+          placement: 'topRight',
+        });
+      }
+    }
+  };
+
+  const formatPrice = (minPrice: number, maxPrice: number) => {
+    const formatter = new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',
-    }).format(price);
+    });
+    
+    if (maxPrice === 0 || minPrice === maxPrice) {
+      return formatter.format(minPrice);
+    }
+    
+    return `${formatter.format(minPrice)} - ${formatter.format(maxPrice)}`;
   };
 
   const getStatusText = (status: string) => {
@@ -141,7 +250,7 @@ const TerrariumList: React.FC = () => {
   };
 
   const getPrimaryImage = (images: TerrariumImage[]) => {
-    return images.find(img => img.isPrimary) || images[0];
+    return images[0];
   };
 
   if (loading) {
@@ -186,7 +295,7 @@ const TerrariumList: React.FC = () => {
         </Link>
       </div>
 
-      {/* Filters */}
+      {/* Filters & Stats */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
@@ -199,8 +308,9 @@ const TerrariumList: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center text-gray-600">
-            Tìm thấy {filteredTerrariums.length} kết quả
+          <div className="flex items-center justify-between text-gray-600">
+            <span>Tìm thấy {filteredTerrariums.length} kết quả</span>
+            <span>Tổng: {pagination.totalRecords} terrarium</span>
           </div>
         </div>
       </div>
@@ -218,40 +328,73 @@ const TerrariumList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng tồn</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Trạng thái</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Môi trường</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Hình dạng</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Phương pháp bể</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Phụ kiện</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredTerrariums.map((terrarium) => {
                 const primaryImage = getPrimaryImage(terrarium.terrariumImages);
+                const isUploading = uploadingImages[terrarium.terrariumId];
+                
                 return (
                   <tr key={terrarium.terrariumId} className="hover:bg-gray-50">
                     <td className="py-3 px-4 font-medium text-gray-900">{terrarium.terrariumId}</td>
                     <td className="py-3 px-4">
-                      {primaryImage ? (
-                        <img
-                          src={primaryImage.imageUrl}
-                          alt={primaryImage.altText}
-                          className="w-12 h-12 object-cover rounded-lg"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-gray-400" />
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-2">
+                        {primaryImage ? (
+                          <img
+                            src={primaryImage.imageUrl}
+                            alt={`Terrarium ${terrarium.terrariumName}`}
+                            className="w-12 h-12 object-cover rounded-lg cursor-pointer"
+                            onClick={() => setShowImageModal({
+                              terrariumId: terrarium.terrariumId,
+                              images: terrarium.terrariumImages
+                            })}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div 
+                            className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center cursor-pointer"
+                            onClick={() => setShowImageModal({
+                              terrariumId: terrarium.terrariumId,
+                              images: terrarium.terrariumImages
+                            })}
+                          >
+                            <ImageIcon className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+                        
+                        {/* Image count badge */}
+                        {terrarium.terrariumImages.length > 0 && (
+                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                            {terrarium.terrariumImages.length}
+                          </span>
+                        )}
+                        
+                        {/* Upload button */}
+                        <label className="cursor-pointer p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded">
+                          <Upload className={`w-4 h-4 ${isUploading ? 'animate-spin' : ''}`} />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleImageUpload(terrarium.terrariumId, file);
+                              }
+                            }}
+                            disabled={isUploading}
+                          />
+                        </label>
+                      </div>
                     </td>
-                    <td className="py-3 px-4 font-medium text-gray-900">{terrarium.name}</td>
+                    <td className="py-3 px-4 font-medium text-gray-900">{terrarium.terrariumName}</td>
                     <td className="py-3 px-4 text-gray-600 max-w-xs truncate">{terrarium.description}</td>
                     <td className="py-3 px-4 font-medium text-gray-900">
-                      {formatPrice(terrarium.price)}
+                      {formatPrice(terrarium.minPrice, terrarium.maxPrice)}
                     </td>
                     <td className="py-3 px-4 text-gray-600">{terrarium.stock}</td>
                     <td className="py-3 px-4">
@@ -259,48 +402,12 @@ const TerrariumList: React.FC = () => {
                         {getStatusText(terrarium.status)}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {terrarium.environments.length > 0
-                        ? terrarium.environments.join(', ')
-                        : 'Không có'}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {terrarium.shapes.length > 0
-                        ? terrarium.shapes.join(', ')
-                        : 'Không có'}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {terrarium.tankMethods.length > 0
-                        ? terrarium.tankMethods.join(', ')
-                        : 'Không có'}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {terrarium.accessories.length > 0 ? (
-                        <div className="space-y-1">
-                          {terrarium.accessories.slice(0, 2).map((accessory) => (
-                            <div key={accessory.accessoryId} className="text-xs">
-                              {accessory.name}
-                            </div>
-                          ))}
-                          {terrarium.accessories.length > 2 && (
-                            <div className="text-xs text-gray-500">
-                              +{terrarium.accessories.length - 2} khác
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        'Không có'
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {new Date(terrarium.createdAt).toLocaleDateString('vi-VN')}
-                    </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center space-x-2">
                         <Link
-                          to={`/terrarium/${terrarium.terrariumId}`}
+                          to={`/manager/terrarium/${terrarium.terrariumId}/variants`}
                           className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                          title="Xem chi tiết"
+                          title="Xem variants"
                         >
                           <Eye className="w-4 h-4" />
                         </Link>
@@ -333,6 +440,50 @@ const TerrariumList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Image Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Hình ảnh Terrarium #{showImageModal.terrariumId}
+              </h3>
+              <button
+                onClick={() => setShowImageModal(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {showImageModal.images.map((image) => (
+                <div key={image.terrariumImageId} className="relative group">
+                  <img
+                    src={image.imageUrl}
+                    alt={`Terrarium image ${image.terrariumImageId}`}
+                    className="w-full h-32 object-cover rounded-lg"
+                  />
+                  <button
+                    onClick={() => handleImageDelete(image.terrariumImageId)}
+                    className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Xóa hình ảnh"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            {showImageModal.images.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                Chưa có hình ảnh nào
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -9,7 +9,7 @@ interface AccessoryFormData {
   name: string;
   description: string;
   price: number;
-  stock: number;
+  stockQuantity: number;
   categoryId: number;
   status: string;
   size?: string;
@@ -32,7 +32,7 @@ const AccessoryEdit: React.FC = () => {
     name: '',
     description: '',
     price: 0,
-    stock: 0,
+    stockQuantity: 0,
     categoryId: 0,
     status: 'active',
     size: '',
@@ -73,7 +73,7 @@ const AccessoryEdit: React.FC = () => {
             name: accessory.name,
             description: accessory.description,
             price: accessory.price,
-            stock: accessory.stock,
+            stockQuantity: accessory.stockQuantity,
             categoryId: accessory.categoryId,
             status: accessory.status,
             size: accessory.size || '',
@@ -103,7 +103,7 @@ const AccessoryEdit: React.FC = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'price' || name === 'stock' || name === 'categoryId' ? Number(value) : value,
+      [name]: name === 'price' || name === 'stockQuantity' || name === 'categoryId' ? Number(value) : value,
     }));
   };
 
@@ -118,7 +118,7 @@ const AccessoryEdit: React.FC = () => {
         size: formData.size || '',
         description: formData.description,
         price: formData.price,
-        stock: formData.stock,
+        stockQuantity: formData.stockQuantity,
         categoryId: formData.categoryId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -249,11 +249,11 @@ const AccessoryEdit: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      name="stock"
+                      name="stockQuantity"
                       required
                       min="0"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={formData.stock}
+                      value={formData.stockQuantity}
                       onChange={handleInputChange}
                       placeholder="0"
                     />
