@@ -1,7 +1,6 @@
 import React from 'react';
 import HeroSection from '../../components/customer/Layout/HeroSection';
 import FeaturedProducts from '../../components/customer/Terrarium/FeaturedProducts';
-import PopularTerrariums from '../../components/customer/Terrarium/PopularTerrariums';
 import MemberBenefits from '../../components/customer/Layout/MemberBenefits';
 import CustomerReviews from '../../components/customer/Terrarium/CustomerReviews';
 import CallToAction from '../../components/customer/Layout/CallToAction';
@@ -12,7 +11,6 @@ const Home: React.FC = () => {
       <HeroSection />
       <div className="container mx-auto py-12">
         <FeaturedProducts />
-        <PopularTerrariums />
         <MemberBenefits />
         <CustomerReviews />
         <CallToAction />

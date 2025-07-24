@@ -40,6 +40,8 @@ const Register = lazy(() => import('../pages/Customer/Register'));
 const ForgotPassword = lazy(() => import('../pages/Customer/ForgotPassword'));
 const ResetPassword = lazy(() => import('../pages/Customer/ResetPassword'));
 const Detail = lazy(() => import('../pages/Customer/Detail'));
+const AccessoryDetail = lazy(() => import('../pages/Customer/AccessoryDetail'));
+
 const Cart = lazy(() => import('../pages/Customer/Cart'));
 const Checkout = lazy(() => import('../pages/Customer/Checkout'));
 const CustomerDashboard = lazy(() => import('../pages/Customer/CustomerDashboard'));
@@ -94,6 +96,7 @@ const AppRoutes = () => {
         <Route path="cart" element={<Suspense fallback={<Loading />}><Cart /></Suspense>} />
         <Route path="checkout" element={<Suspense fallback={<Loading />}><Checkout /></Suspense>} />
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
+        <Route path="accessory/:id" element={<Suspense fallback={<Loading />}><AccessoryDetail /></Suspense>} />
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
         <Route
           path="customer-dashboard"

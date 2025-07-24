@@ -1,148 +1,128 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import TerrariumCard from '../Terrarium/TerrariumCard';
-import forestImg from '../../../assets/image/1.jpg';
-import desertImg from '../../../assets/image/2.jpg';
-import tropicalImg from '../../../assets/image/3.jpg';
-import succulentImg from '../../../assets/image/4.jpg';
-import mossyImg from '../../../assets/image/5.jpg';
-import fairyImg from '../../../assets/image/6.jpg';
-
-const products = [
-  {
-    id: '1',
-    name: 'Forest Terrarium',
-    description: 'Hệ sinh thái rừng thu nhỏ với cây xanh tươi mát.',
-    type: 'Cạn',
-    price: 1475000,
-    rating: 4.5,
-    purchases: 120,
-    image: forestImg,
-    category: 'Terrarium',
-  },
-  {
-    id: '2',
-    name: 'Desert Oasis Terrarium',
-    description: 'Bể sa mạc với xương rồng và cát trắng tinh tế.',
-    type: 'Cạn',
-    price: 1975000,
-    rating: 4.0,
-    purchases: 85,
-    image: desertImg,
-    category: 'Terrarium',
-  },
-  {
-    id: '3',
-    name: 'Tropical Paradise Terrarium',
-    description: 'Không gian nhiệt đới với cây cối rực rỡ.',
-    type: 'Bán Cạn',
-    price: 2475000,
-    rating: 4.8,
-    purchases: 150,
-    image: tropicalImg,
-    category: 'Terrarium',
-  },
-  {
-    id: '4',
-    name: 'Succulent Garden Terrarium',
-    description: 'Vườn cây mọng nước dễ chăm sóc.',
-    type: 'Cạn',
-    price: 1225000,
-    rating: 4.2,
-    purchases: 90,
-    image: succulentImg,
-    category: 'Terrarium',
-  },
-  {
-    id: '5',
-    name: 'Mossy World Terrarium',
-    description: 'Thế giới rêu xanh mát, đầy thư giãn.',
-    type: 'Bán Cạn',
-    price: 1725000,
-    rating: 4.3,
-    purchases: 110,
-    image: mossyImg,
-    category: 'Terrarium',
-  },
-  {
-    id: '6',
-    name: 'Fairy Garden Terrarium',
-    description: 'Vườn cổ tích với ánh sáng lung linh.',
-    type: 'Cạn',
-    price: 2225000,
-    rating: 4.7,
-    purchases: 130,
-    image: fairyImg,
-    category: 'Terrarium',
-  },
-  {
-    id: '7',
-    name: 'Tảo Rêu Cao Cấp',
-    description: 'Tảo rêu cao cấp để trang trí bể.',
-    type: 'Nước',
-    price: 375000,
-    rating: 4.1,
-    purchases: 200,
-    image: mossyImg,
-    category: 'Phụ kiện',
-  },
-  {
-    id: '8',
-    name: 'Kéo Chăm Sóc Cây',
-    description: 'Kéo chuyên dụng để chăm sóc cây và bể.',
-    type: 'Dụng Cụ',
-    price: 625000,
-    rating: 4.6,
-    purchases: 180,
-    image: forestImg,
-    category: 'Phụ kiện',
-  },
-];
+import {
+  getAllTerrariums,
+  getTerrariumImagesByTerrariumId,
+  getAllEnvironments,
+  getAllTankMethods,
+} from '@/api/terrarium';
+import { Terrarium, Environment, TankMethod } from '@/types/terrarium';
 
 interface ProductGridProps {
   searchQuery: string;
   selectedType: string | null;
   sortCriteria: string;
   sortOrder: 'ASC' | 'DESC';
+  page: number;
+  setPage: React.Dispatch<React.SetStateAction<number>>; // ✅ Thêm prop điều khiển page
 }
 
-const ProductGrid: React.FC<ProductGridProps> = ({ searchQuery, selectedType, sortCriteria, sortOrder }) => {
-  const filteredProducts = products
+const ProductGrid: React.FC<ProductGridProps> = ({
+  searchQuery,
+  selectedType,
+  sortCriteria,
+  sortOrder,
+  page,
+  setPage,
+}) => {
+  const [terrariums, setTerrariums] = useState<Terrarium[]>([]);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [tankMethods, setTankMethods] = useState<TankMethod[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [terrariumRes, envRes, tankRes] = await Promise.all([
+          getAllTerrariums(page),
+          getAllEnvironments(),
+          getAllTankMethods(),
+        ]);
+
+        const enriched = await Promise.all(
+          (terrariumRes || []).map(async (item) => {
+            if (Array.isArray(item.terrariumImages) && item.terrariumImages.length > 0) {
+              return item;
+            }
+            const images = await getTerrariumImagesByTerrariumId(item.terrariumId);
+            return {
+              ...item,
+              terrariumImages: images || [],
+            };
+          })
+        );
+
+        setTerrariums(enriched);
+        setEnvironments(envRes || []);
+        setTankMethods(tankRes || []);
+      } catch (error) {
+        console.error('Lỗi khi tải dữ liệu:', error);
+      }
+    };
+
+    fetchData();
+  }, [page]);
+
+  const getEnvironmentName = (environmentId: number): string => {
+    return environments.find((e) => e.environmentId === environmentId)?.environmentName || 'Không rõ';
+  };
+
+  const getTankMethodType = (tankMethodId: number): string => {
+    return tankMethods.find((t) => t.tankMethodId === tankMethodId)?.tankMethodType || 'Không rõ';
+  };
+
+  const filteredProducts = terrariums
     .filter((product) =>
-      product.name.toLowerCase().includes(searchQuery.toLowerCase())
+      product.terrariumName.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .filter((product) =>
-      selectedType ? product.type === selectedType : true
+      selectedType ? product.status?.toLowerCase() === selectedType.toLowerCase() : true
     );
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     let comparison = 0;
-    if (sortCriteria === 'rating') {
-      comparison = a.rating - b.rating;
-    } else if (sortCriteria === 'purchases') {
-      comparison = a.purchases - b.purchases;
-    } else if (sortCriteria === 'price') {
-      comparison = a.price - b.price;
-    }
+    if (sortCriteria === 'rating') comparison = 0;
+    else if (sortCriteria === 'purchases') comparison = 0;
+    else if (sortCriteria === 'price') comparison = (a.minPrice ?? 0) - (b.minPrice ?? 0);
     return sortOrder === 'ASC' ? comparison : -comparison;
   });
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {sortedProducts.map((product) => (
-        <TerrariumCard
-          key={product.id}
-          id={product.id}
-          name={product.name}
-          description={product.description}
-          type={product.type}
-          price={product.price}
-          rating={product.rating}
-          purchases={product.purchases}
-          image={product.image}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {sortedProducts.map((product) => (
+          <TerrariumCard
+              key={product.terrariumId}
+              id={product.terrariumId.toString()}
+              name={product.terrariumName}
+              description={product.description}
+              type={getTankMethodType(product.tankMethodId)}
+              price={product.minPrice ?? 0}
+              rating={0}
+              purchases={0}
+              image={product.terrariumImages?.[0]?.imageUrl || '/src/assets/image/1.jpg'}
+              environmentName={getEnvironmentName(product.environmentId)}
+              page={page} 
+            />
+        ))}
+      </div>
+
+      <div className="flex justify-center mt-6 space-x-4">
+        <button
+          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+          disabled={page === 1}
+          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+        >
+          Trang trước
+        </button>
+        <span className="px-4 py-2">Trang {page}</span>
+        <button
+          onClick={() => setPage((prev) => prev + 1)}
+          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+        >
+          Trang tiếp
+        </button>
+      </div>
+    </>
   );
 };
 
