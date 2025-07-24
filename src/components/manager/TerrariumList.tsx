@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon, Upload, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { notification } from 'antd';
 
 interface TerrariumImage {
@@ -51,17 +51,18 @@ const TerrariumList: React.FC = () => {
     pageSize: 10,
   });
 
-  // Fetch terrariums from API
+  // Fetch terrariums from API with pagination
   useEffect(() => {
     fetchTerrariums();
-  }, []);
+  }, [pagination.pageNumber, pagination.pageSize]);
 
   const fetchTerrariums = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('https://terarium.shop/api/Terrarium/get-all?IncludeProperties=TerrariumImages');
+      const url = `https://terarium.shop/api/Terrarium/get-all?Pagination.PageNumber=${pagination.pageNumber}&Pagination.PageSize=${pagination.pageSize}&IncludeProperties=TerrariumImages`;
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -71,12 +72,13 @@ const TerrariumList: React.FC = () => {
       
       if (result.status === 200 && result.data) {
         setTerrariums(result.data.results);
-        setPagination({
+        setPagination(prev => ({
+          ...prev,
           totalPages: result.data.totalPages,
           totalRecords: result.data.totalRecords,
           pageNumber: result.data.pageNumber,
           pageSize: result.data.pageSize,
-        });
+        }));
       } else {
         throw new Error(result.message || 'Failed to fetch terrariums');
       }
@@ -93,6 +95,7 @@ const TerrariumList: React.FC = () => {
     }
   };
 
+  // Filter terrariums based on search term
   const filteredTerrariums = terrariums.filter((terrarium) =>
     terrarium.terrariumName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     terrarium.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -109,8 +112,8 @@ const TerrariumList: React.FC = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // Remove from local state
-        setTerrariums(terrariums.filter((t) => t.terrariumId !== id));
+        // Refresh data after delete
+        await fetchTerrariums();
         notification.success({
           message: 'Thành công',
           description: 'Terrarium đã được xóa thành công!',
@@ -214,6 +217,54 @@ const TerrariumList: React.FC = () => {
     }
   };
 
+  // Pagination handlers
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setPagination(prev => ({ ...prev, pageNumber: newPage }));
+    }
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPagination(prev => ({ 
+      ...prev, 
+      pageSize: newPageSize,
+      pageNumber: 1 // Reset to first page when changing page size
+    }));
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    const currentPage = pagination.pageNumber;
+    const totalPages = pagination.totalPages;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+      if (startPage > 1) {
+        pages.push(1);
+        if (startPage > 2) pages.push(-1); // Ellipsis
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) pages.push(-1); // Ellipsis
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
   const formatPrice = (minPrice: number, maxPrice: number) => {
     const formatter = new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -297,7 +348,7 @@ const TerrariumList: React.FC = () => {
 
       {/* Filters & Stats */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -311,6 +362,20 @@ const TerrariumList: React.FC = () => {
           <div className="flex items-center justify-between text-gray-600">
             <span>Tìm thấy {filteredTerrariums.length} kết quả</span>
             <span>Tổng: {pagination.totalRecords} terrarium</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <label className="text-sm text-gray-600">Hiển thị:</label>
+            <select
+              value={pagination.pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+            <span className="text-sm text-gray-600">/ trang</span>
           </div>
         </div>
       </div>
@@ -440,6 +505,72 @@ const TerrariumList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {pagination.totalPages > 1 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Hiển thị {((pagination.pageNumber - 1) * pagination.pageSize) + 1} đến{' '}
+              {Math.min(pagination.pageNumber * pagination.pageSize, pagination.totalRecords)} của{' '}
+              {pagination.totalRecords} kết quả
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              {/* Previous button */}
+              <button
+                onClick={() => handlePageChange(pagination.pageNumber - 1)}
+                disabled={pagination.pageNumber === 1}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 ${
+                  pagination.pageNumber === 1
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Trước</span>
+              </button>
+
+              {/* Page numbers */}
+              <div className="flex items-center space-x-1">
+                {getPageNumbers().map((page, index) => (
+                  page === -1 ? (
+                    <span key={`ellipsis-${index}`} className="px-3 py-2 text-gray-400">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-3 py-2 rounded-lg ${
+                        page === pagination.pageNumber
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                ))}
+              </div>
+
+              {/* Next button */}
+              <button
+                onClick={() => handlePageChange(pagination.pageNumber + 1)}
+                disabled={pagination.pageNumber === pagination.totalPages}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 ${
+                  pagination.pageNumber === pagination.totalPages
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <span>Sau</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Image Modal */}
       {showImageModal && (

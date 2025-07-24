@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
-import { notification } from 'antd';
+import { Edit, Trash2, Eye, Plus, Search, Upload, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { notification, Modal, Upload as AntUpload } from 'antd';
 import axios from 'axios';
 
 interface Accessory {
@@ -47,52 +47,86 @@ const AccessoryList: React.FC = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(true);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  // Image management states
+  const [isImageModalVisible, setIsImageModalVisible] = useState(false);
+  const [selectedAccessory, setSelectedAccessory] = useState<Accessory | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const fetchAccessories = async (page: number = currentPage, size: number = pageSize) => {
+    try {
+      setLoading(true);
+      
+      const accessoryResponse = await axios.get<ApiResponse<AccessoryApiResponse>>(
+        `https://terarium.shop/api/Accessory/get-all?Pagination.PageNumber=${page}&Pagination.PageSize=${size}&IncludeProperties=AccessoryImages`
+      );
+      
+      if (accessoryResponse.data.status === 200) {
+        const data = accessoryResponse.data.data;
+        setAccessories(data.results);
+        setTotalPages(data.totalPages);
+        setTotalRecords(data.totalRecords);
+        setCurrentPage(data.pageNumber);
+      } else {
+        notification.error({
+          message: 'Lỗi',
+          description: 'Không thể tải danh sách phụ kiện',
+          placement: 'topRight',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching accessories:', error);
+      notification.error({
+        message: 'Lỗi',
+        description: 'Có lỗi xảy ra khi tải dữ liệu phụ kiện',
+        placement: 'topRight',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const categoryResponse = await axios.get<ApiResponse<Category[]>>('https://terarium.shop/api/Category');
+      
+      if (categoryResponse.data.status === 200) {
+        setCategories(categoryResponse.data.data);
+      } else {
+        notification.error({
+          message: 'Lỗi',
+          description: 'Không thể tải danh sách danh mục',
+          placement: 'topRight',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      notification.error({
+        message: 'Lỗi',
+        description: 'Có lỗi xảy ra khi tải danh mục',
+        placement: 'topRight',
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch accessories
-        const accessoryResponse = await axios.get<ApiResponse<AccessoryApiResponse>>('https://terarium.shop/api/Accessory/get-all?IncludeProperties=AccessoryImages');
-        
-        // Fetch categories
-        const categoryResponse = await axios.get<ApiResponse<Category[]>>('https://terarium.shop/api/Category');
-        
-        if (accessoryResponse.data.status === 200) {
-          setAccessories(accessoryResponse.data.data.results);
-        } else {
-          notification.error({
-            message: 'Lỗi',
-            description: 'Không thể tải danh sách phụ kiện',
-            placement: 'topRight',
-          });
-        }
-
-        if (categoryResponse.data.status === 200) {
-          setCategories(categoryResponse.data.data);
-        } else {
-          notification.error({
-            message: 'Lỗi',
-            description: 'Không thể tải danh sách danh mục',
-            placement: 'topRight',
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        notification.error({
-          message: 'Lỗi',
-          description: 'Có lỗi xảy ra khi tải dữ liệu',
-          placement: 'topRight',
-        });
-      } finally {
-        setLoading(false);
-      }
+      await Promise.all([fetchAccessories(), fetchCategories()]);
     };
-
     fetchData();
   }, []);
 
+  useEffect(() => {
+    fetchAccessories(currentPage, pageSize);
+  }, [currentPage, pageSize]);
+
+  // Apply filters to current page data
   const filteredAccessories = accessories.filter((accessory) => {
     const matchesSearch = accessory.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || accessory.categoryId.toString() === filterCategory;
@@ -106,7 +140,8 @@ const AccessoryList: React.FC = () => {
         const response = await axios.delete(`https://terarium.shop/api/Accessory/delete-accessory${id}`);
 
         if (response.data.status === 200 || response.status === 204) {
-          setAccessories(accessories.filter((a) => a.accessoryId !== id));
+          // Refresh current page data
+          await fetchAccessories();
           notification.success({
             message: 'Thành công',
             description: 'Phụ kiện đã được xóa thành công!',
@@ -124,6 +159,108 @@ const AccessoryList: React.FC = () => {
         });
       }
     }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    if (!selectedAccessory) return;
+
+    const formData = new FormData();
+    formData.append('AccessoryId', selectedAccessory.accessoryId.toString());
+    formData.append('ImageFile', file);
+
+    try {
+      setUploadingImage(true);
+      const response = await axios.post('https://terarium.shop/api/AccessoryImage/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.status === 200 || response.status === 200) {
+        // Refresh accessories to get updated images
+        await fetchAccessories();
+        
+        // Update selected accessory
+        const updatedAccessory = accessories.find(a => a.accessoryId === selectedAccessory.accessoryId);
+        if (updatedAccessory) {
+          setSelectedAccessory(updatedAccessory);
+        }
+
+        notification.success({
+          message: 'Thành công',
+          description: 'Tải ảnh lên thành công!',
+          placement: 'topRight',
+        });
+      } else {
+        throw new Error(response.data?.message || 'Không thể tải ảnh lên');
+      }
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      notification.error({
+        message: 'Lỗi',
+        description: error.response?.data?.message || 'Không thể tải ảnh lên',
+        placement: 'topRight',
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleImageDelete = async (imageId: number) => {
+    if (!selectedAccessory) return;
+
+    if (window.confirm('Bạn có chắc chắn muốn xóa ảnh này?')) {
+      try {
+        const response = await axios.delete(`https://terarium.shop/api/AccessoryImage/${imageId}`);
+
+        if (response.data.status === 200 || response.status === 204) {
+          // Refresh accessories to get updated images
+          await fetchAccessories();
+          
+          // Update selected accessory
+          const updatedAccessory = accessories.find(a => a.accessoryId === selectedAccessory.accessoryId);
+          if (updatedAccessory) {
+            setSelectedAccessory(updatedAccessory);
+          }
+
+          notification.success({
+            message: 'Thành công',
+            description: 'Xóa ảnh thành công!',
+            placement: 'topRight',
+          });
+        } else {
+          throw new Error(response.data?.message || 'Không thể xóa ảnh');
+        }
+      } catch (error: any) {
+        console.error('Error deleting image:', error);
+        notification.error({
+          message: 'Lỗi',
+          description: error.response?.data?.message || 'Không thể xóa ảnh',
+          placement: 'topRight',
+        });
+      }
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
+
+  const openImageModal = (accessory: Accessory) => {
+    setSelectedAccessory(accessory);
+    setIsImageModalVisible(true);
+  };
+
+  const closeImageModal = () => {
+    setIsImageModalVisible(false);
+    setSelectedAccessory(null);
   };
 
   const formatPrice = (price: number) => {
@@ -200,9 +337,19 @@ const AccessoryList: React.FC = () => {
             <option value="active">Hoạt động</option>
             <option value="inactive">Không hoạt động</option>
           </select>
-          <div className="flex items-center text-gray-600">
-            Tìm thấy {filteredAccessories.length} kết quả
-          </div>
+          <select
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+          >
+            <option value={5}>5 / trang</option>
+            <option value={10}>10 / trang</option>
+            <option value={20}>20 / trang</option>
+            <option value={50}>50 / trang</option>
+          </select>
+        </div>
+        <div className="mt-2 text-sm text-gray-600">
+          Hiển thị {filteredAccessories.length} trong số {totalRecords} kết quả
         </div>
       </div>
 
@@ -248,8 +395,13 @@ const AccessoryList: React.FC = () => {
                   <td className="py-3 px-4 text-gray-600">
                     {accessory.size}
                   </td>
-                  <td className="py-3 px-4 text-gray-600">
-                    {accessory.accessoryImages.length} hình
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => openImageModal(accessory)}
+                      className="text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {accessory.accessoryImages.length} hình
+                    </button>
                   </td>
                   <td className="py-3 px-4">
                     <span
@@ -302,6 +454,136 @@ const AccessoryList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Trang {currentPage} trong tổng số {totalPages} trang
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`px-3 py-1 border rounded-lg ${
+                      currentPage === pageNum
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Management Modal */}
+      <Modal
+        title={`Quản lý ảnh - ${selectedAccessory?.name}`}
+        open={isImageModalVisible}
+        onCancel={closeImageModal}
+        footer={null}
+        width={800}
+      >
+        {selectedAccessory && (
+          <div className="space-y-4">
+            {/* Upload Section */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+              <div className="text-center">
+                <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="mt-2">
+                  <label htmlFor="image-upload" className="cursor-pointer">
+                    <span className="mt-2 block text-sm font-medium text-gray-900">
+                      Tải ảnh lên
+                    </span>
+                    <span className="mt-1 block text-sm text-gray-500">
+                      PNG, JPG, GIF tối đa 10MB
+                    </span>
+                  </label>
+                  <input
+                    id="image-upload"
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleImageUpload(file);
+                      }
+                    }}
+                    disabled={uploadingImage}
+                  />
+                </div>
+                {uploadingImage && (
+                  <div className="mt-2">
+                    <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <span className="text-sm text-gray-600">Đang tải ảnh lên...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Images Grid */}
+            <div className="grid grid-cols-3 gap-4">
+              {selectedAccessory.accessoryImages.map((image) => (
+                <div key={image.accessoryImageId} className="relative group">
+                  <img
+                    src={image.imageUrl}
+                    alt="Accessory"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                  />
+                  <button
+                    onClick={() => handleImageDelete(image.accessoryImageId)}
+                    className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                    title="Xóa ảnh"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {selectedAccessory.accessoryImages.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                Chưa có ảnh nào cho phụ kiện này
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
