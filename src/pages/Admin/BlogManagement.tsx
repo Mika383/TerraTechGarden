@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { getAllBlogs, createBlog, updateBlog, deleteBlog } from '../../api/blog';
-import { getAllCategories } from '../../api/blogCategory';
-import { Blog } from '../../api/types/blog';
+import { getAllBlogs, createBlog, updateBlog, deleteBlog, getAllCategories } from '@/api';
+import { Blog, BlogCategory } from '@/types';
 import { Table, Button, Space, Modal, Input, Select, Popconfirm, Pagination, Upload, Radio, Switch } from 'antd';
 import { EditOutlined, DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { Editor } from '@tinymce/tinymce-react';
-import { BlogCategory } from '../../api/types/blogCategory';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 

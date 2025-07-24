@@ -1,78 +1,31 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Col, Row } from 'antd';
-import { getAllTerrariums } from '../../../api/terrarium';
+import { Row, Col, Button } from 'antd';
+import { getFeaturedTerrariums } from '@/api'; // ✅ dùng API mới
+import { Terrarium } from '@/types';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import TerrariumCard from './TerrariumCard';
-import { Terrarium } from '../../../api/types/terrarium';
-
-// Ảnh fallback
-import miniForest from '../../../assets/image/1.jpg';
-import desertOasis from '../../../assets/image/2.jpg';
-import tropicalParadise from '../../../assets/image/3.jpg';
+import miniForest from '@/assets/image/1.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
-interface ProductDisplay {
-  id: string;
-  name: string;
-  description: string;
-  type: string;
-  price: number;
-  rating: number;
-  purchases: number;
-  image: string;
-}
-
-const fallbackProducts: ProductDisplay[] = [
-  {
-    id: '2',
-    name: 'Desert Oasis Terrarium',
-    description: 'Terrarium chủ đề sa mạc ấn tượng.',
-    type: 'Desert',
-    price: 899000,
-    rating: 4,
-    purchases: 85,
-    image: desertOasis,
-  },
-  {
-    id: '3',
-    name: 'Tropical Paradise Terrarium',
-    description: 'Cây nhiệt đới rực rỡ trong lồng kính.',
-    type: 'Tropical',
-    price: 1199000,
-    rating: 5,
-    purchases: 150,
-    image: tropicalParadise,
-  },
-];
+const ITEMS_PER_PAGE = 6;
 
 const FeaturedProducts: React.FC = () => {
-  const [products, setProducts] = useState<ProductDisplay[]>([]);
+  const [terrariums, setTerrariums] = useState<Terrarium[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const featuredRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gsapContext = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
-      const terrariums: Terrarium[] = await getAllTerrariums();
-
-      const formattedTerrariums: ProductDisplay[] = terrariums.map((item) => ({
-            id: item.terrariumId.toString(),
-            name: item.name,
-            description: item.description,
-            type: item.environments.join(', ') || 'Unknown',
-            price: item.price,
-            rating: 4,
-            purchases: 0,
-            image: item.terrariumImages[0]?.url || miniForest, 
-      }));
-
-      setProducts([...formattedTerrariums, ...fallbackProducts]);
+      const data = await getFeaturedTerrariums(currentPage); // ✅ gọi đúng trang
+      const validData = data.filter(item => item.terrariumId);
+      setTerrariums(validData);
     };
-
     fetchData();
-  }, []);
+  }, [currentPage]);
 
   useEffect(() => {
     gsapContext.current = gsap.context(() => {
@@ -102,7 +55,7 @@ const FeaturedProducts: React.FC = () => {
               y: 0,
               scale: 1,
               duration: 1.2,
-              delay: index * 0.3,
+              delay: index * 0.2,
               ease: 'expo.out',
               scrollTrigger: {
                 trigger: card,
@@ -118,7 +71,7 @@ const FeaturedProducts: React.FC = () => {
     return () => {
       gsapContext.current?.revert();
     };
-  }, [products]);
+  }, [terrariums]);
 
   return (
     <div ref={featuredRef} className="mb-16 font-roboto will-change-transform-opacity">
@@ -126,19 +79,44 @@ const FeaturedProducts: React.FC = () => {
         Sản Phẩm Nổi Bật
       </h2>
       <Row gutter={[24, 24]} justify="center">
-        {products.map((product, index) => (
-          <Col xs={24} sm={12} md={8} key={product.id}>
+        {terrariums.map((item, index) => (
+          <Col xs={24} sm={12} md={8} key={item.terrariumId}>
             <div
               ref={(el) => {
                 cardRefs.current[index] = el;
               }}
               className="will-change-transform-opacity"
             >
-              <TerrariumCard {...product} />
+              <TerrariumCard
+                id={item.terrariumId.toString()}
+                name={item.terrariumName}
+                description={item.description}
+                type={`#${item.terrariumId}`}
+                price={item.minPrice}
+                rating={4}
+                purchases={0}
+                image={item.terrariumImages?.[0]?.imageUrl || miniForest}
+                environmentName={item.environment?.environmentName}
+              />
             </div>
           </Col>
         ))}
       </Row>
+
+      <div className="flex justify-center mt-8 space-x-4">
+        <Button
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(prev => prev - 1)}
+        >
+          Trang trước
+        </Button>
+        <Button
+          disabled={currentPage === 2} // ✅ chỉ 2 trang
+          onClick={() => setCurrentPage(prev => prev + 1)}
+        >
+          Trang sau
+        </Button>
+      </div>
     </div>
   );
 };

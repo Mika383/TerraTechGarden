@@ -1,14 +1,13 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Form, Input, Button } from 'antd';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import api from '../../api';
+
+import { resetPassword } from '@/api/auth'; // ✅ Đã chuẩn hóa
 
 const ResetPassword: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
   const { token } = useParams<{ token?: string }>();
@@ -32,19 +31,19 @@ const ResetPassword: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await api.post('/api/Users/reset-password', {
-        token,
-        newPassword: values.password,
-      });
-      if (response.data.message === 'Đặt lại mật khẩu thành công') {
+      const response = await resetPassword(token, values.password); // ✅ Gọi API đã chuẩn hóa
+
+      if (response.message?.includes('thành công')) {
         toast.success('Mật khẩu đã được đặt lại thành công! Vui lòng đăng nhập.', {
           position: 'top-right',
           autoClose: 3000,
         });
         navigate('/login');
+      } else {
+        toast.error(response.message || 'Không rõ phản hồi từ server.');
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.', {
+      toast.error(error.message || 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.', {
         position: 'top-right',
         autoClose: 3000,
       });

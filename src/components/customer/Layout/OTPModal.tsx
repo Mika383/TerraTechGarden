@@ -3,9 +3,10 @@ import { Modal, Button, Input } from 'antd';
 import { useAuth } from '../../../hook/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRightOutlined, SyncOutlined } from '@ant-design/icons';
-import api from '../../../api/axios';
-import type { InputRef } from 'antd';
 import { toast } from 'react-toastify';
+import type { InputRef } from 'antd';
+
+import { resendOTP } from '@/api'; // ✓ Chuẩn hóa API resend
 
 interface OTPModalProps {
   visible: boolean;
@@ -45,11 +46,11 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
   const handleResendOTP = async () => {
     setLoading(true);
     try {
-      const response = await api.post('/api/Users/resend-otp', { email });
-      setError(response.data.message || 'Mã OTP đã được gửi lại.');
+      const response = await resendOTP(email);
+      setError(response.message || 'Mã OTP đã được gửi lại.');
       toast.info('Mã OTP đã được gửi lại thành công.');
     } catch (error: any) {
-      setError(error.response?.data?.message || 'Gửi lại OTP thất bại.');
+      setError(error.message || 'Gửi lại OTP thất bại.');
     } finally {
       setLoading(false);
     }
@@ -125,7 +126,6 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
           ))}
         </div>
         {error && <p className="text-red-500 text-center mt-2">{error}</p>}
-        {loading }
         <Button
           type="primary"
           icon={<ArrowRightOutlined />}
@@ -141,16 +141,14 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
             disabled={loading}
             style={{ padding: '0', fontSize: '16px', color: loading ? '#ccc' : '#000' }}
           >
-            GỬI LẠI MÃ
+            Gửi Lại Mã
           </Button>
         </div>
         <div className="mt-2">
           <Button type="link" onClick={onCancel} style={{ padding: '0', fontSize: '16px', color: '#000' }}>
-            KHÔNG THỂ ĐĂNG NHẬP?
+            Không Thể Đăng Nhập?
           </Button>
         </div>
-        {/* <div className="mt-4 text-sm text-gray-500">© mobmet.com</div>
-        <div className="mt-2 text-sm text-gray-500">2003</div> */}
       </div>
     </Modal>
   );

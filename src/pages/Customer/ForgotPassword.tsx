@@ -3,7 +3,8 @@ import { Form, Input, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import api from '../../api';
+
+import { forgotPassword } from '@/api/auth'; // ✅ Gọi từ service đã chuẩn hóa
 
 const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
@@ -13,16 +14,18 @@ const ForgotPassword: React.FC = () => {
   const onFinish = async (values: { email: string }) => {
     setLoading(true);
     try {
-      const response = await api.post('/api/Users/forgot-password', { email: values.email });
-      if (response.data.message === 'Email gửi thành công') {
+      const response = await forgotPassword(values.email); // ✅ Gọi function chuẩn hóa
+      if (response.message?.includes('thành công')) {
         toast.success('Email khôi phục đã được gửi! Vui lòng kiểm tra hộp thư của bạn.', {
           position: 'top-right',
           autoClose: 3000,
         });
         navigate('/login');
+      } else {
+        toast.error(response.message || 'Không rõ phản hồi từ server.');
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gửi email khôi phục thất bại. Vui lòng thử lại.', {
+      toast.error(error.message || 'Gửi email khôi phục thất bại. Vui lòng thử lại.', {
         position: 'top-right',
         autoClose: 3000,
       });
