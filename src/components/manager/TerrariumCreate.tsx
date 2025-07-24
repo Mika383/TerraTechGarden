@@ -187,9 +187,13 @@ const AccessoryMultiSelect: React.FC<{
   disabled?: boolean;
 }> = ({ apiUrl, placeholder, selectedAccessories, onSelectionChange, className = '', disabled = false }) => {
   const [data, setData] = useState<Accessory[]>([]);
+  const [filteredData, setFilteredData] = useState<Accessory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const fetchData = async () => {
     try {
@@ -200,6 +204,7 @@ const AccessoryMultiSelect: React.FC<{
       const result: ApiResponse<AccessoryApiResponse> = await response.json();
       if (result.status !== 200) throw new Error(result.message || 'Failed to fetch data');
       setData(result.data.results);
+      setFilteredData(result.data.results);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
@@ -207,15 +212,97 @@ const AccessoryMultiSelect: React.FC<{
     }
   };
 
+  const searchAccessories = async (searchTerm: string) => {
+    if (!searchTerm.trim()) {
+      setFilteredData(data);
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      const encodedSearchTerm = encodeURIComponent(searchTerm.trim());
+      const searchUrl = `https://terarium.shop/api/Accessory/get-by-name/${encodedSearchTerm}`;
+      
+      const response = await fetch(searchUrl);
+      if (!response.ok) {
+        // If search fails, fall back to local filtering
+        const localFiltered = data.filter(accessory => 
+          accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredData(localFiltered);
+        return;
+      }
+      
+      const result: ApiResponse<Accessory[]> = await response.json();
+      if (result.status === 200) {
+        setFilteredData(result.data);
+      } else {
+        // Fall back to local filtering if API search fails
+        const localFiltered = data.filter(accessory => 
+          accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredData(localFiltered);
+      }
+    } catch (err) {
+      // Fall back to local filtering on error
+      const localFiltered = data.filter(accessory => 
+        accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredData(localFiltered);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set new timeout for debounced search
+    const timeout = setTimeout(() => {
+      searchAccessories(value);
+    }, 300); // 300ms delay
+
+    setSearchTimeout(timeout);
+  };
+
   React.useEffect(() => {
     fetchData();
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
   }, [apiUrl]);
+
+  React.useEffect(() => {
+    // Reset search when dropdown closes
+    if (!isOpen) {
+      setSearchTerm('');
+      setFilteredData(data);
+    }
+  }, [isOpen, data]);
 
   const handleToggleAccessory = (accessory: Accessory) => {
     const newSelection = selectedAccessories.some(a => a.accessoryId === accessory.accessoryId)
       ? selectedAccessories.filter(a => a.accessoryId !== accessory.accessoryId)
       : [...selectedAccessories, accessory];
     onSelectionChange(newSelection);
+  };
+
+  const clearSearch = () => {
+    setSearchTerm('');
+    setFilteredData(data);
   };
 
   return (
@@ -264,31 +351,101 @@ const AccessoryMultiSelect: React.FC<{
       )}
 
       {isOpen && !loading && !error && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-          {data.length === 0 ? (
-            <div className="px-4 py-3 text-gray-500 text-center">Không có phụ kiện</div>
-          ) : (
-            data.map((accessory) => (
-              <div
-                key={accessory.accessoryId}
-                onClick={() => handleToggleAccessory(accessory)}
-                className={`px-4 py-3 hover:bg-blue-50 transition-colors duration-150 cursor-pointer ${selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) ? 'bg-blue-100' : ''}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900">{accessory.name}</div>
-                    <div className="text-sm text-gray-500 mt-1 space-y-1">
-                      <div>Mô tả: {accessory.description}</div>
-                      <div>Kích thước: {accessory.size}</div>
-                      <div>Giá: {accessory.price.toLocaleString()} VNĐ</div>
-                      <div>Tồn kho: {accessory.stockQuantity}</div>
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden">
+          {/* Search Input */}
+          <div className="p-3 border-b border-gray-200 bg-gray-50">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Tìm kiếm phụ kiện..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                {searchLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                ) : (
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                )}
+              </div>
+              {searchTerm && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearSearch();
+                  }}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="max-h-60 overflow-auto">
+            {filteredData.length === 0 ? (
+              <div className="px-4 py-3 text-gray-500 text-center">
+                {searchTerm ? 'Không tìm thấy phụ kiện nào' : 'Không có phụ kiện'}
+              </div>
+            ) : (
+              <>
+                {searchTerm && (
+                  <div className="px-3 py-2 text-xs text-gray-600 bg-blue-50 border-b border-gray-200">
+                    Tìm thấy {filteredData.length} kết quả cho "{searchTerm}"
+                  </div>
+                )}
+                {filteredData.map((accessory) => (
+                  <div
+                    key={accessory.accessoryId}
+                    onClick={() => handleToggleAccessory(accessory)}
+                    className={`px-4 py-3 hover:bg-blue-50 transition-colors duration-150 cursor-pointer border-b border-gray-100 last:border-b-0 ${selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) ? 'bg-blue-100' : ''}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900">
+                          {searchTerm && accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ? (
+                            <span dangerouslySetInnerHTML={{
+                              __html: accessory.name.replace(
+                                new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                                '<mark class="bg-yellow-200 px-0.5">$1</mark>'
+                              )
+                            }} />
+                          ) : (
+                            accessory.name
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1 space-y-1">
+                          <div>
+                            Mô tả: {searchTerm && accessory.description.toLowerCase().includes(searchTerm.toLowerCase()) ? (
+                              <span dangerouslySetInnerHTML={{
+                                __html: accessory.description.replace(
+                                  new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                                  '<mark class="bg-yellow-200 px-0.5">$1</mark>'
+                                )
+                              }} />
+                            ) : (
+                              accessory.description
+                            )}
+                          </div>
+                          <div>Kích thước: {accessory.size || 'Không có'}</div>
+                          <div>Giá: {accessory.price.toLocaleString()} VNĐ</div>
+                          <div>Tồn kho: {accessory.stockQuantity}</div>
+                        </div>
+                      </div>
+                      {selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) && (
+                        <Check className="w-5 h-5 text-blue-600 ml-3 flex-shrink-0" />
+                      )}
                     </div>
                   </div>
-                  {selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) && <Check className="w-5 h-5 text-blue-600 ml-3" />}
-                </div>
-              </div>
-            ))
-          )}
+                ))}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -469,7 +626,7 @@ const TerrariumCreate: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phụ kiện (Tùy chọn)</label>
                     <AccessoryMultiSelect
-                      apiUrl="https://terarium.shop/api/Accessory/get-all"
+                      apiUrl="https://terarium.shop/api/Accessory/get-all?Pagination.PageSize=100"
                       placeholder="Chọn phụ kiện"
                       selectedAccessories={formData.accessories}
                       onSelectionChange={(accessories) => handleApiSelection('accessories', accessories)}
