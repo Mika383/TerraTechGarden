@@ -112,11 +112,20 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
     localStorage.setItem('wishlistItems', JSON.stringify(storedWishlist));
   };
 
-  const handleViewDetail = () => {
-    sessionStorage.setItem('scrollPosition', window.scrollY.toString());
-    sessionStorage.setItem('shopPage', String(page || 1)); // ✅ lưu cả page
-    navigate(`/terrarium/${id}`);
-  };
+//   const handleViewDetail = () => {
+//   const enableSessionRestore = false; // 👈 chỉ cần toggle true/false
+
+//   if (enableSessionRestore) {
+//     sessionStorage.setItem('scrollPosition', window.scrollY.toString());
+//     sessionStorage.setItem('shopPage', String(page || 1));
+//   }
+
+//   navigate(`/terrarium/${id}`); // hoặc `/accessory/${id}`
+// };
+
+const handleViewDetail = () => {
+  navigate(`/terrarium/${id}`);
+};
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.target as HTMLImageElement;
@@ -136,7 +145,7 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
           ref={imageRef}
           src={image}
           alt={name}
-          className="w-full h-48 object-cover rounded-t-lg"
+          className="w-full object-contain max-h-64"
           onError={handleImageError}
         />
       }

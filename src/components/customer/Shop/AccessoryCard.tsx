@@ -97,11 +97,21 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
     localStorage.setItem('wishlistAccessories', JSON.stringify(storedWishlist));
   };
 
-  const handleViewDetail = () => {
-    sessionStorage.setItem('scrollPosition', window.scrollY.toString());
-    sessionStorage.setItem('shopPage', String(page || 1));
-    navigate(`/accessory/${id}`);
-  };
+//   const handleViewDetail = () => {
+//   const enableSessionRestore = false; // 👈 chỉ cần toggle true/false
+
+//   if (enableSessionRestore) {
+//     sessionStorage.setItem('scrollPosition', window.scrollY.toString());
+//     sessionStorage.setItem('shopPage', String(page || 1));
+//   }
+
+//   navigate(`/terrarium/${id}`); // hoặc `/accessory/${id}`
+// };
+const handleViewDetail = () => {
+  navigate(`/accessory/${id}`);
+};
+
+
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
@@ -121,7 +131,7 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
           ref={imageRef}
           src={image}
           alt={name}
-          className="w-full h-48 object-cover rounded-t-lg"
+          className="w-full object-contain max-h-64"
           onError={handleImageError}
         />
       }
