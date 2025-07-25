@@ -1,289 +1,227 @@
 import React, { useEffect, useState } from 'react';
-import { getAllBlogs, createBlog, updateBlog, deleteBlog } from '@/api';
-import { getAllCategories } from '@/api';
-import { Blog, BlogCategory } from '@/types';
-import { Table, Button, Space, Modal, Input, Select, Popconfirm, Pagination, Upload, Radio, Switch } from 'antd';
-import { EditOutlined, DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
-import { Editor } from '@tinymce/tinymce-react';
-import axios from 'axios';
+import { getAccounts, getAccountsByRole, deleteAccountById, createAccount, updateAccount, updateAccountStatus } from '../../api/accounts';
+import { Account } from '@/types';
+import { EditOutlined, DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
+import { Switch } from 'antd';
 import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { motion, AnimatePresence } from 'framer-motion';
 
+const roles = ['Tất cả', 'User', 'Staff', 'Manager', 'Admin', 'Shipper'];
 const PAGE_SIZE = 5;
-const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
-const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
 
-const BlogManagement: React.FC = () => {
-  const [blogs, setBlogs] = useState<Blog[]>([]);
-  const [categories, setCategories] = useState<BlogCategory[]>([]);
+const roleMap: Record<string, number> = {
+  'User': 1,
+  'Staff': 2,
+  'Manager': 3,
+  'Admin': 4,
+  'Shipper': 5,
+};
+
+const AccountManagement: React.FC = () => {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingBlog, setEditingBlog] = useState<Blog | null>(null);
-  const [formState, setFormState] = useState({
-    blogCategoryId: 0,
-    title: '',
-    content: '',
-    urlImage: '',
-    bodyHTML: '',
-    status: 'Active',
-  });
+  const [selectedRole, setSelectedRole] = useState('Tất cả');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [newAccount, setNewAccount] = useState({ username: '', email: '', roleId: 1 });
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [imageInputType, setImageInputType] = useState<'upload' | 'url'>('upload');
 
-  const fetchBlogs = async () => {
+  const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const data = await getAllBlogs();
-      setBlogs(data);
+      const selected = selectedRole !== 'Tất cả' ? selectedRole : null;
+      const data = selected ? await getAccountsByRole(selected) : await getAccounts();
+      setAccounts(Array.isArray(data) ? data : []);
     } catch {
-      toast.error('Lỗi khi tải danh sách blog');
+      toast.error('Lỗi tải danh sách tài khoản');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCategories = async () => {
-    try {
-      const data = await getAllCategories();
-      setCategories(data);
-    } catch {
-      toast.error('Lỗi khi tải danh mục blog');
-    }
-  };
-
   useEffect(() => {
-    fetchBlogs();
-    fetchCategories();
-  }, []);
-
-  const openModal = (blog: Blog | null = null) => {
-    setEditingBlog(blog);
-    setFormState(blog ? {
-      blogCategoryId: blog.blogCategoryId,
-      title: blog.title,
-      content: blog.content,
-      urlImage: blog.urlImage || '',
-      bodyHTML: blog.bodyHTML,
-      status: blog.status,
-    } : {
-      blogCategoryId: 0,
-      title: '',
-      content: '',
-      urlImage: '',
-      bodyHTML: '',
-      status: 'Active',
-    });
-    setImageInputType('upload');
-    setIsModalVisible(true);
+    fetchAccounts();
+    setCurrentPage(1);
+  }, [selectedRole]);
+  useEffect(() => {
+  const handleTokenRefresh = () => {
+    fetchAccounts();
   };
 
-  const handleUpload = async (file: any) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  window.addEventListener('tokenRefreshed', handleTokenRefresh);
+  return () => window.removeEventListener('tokenRefreshed', handleTokenRefresh);
+}, []);
 
-    try {
-      const res = await axios.post(CLOUDINARY_UPLOAD_URL, formData);
-      const imageUrl = res.data.secure_url;
-      setFormState(prev => ({ ...prev, urlImage: imageUrl }));
-      toast.success('Tải ảnh bìa lên thành công!');
-    } catch {
-      toast.error('Tải ảnh bìa lên thất bại');
-    }
-    return false;
+  const handleCreate = async () => {
+    const payload = {
+      ...newAccount,
+      password: '1',
+      fullName: newAccount.username,
+      phoneNumber: '',
+      dateOfBirth: new Date().toISOString(),
+      gender: 'Nam',
+    };
+    await createAccount(payload);
+    toast.success('Tạo tài khoản thành công!');
+    setShowCreateForm(false);
+    fetchAccounts();
   };
 
-  const handleSubmit = async () => {
-    console.log('Submitting blog data:', formState);
-    try {
-      if (editingBlog) {
-        await updateBlog(editingBlog.blogId, {
-          ...editingBlog,
-          ...formState,
-          updatedAt: new Date().toISOString(),
-        });
-        toast.success('Cập nhật blog thành công');
-      } else {
-        await createBlog({
-          ...formState,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        toast.success('Tạo blog thành công');
-      }
-      fetchBlogs();
-    } catch {
-      toast.error('Đã xảy ra lỗi khi lưu blog');
-    } finally {
-      setIsModalVisible(false);
-    }
+  const handleEdit = async () => {
+    if (!editingAccount) return;
+    await updateAccount(editingAccount.userId, editingAccount);
+    toast.success('Cập nhật tài khoản thành công!');
+    setShowEditForm(false);
+    fetchAccounts();
+  };
+
+  const handleUpdateStatus = async (userId: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
+    await updateAccountStatus(userId, newStatus);
+    toast.success(`Đã cập nhật trạng thái thành ${newStatus}`);
+    fetchAccounts();
   };
 
   const handleDelete = async (id: number) => {
-    await deleteBlog(id);
-    toast.success('Xóa blog thành công');
-    fetchBlogs();
+    await deleteAccountById(id);
+    toast.success('Xóa tài khoản thành công!');
+    fetchAccounts();
   };
 
-  const toggleStatus = async (blog: Blog) => {
-    await updateBlog(blog.blogId, {
-      ...blog,
-      status: blog.status === 'Active' ? 'Inactive' : 'Active',
-      updatedAt: new Date().toISOString(),
-    });
-    toast.success('Đã cập nhật trạng thái');
-    fetchBlogs();
-  };
+  const filteredAccounts = accounts.filter(acc =>
+    acc.fullName?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const columns = [
-    { title: 'ID', dataIndex: 'blogId', key: 'blogId' },
-    {
-      title: 'Ảnh bìa',
-      dataIndex: 'urlImage',
-      key: 'urlImage',
-      render: (url: string) => url ? <img src={url} alt="Ảnh bìa" className="h-16" /> : 'Không có',
-    },
-    { title: 'Tiêu đề', dataIndex: 'title', key: 'title' },
-    { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
-    {
-      title: 'Chuyển trạng thái',
-      render: (_: any, record: Blog) => (
-        <Switch
-          checked={record.status === 'Active'}
-          onChange={() => toggleStatus(record)}
-        />
-      ),
-    },
-    {
-      title: 'Thao tác',
-      render: (_: any, record: Blog) => (
-        <Space>
-          <Button icon={<EditOutlined />} onClick={() => openModal(record)} />
-          <Popconfirm title="Xác nhận xoá?" onConfirm={() => handleDelete(record.blogId)}>
-            <Button icon={<DeleteOutlined />} danger />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
+  const totalPages = Math.ceil(filteredAccounts.length / PAGE_SIZE);
+  const paginatedAccounts = filteredAccounts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const roleNameFromId = (roleId: number) => {
+    return Object.keys(roleMap).find(key => roleMap[key] === roleId) || 'Unknown';
+  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Quản lý Bài viết</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Thêm Bài Viết</Button>
-      </div>
+        <h2 className="text-xl font-bold flex items-center space-x-2">
+          <UserOutlined /> <span>Quản lý Tài Khoản</span>
+        </h2>
+        <div className="flex space-x-2">
+          <select
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value)}
+            className="border rounded-lg py-1 px-3"
+          >
+            {roles.map((role) => (
+              <option key={role} value={role}>{role}</option>
+            ))}
+          </select>
 
-      <Table
-        rowKey="blogId"
-        dataSource={blogs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)}
-        columns={columns}
-        loading={loading}
-        pagination={false}
-      />
-
-      <Pagination
-        current={currentPage}
-        pageSize={PAGE_SIZE}
-        total={blogs.length}
-        onChange={page => setCurrentPage(page)}
-        className="mt-4 text-right"
-      />
-
-      <Modal
-        title={editingBlog ? 'Chỉnh sửa Bài viết' : 'Tạo Bài viết mới'}
-        open={isModalVisible}
-        onOk={handleSubmit}
-        onCancel={() => setIsModalVisible(false)}
-        width={800}
-      >
-        <Select
-          value={formState.blogCategoryId}
-          onChange={ EngineerValue => setFormState({ ...formState, blogCategoryId: EngineerValue })}
-          className="w-full mb-2"
-          placeholder="Chọn danh mục"
-        >
-          {categories.map(cat => (
-            <Select.Option key={cat.blogCategoryId} value={cat.blogCategoryId}>{cat.categoryName}</Select.Option>
-          ))}
-        </Select>
-
-        <Input
-          placeholder="Tiêu đề"
-          value={formState.title}
-          onChange={e => setFormState({ ...formState, title: e.target.value })}
-          className="mb-2"
-        />
-
-        <Input
-          placeholder="Content"
-          value={formState.content}
-          onChange={e => setFormState({ ...formState, content: e.target.value })}
-          className="mb-2"
-        />
-
-        <Radio.Group
-          onChange={(e) => setImageInputType(e.target.value)}
-          value={imageInputType}
-          className="mb-2"
-        >
-          <Radio value="upload">Upload ảnh</Radio>
-          <Radio value="url">Dán URL ảnh</Radio>
-        </Radio.Group>
-
-        {imageInputType === 'upload' ? (
-          <Upload beforeUpload={handleUpload} showUploadList={false}>
-            <Button icon={<UploadOutlined />}>Chọn ảnh</Button>
-          </Upload>
-        ) : (
-          <Input
-            placeholder="URL Ảnh bìa"
-            value={formState.urlImage}
-            onChange={e => setFormState({ ...formState, urlImage: e.target.value })}
-            className="mb-2"
+          <input
+            type="text"
+            placeholder="Tìm kiếm theo tên..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="border rounded-lg py-1 px-3"
           />
+          <button onClick={() => setShowCreateForm(true)} className="bg-blue-500 text-white px-3 py-1 rounded">
+            <PlusOutlined /> Thêm Tài Khoản
+          </button>
+        </div>
+      </div>
+            <div className="border rounded-lg p-4 relative" style={{ minHeight: '400px' }}>
+            <table className="w-full text-left border-collapse">
+                <thead>
+                <tr>
+                    <th className="border p-2">ID</th>
+                    <th className="border p-2">Tên</th>
+                    <th className="border p-2">Email</th>
+                    <th className="border p-2">Vai trò</th>
+                    <th className="border p-2">Trạng thái</th>
+                    <th className="border p-2">Thao tác</th>
+                </tr>
+                </thead>
+                <tbody>
+                {paginatedAccounts.map(acc => (
+                    <tr key={acc.userId}>
+                    <td className="border p-2">{acc.userId}</td>
+                    <td className="border p-2">{acc.fullName}</td>
+                    <td className="border p-2">{acc.email}</td>
+                    <td className="border p-2">{roleNameFromId(acc.roleId)}</td>
+                    <td className="border p-2">
+                        <Switch
+                        checked={acc.status === 'Active'}
+                        onChange={() => handleUpdateStatus(acc.userId, acc.status)}
+                        />
+                    </td>
+                    <td className="border p-2 space-x-2">
+                        <button onClick={() => {setEditingAccount(acc); setShowEditForm(true);}} className="text-blue-500"><EditOutlined /></button>
+                        <button onClick={() => handleDelete(acc.userId)} className="text-red-500"><DeleteOutlined /></button>
+                    </td>
+                    </tr>
+                ))}
+                </tbody>
+            </table>
+
+            <div className="absolute bottom-4 right-4 flex space-x-2">
+                {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                    key={i + 1}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={`px-3 py-1 border rounded ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}
+                >
+                    {i + 1}
+                </button>
+                ))}
+            </div>
+            </div>
+      <AnimatePresence>
+        {showCreateForm && (
+          <motion.div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-center z-50"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="bg-white p-6 rounded shadow-lg w-96"
+              initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}>
+              <h3 className="text-lg font-semibold mb-4">Tạo tài khoản mới</h3>
+              <input placeholder="Username" onChange={e => setNewAccount({...newAccount, username: e.target.value})} className="border p-2 mb-2 w-full" />
+              <input placeholder="Email" onChange={e => setNewAccount({...newAccount, email: e.target.value})} className="border p-2 mb-2 w-full" />
+              <select value={newAccount.roleId} onChange={e => setNewAccount({...newAccount, roleId: Number(e.target.value)})} className="border p-2 mb-4 w-full">
+                {Object.entries(roleMap).map(([name, id]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+              <div className="flex justify-end space-x-2">
+                <button onClick={handleCreate} className="bg-green-500 text-white px-4 py-2 rounded">Tạo</button>
+                <button onClick={() => setShowCreateForm(false)} className="bg-gray-300 px-4 py-2 rounded">Hủy</button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
 
-        {formState.urlImage && (
-          <img src={formState.urlImage} alt="Preview" className="mb-2 max-h-48 object-contain" />
+        {showEditForm && editingAccount && (
+          <motion.div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-center z-50"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="bg-white p-6 rounded shadow-lg w-96"
+              initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}>
+              <h3 className="text-lg font-semibold mb-4">Chỉnh sửa tài khoản</h3>
+              <input value={editingAccount.fullName} onChange={e => setEditingAccount({...editingAccount, fullName: e.target.value})} className="border p-2 mb-2 w-full" />
+              <input value={editingAccount.email} onChange={e => setEditingAccount({...editingAccount, email: e.target.value})} className="border p-2 mb-2 w-full" />
+              <select value={editingAccount.roleId} onChange={e => setEditingAccount({...editingAccount, roleId: Number(e.target.value)})} className="border p-2 mb-2 w-full">
+                {Object.entries(roleMap).map(([name, id]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+              <div className="flex justify-end space-x-2">
+                <button onClick={handleEdit} className="bg-green-500 text-white px-4 py-2 rounded">Lưu</button>
+                <button onClick={() => setShowEditForm(false)} className="bg-gray-300 px-4 py-2 rounded">Hủy</button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
-
-        <Editor
-          apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
-          value={formState.bodyHTML}
-          init={{
-            height: 300,
-            images_upload_handler: async (
-              blobInfo: any,
-              success: (url: string) => void,
-              failure: (err: string) => void
-            ) => {
-              const formData = new FormData();
-              formData.append('file', blobInfo.blob());
-              formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-              try {
-                const res = await axios.post(CLOUDINARY_UPLOAD_URL, formData);
-                toast.success('Ảnh đã được upload lên Cloudinary');
-                success(res.data.secure_url);
-              } catch {
-                toast.error('Upload ảnh thất bại');
-                failure('Upload thất bại');
-              }
-            }
-          }}
-          onEditorChange={(content) => setFormState({ ...formState, bodyHTML: content })}
-        />
-
-        <Select
-          value={formState.status}
-          onChange={value => setFormState({ ...formState, status: value })}
-          className="w-full mt-2"
-        >
-          <Select.Option value="Active">Active</Select.Option>
-          <Select.Option value="Inactive">Inactive</Select.Option>
-        </Select>
-      </Modal>
+      </AnimatePresence>
     </div>
   );
 };
 
-export default BlogManagement;
+export default AccountManagement;
