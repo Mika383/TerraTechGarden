@@ -17,22 +17,45 @@ const Shop: React.FC = () => {
   const [page, setPage] = useState<number>(1); // ✅ trạng thái page
 
   const contentRef = useRef<HTMLDivElement>(null);
-
-  // ✅ Scroll + page recovery
   useEffect(() => {
-    const savedPage = sessionStorage.getItem('shopPage');
-    const savedScroll = sessionStorage.getItem('scrollPosition');
+  setPage(1); // ✅ reset về trang 1 mỗi khi chuyển tab
+}, [selectedCategory]);
 
-    if (savedPage) setPage(parseInt(savedPage));
-    if (savedScroll) {
-      setTimeout(() => {
-        window.scrollTo({ top: parseInt(savedScroll), behavior: 'smooth' });
-      }, 300);
-    }
+ 
+//  useEffect(() => {
+//   const enableRestore = false; 
+//   if (!enableRestore) return;
 
-    sessionStorage.removeItem('shopPage');
-    sessionStorage.removeItem('scrollPosition');
-  }, []);
+//   const savedPage = sessionStorage.getItem('shopPage');
+//   const savedScroll = sessionStorage.getItem('scrollPosition');
+
+//   if (savedPage) setPage(parseInt(savedPage));
+//   if (savedScroll) {
+//     setTimeout(() => {
+//       window.scrollTo({ top: parseInt(savedScroll), behavior: 'smooth' });
+//     }, 300);
+//   }
+
+//   sessionStorage.removeItem('shopPage');
+//   sessionStorage.removeItem('scrollPosition');
+// }, []);
+
+useEffect(() => {
+  const savedPage = sessionStorage.getItem('shopPage');
+  const savedScroll = sessionStorage.getItem('scrollPosition');
+
+  if (savedPage) setPage(parseInt(savedPage));
+  if (savedScroll) {
+    setTimeout(() => {
+      window.scrollTo({ top: parseInt(savedScroll), behavior: 'smooth' });
+    }, 300);
+  }
+
+  sessionStorage.removeItem('shopPage');
+  sessionStorage.removeItem('scrollPosition');
+}, []);
+
+
 
   // ✅ GSAP animation khi đổi tab
   useEffect(() => {
