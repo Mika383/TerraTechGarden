@@ -128,3 +128,12 @@ export const getAllTankMethods = async (): Promise<TankMethod[]> => {
   const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/TankMethod`);
   return response.data?.data || [];
 };
+
+export const getTerrariumVariantById = async (
+  variantId: number
+): Promise<TerrariumVariant | null> => {
+  const res = await axios.get(
+    `${BASE_URL}/TerrariumVariant/get-terrariumVariant-${variantId}`
+  );
+  return res.data?.data || null;
+};
