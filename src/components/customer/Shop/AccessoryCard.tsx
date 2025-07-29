@@ -1,9 +1,11 @@
+// ✅ AccessoryCard.tsx
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { gsap } from 'gsap';
 import { Button, Card } from 'antd';
 import { HeartFilled, HeartOutlined } from '@ant-design/icons';
+import { addToCart } from '@/api/cart';
 
 interface AccessoryCardProps {
   id: string;
@@ -12,7 +14,7 @@ interface AccessoryCardProps {
   categoryName: string;
   price: number;
   image: string;
-  page?: number; // ✅ dùng để lưu lại phân trang
+  page?: number;
 }
 
 const AccessoryCard: React.FC<AccessoryCardProps> = ({
@@ -31,61 +33,69 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
   const buttonsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    gsap.fromTo(
-      imageRef.current,
-      { opacity: 0, scale: 1.1 },
-      {
-        opacity: 1,
-        scale: 1,
-        duration: 0.8,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: 'top 85%',
-        },
-      }
-    );
-    gsap.fromTo(
-      contentRef.current,
-      { opacity: 0, y: 20 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.8,
-        delay: 0.2,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: 'top 85%',
-        },
-      }
-    );
-    gsap.fromTo(
-      buttonsRef.current,
-      { opacity: 0, y: 20 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.8,
-        delay: 0.4,
-        ease: 'back.out(1.7)',
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: 'top 85%',
-        },
-      }
-    );
+    gsap.fromTo(imageRef.current, { opacity: 0, scale: 1.1 }, {
+      opacity: 1,
+      scale: 1,
+      duration: 0.8,
+      ease: 'power2.out',
+      scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
+    });
+    gsap.fromTo(contentRef.current, { opacity: 0, y: 20 }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      delay: 0.2,
+      ease: 'power2.out',
+      scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
+    });
+    gsap.fromTo(buttonsRef.current, { opacity: 0, y: 20 }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      delay: 0.4,
+      ease: 'back.out(1.7)',
+      scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
+    });
   }, []);
 
-  const handleAddToCart = () => {
-    toast.info(`${name} sẽ được thêm vào giỏ khi chức năng hoàn tất.`);
+  const handleAddToCart = async () => {
+    const isLoggedIn = !!localStorage.getItem('authToken');
+    if (isLoggedIn) {
+      try {
+        await addToCart({ accessoryId: Number(id), accessoryQuantity: 1, terrariumVariantId: 0, variantQuantity: 0 });
+        toast.success(`${name} đã được thêm vào giỏ hàng!`);
+      } catch {
+        toast.error('Thêm vào giỏ hàng thất bại');
+      }
+    } else {
+      const localCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
+      const index = localCart.findIndex((item: any) => item.accessoryId === Number(id));
+      if (index !== -1) {
+        localCart[index].quantity += 1;
+      } else {
+        localCart.push({
+          id: id + '-accessory',
+          accessoryId: Number(id),
+          name,
+          price,
+          quantity: 1,
+          image,
+          selected: false,
+        });
+      }
+      localStorage.setItem('cartItems', JSON.stringify(localCart));
+      toast.success(`${name} đã được thêm vào giỏ hàng (local)!`);
+    }
+  };
+
+  const handleViewDetail = () => {
+    navigate(`/accessory/${id}`);
   };
 
   const handleAddToWishlist = () => {
     const wishlistItem = { id, name, price, image };
     const storedWishlist = JSON.parse(localStorage.getItem('wishlistAccessories') || '[]');
     const existing = storedWishlist.findIndex((item: any) => item.id === id);
-
     if (existing > -1) {
       storedWishlist.splice(existing, 1);
       toast.info(`${name} đã được xóa khỏi danh sách yêu thích!`);
@@ -93,25 +103,8 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
       storedWishlist.push(wishlistItem);
       toast.success(`${name} đã được thêm vào danh sách yêu thích!`);
     }
-
     localStorage.setItem('wishlistAccessories', JSON.stringify(storedWishlist));
   };
-
-//   const handleViewDetail = () => {
-//   const enableSessionRestore = false; // 👈 chỉ cần toggle true/false
-
-//   if (enableSessionRestore) {
-//     sessionStorage.setItem('scrollPosition', window.scrollY.toString());
-//     sessionStorage.setItem('shopPage', String(page || 1));
-//   }
-
-//   navigate(`/terrarium/${id}`); // hoặc `/accessory/${id}`
-// };
-const handleViewDetail = () => {
-  navigate(`/accessory/${id}`);
-};
-
-
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;

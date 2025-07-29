@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import BodyDetail from './BodyDetail';
 import { Terrarium, TerrariumVariant } from '@/types/terrarium';

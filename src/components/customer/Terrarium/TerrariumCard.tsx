@@ -83,19 +83,19 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
     );
   }, []);
 
-  const handleAddToCart = () => {
-    const cartItem = { id, name, price, image, quantity: 1, selected: false };
-    const storedCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
-    const existingItemIndex = storedCart.findIndex((item: any) => item.id === id);
-    if (existingItemIndex > -1) {
-      storedCart[existingItemIndex].quantity += 1;
-      toast.success(`${name} đã được tăng số lượng trong giỏ hàng!`);
-    } else {
-      storedCart.push(cartItem);
-      toast.success(`${name} đã được thêm vào giỏ hàng!`);
-    }
-    localStorage.setItem('cartItems', JSON.stringify(storedCart));
-  };
+  // const handleAddToCart = () => {
+  //   const cartItem = { id, name, price, image, quantity: 1, selected: false };
+  //   const storedCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
+  //   const existingItemIndex = storedCart.findIndex((item: any) => item.id === id);
+  //   if (existingItemIndex > -1) {
+  //     storedCart[existingItemIndex].quantity += 1;
+  //     toast.success(`${name} đã được tăng số lượng trong giỏ hàng!`);
+  //   } else {
+  //     storedCart.push(cartItem);
+  //     toast.success(`${name} đã được thêm vào giỏ hàng!`);
+  //   }
+  //   localStorage.setItem('cartItems', JSON.stringify(storedCart));
+  // };
 
   const handleAddToWishlist = () => {
     const wishlistItem = { id, name, price, image };
@@ -175,13 +175,7 @@ const handleViewDetail = () => {
         </div>
       </div>
       <div ref={buttonsRef} className="flex space-x-2 mt-4">
-        <Button
-          type="primary"
-          className="flex-1 bg-green-600 hover:bg-green-700 font-roboto"
-          onClick={handleAddToCart}
-        >
-          Thêm vào giỏ
-        </Button>
+        
         <Button
           type="default"
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white border-none font-roboto"

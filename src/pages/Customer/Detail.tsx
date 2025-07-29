@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -5,6 +6,7 @@ import {
   getTerrariumImagesByTerrariumId,
   getVariantsByTerrariumId,
 } from '@/api/terrarium';
+import { getCart, updateCartItem, addMultipleToCart } from '@/api/cart';
 import TerrariumDetail from '@/components/customer/Terrarium/TerrariumDetail';
 import Loading from '@/components/Loading';
 import { toast } from 'react-toastify';
@@ -31,8 +33,6 @@ const Detail: React.FC = () => {
       try {
         const apiData = await getTerrariumById(terrariumId);
         const images = await getTerrariumImagesByTerrariumId(terrariumId);
-        
-
 
         if (!apiData || typeof apiData.terrariumId !== 'number') {
           toast.error('Không tìm thấy dữ liệu bể!');
@@ -40,14 +40,13 @@ const Detail: React.FC = () => {
         }
 
         const formattedTerrarium = {
-  ...apiData,
-  id: apiData.terrariumId.toString(),
-  name: apiData.terrariumName || 'Không rõ tên',
-  type: `#${apiData.environmentId || 'N/A'}`,
-  image: images[0]?.imageUrl || 'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg',
-  terrariumImages: images || [] 
-};
-
+          ...apiData,
+          id: apiData.terrariumId.toString(),
+          name: apiData.terrariumName || 'Không rõ tên',
+          type: `#${apiData.environmentId || 'N/A'}`,
+          image: images[0]?.imageUrl || 'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg',
+          terrariumImages: images || []
+        };
 
         setTerrarium(formattedTerrarium);
 
@@ -69,26 +68,65 @@ const Detail: React.FC = () => {
     toast.info(`Đã chọn: ${variant.variantName}`);
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!selectedVariant) {
       toast.error('Vui lòng chọn phiên bản trước khi thêm vào giỏ hàng!');
       return;
     }
 
-    const cartItem = {
-      id: `variant-${selectedVariant.terrariumVariantId}`,
-      name: `${terrarium.name} - ${selectedVariant.variantName}`,
-      price: selectedVariant.price,
-      image: selectedVariant.urlImage || terrarium.image,
-      quantity: 1,
-      selected: false,
-      variant: selectedVariant,
-    };
+    const isLoggedIn = !!localStorage.getItem('authToken');
 
-    const storedCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
-    storedCart.push(cartItem);
-    localStorage.setItem('cartItems', JSON.stringify(storedCart));
-    toast.success('Đã thêm variant vào giỏ hàng!');
+    if (isLoggedIn) {
+      try {
+        const cart = await getCart();
+        const existingItem = cart.cartItems.find(
+          (item) => item.terrariumVariantId === selectedVariant.terrariumVariantId
+        );
+
+        if (existingItem) {
+          await updateCartItem(existingItem.cartItemId, {
+            accessoryQuantity: 0,
+            variantQuantity: existingItem.totalCartQuantity + 1,
+          });
+          toast.success('Đã tăng số lượng variant trong giỏ hàng!');
+        } else {
+          await addMultipleToCart([{
+            accessoryId: 0,
+            terrariumVariantId: selectedVariant.terrariumVariantId,
+            accessoryQuantity: 0,
+            variantQuantity: 1,
+          }]);
+          toast.success('Đã thêm variant vào giỏ hàng!');
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error('Lỗi khi thêm vào giỏ hàng!');
+      }
+    } else {
+      const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+
+      const newItem = {
+        id: `variant-${selectedVariant.terrariumVariantId}`,
+        variantId: selectedVariant.terrariumVariantId,
+        name: `${terrarium.name} - ${selectedVariant.variantName}`,
+        price: selectedVariant.price,
+        image: selectedVariant.urlImage || terrarium.image,
+        quantity: 1,
+        selected: false,
+      };
+
+      const existingIndex = cartItems.findIndex((item: any) => item.id === newItem.id);
+
+      if (existingIndex >= 0) {
+        cartItems[existingIndex].quantity += 1;
+        toast.success('Đã tăng số lượng trong giỏ hàng!');
+      } else {
+        cartItems.push(newItem);
+        toast.success('Đã thêm variant vào giỏ hàng!');
+      }
+
+      localStorage.setItem('cartItems', JSON.stringify(cartItems));
+    }
   };
 
   const handleBuyAsAccessories = (accessories: any[]) => {
