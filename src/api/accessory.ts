@@ -27,14 +27,14 @@ export const getAccessoryById = async (
 };
 
 export const getAllAccessoryImages = async (): Promise<AccessoryImage[]> => {
-  const res = await axios.get(`${BASE_URL}/AccessoryImage`);
+  const res = await axios.get(`${BASE_URL}/AccessoryImage/get-all`);
   return res.data?.data || [];
 };
 
 export const getAccessoryImageById = async (
   imageId: number
 ): Promise<AccessoryImage | null> => {
-  const res = await axios.get(`${BASE_URL}/AccessoryImage/${imageId}`);
+  const res = await axios.get(`${BASE_URL}/AccessoryImage/get-by/${imageId}`);
   return res.data?.data || null;
 };
 
@@ -42,12 +42,12 @@ export const getAccessoryImagesByAccessoryId = async (
   accessoryId: number
 ): Promise<AccessoryImage[]> => {
   const res = await axios.get(
-    `${BASE_URL}/AccessoryImage/accessoryId/${accessoryId}`
+    `${BASE_URL}/AccessoryImage/get-accessoryId/${accessoryId}`
   );
   return res.data?.data || [];
 };
 
 export const getAllAccessoryCategories = async (): Promise<AccessoryCategory[]> => {
-  const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/Category`);
+  const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/Category/get-all`);
   return response.data?.data || [];
 }
