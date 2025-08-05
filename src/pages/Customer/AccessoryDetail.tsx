@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
   addToCart,
   updateCartItem,
-  getCart
+  getCart,
+  addAccessoryToCart
 } from '@/api/cart';
 import { useParams } from 'react-router-dom';
 import {
@@ -65,26 +66,8 @@ const AccessoryDetail: React.FC = () => {
 
   if (isLoggedIn) {
     try {
-      const cartData = JSON.parse(localStorage.getItem('cartData') || '{}');
-      const existing = cartData?.cartItems?.find(
-        (item: any) => item.accessoryId === accessory.accessoryId
-      );
-
-      if (existing) {
-        await updateCartItem(existing.cartItemId, {
-          accessoryQuantity: existing.totalCartQuantity + quantity,
-          variantQuantity: 0,
-        });
-        toast.info('Đã tăng số lượng sản phẩm trong giỏ hàng');
-      } else {
-        await addToCart({
-          accessoryId: accessory.accessoryId,
-          terrariumVariantId: 0,
-          accessoryQuantity: quantity,
-          variantQuantity: 0,
-        });
-        toast.success('Đã thêm sản phẩm vào giỏ hàng!');
-      }
+      await addAccessoryToCart(accessory.accessoryId, quantity); // chỉ gửi field cần
+      toast.success('Đã thêm sản phẩm vào giỏ hàng!');
     } catch (err) {
       toast.error('Không thể thêm vào giỏ hàng. Vui lòng thử lại!');
     }
@@ -95,8 +78,8 @@ const AccessoryDetail: React.FC = () => {
       id: `accessory-${accessory.accessoryId}`,
       accessoryId: accessory.accessoryId,
       name: accessory.name,
-      price: accessory.price,
-      image: images[0] || '/default.jpg',
+      price: accessory.price, // ✅ Fix lỗi: lấy giá từ object accessory
+      image: images[0] || accessory.accessoryImages?.[0]?.imageUrl || '/default.jpg', // ✅ Fix lỗi: lấy ảnh từ mảng images hoặc từ accessoryImages
       quantity,
       selected: false,
     };

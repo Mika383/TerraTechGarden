@@ -12,6 +12,7 @@ import CategoryList from '../components/manager/CategoryList';
 import CategoryCreate from '../components/manager/CategoryCreate';
 import CategoryEdit from '../components/manager/CategoryEdit';
 import TerrariumVariants from '../components/manager/TerrariumVariants';
+import ThankYou from '@/pages/Customer/ThankYou';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -98,6 +99,7 @@ const AppRoutes = () => {
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
         <Route path="accessory/:id" element={<Suspense fallback={<Loading />}><AccessoryDetail /></Suspense>} />
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
+        <Route path="thank-you/:id" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}

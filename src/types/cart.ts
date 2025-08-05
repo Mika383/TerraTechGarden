@@ -25,14 +25,18 @@ export interface RawCartItem {
 }
 
 export interface CartResponse {
-  cartId: number;
-  userId: number;
-  user: string;
-  cartItems: RawCartItem[];
-  totalCartQuantity: number;
-  totalCartPrice: number;
-  createdAt: string;
-  updatedAt: string;
+ status: number;
+  message: string;
+  data: {
+    cartId: number;
+    userId: number;
+    user: string;
+    cartItems: CartItemAPI[];
+    totalCartQuantity: number;
+    totalCartPrice: number;
+    createdAt: string;
+    updatedAt: string;
+  };
 }
 
 export interface UpdateCartItemRequest {

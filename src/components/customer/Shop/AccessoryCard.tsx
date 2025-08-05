@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { gsap } from 'gsap';
 import { Button, Card } from 'antd';
 import { HeartFilled, HeartOutlined } from '@ant-design/icons';
-import { addToCart } from '@/api/cart';
+import { addAccessoryToCart, addToCart } from '@/api/cart';
 
 interface AccessoryCardProps {
   id: string;
@@ -59,34 +59,35 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
   }, []);
 
   const handleAddToCart = async () => {
-    const isLoggedIn = !!localStorage.getItem('authToken');
-    if (isLoggedIn) {
-      try {
-        await addToCart({ accessoryId: Number(id), accessoryQuantity: 1, terrariumVariantId: 0, variantQuantity: 0 });
-        toast.success(`${name} đã được thêm vào giỏ hàng!`);
-      } catch {
-        toast.error('Thêm vào giỏ hàng thất bại');
-      }
-    } else {
-      const localCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
-      const index = localCart.findIndex((item: any) => item.accessoryId === Number(id));
-      if (index !== -1) {
-        localCart[index].quantity += 1;
-      } else {
-        localCart.push({
-          id: id + '-accessory',
-          accessoryId: Number(id),
-          name,
-          price,
-          quantity: 1,
-          image,
-          selected: false,
-        });
-      }
-      localStorage.setItem('cartItems', JSON.stringify(localCart));
-      toast.success(`${name} đã được thêm vào giỏ hàng (local)!`);
+  const isLoggedIn = !!localStorage.getItem('authToken');
+
+  if (isLoggedIn) {
+    try {
+      await addAccessoryToCart(Number(id), 1); // chỉ gửi đúng field cần
+      toast.success(`${name} đã được thêm vào giỏ hàng!`);
+    } catch {
+      toast.error('Thêm vào giỏ hàng thất bại');
     }
-  };
+  } else {
+    const localCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
+    const index = localCart.findIndex((item: any) => item.accessoryId === Number(id));
+    if (index !== -1) {
+      localCart[index].quantity += 1;
+    } else {
+      localCart.push({
+        id: id + '-accessory',
+        accessoryId: Number(id),
+        name,
+        price,
+        quantity: 1,
+        image,
+        selected: false,
+      });
+    }
+    localStorage.setItem('cartItems', JSON.stringify(localCart));
+    toast.success(`${name} đã được thêm vào giỏ hàng (local)!`);
+  }
+};
 
   const handleViewDetail = () => {
     navigate(`/accessory/${id}`);
