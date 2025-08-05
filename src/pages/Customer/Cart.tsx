@@ -9,7 +9,7 @@ import {
   addTerrariumToCart
 } from '@/api';
 import { getTerrariumVariantById, getVariantsByTerrariumId } from '@/api';
-import { CartItem } from '@/types';
+import { CartItem, RawCartItem } from '@/types';
 import { toast } from 'react-toastify';
 import { Modal } from 'antd';
 import {
@@ -41,7 +41,8 @@ const Cart: React.FC = () => {
       try {
         const res = await getCart();
         let items = await Promise.all(
-          res.cartItems.map(async (raw) => {
+          res.cartItems.map(async (raw: RawCartItem) => {
+
             let imageUrl = '/default.jpg';
             let terrariumName = raw.item[0]?.productName || 'Sản phẩm không tên';
 
