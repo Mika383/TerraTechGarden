@@ -100,6 +100,7 @@ const AppRoutes = () => {
         <Route path="accessory/:id" element={<Suspense fallback={<Loading />}><AccessoryDetail /></Suspense>} />
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
         <Route path="thank-you/:id" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
+        <Route path="payment-success" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
