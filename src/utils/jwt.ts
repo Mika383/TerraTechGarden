@@ -19,3 +19,16 @@ export const getRoleFromToken = (): string | null => {
     return null;
   }
 };
+
+export const getUserIdFromToken = (): number | null => {
+  const token = localStorage.getItem('authToken');
+  if (!token) return null;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return Number(payload.sub);
+  } catch {
+    return null;
+  }
+};
+

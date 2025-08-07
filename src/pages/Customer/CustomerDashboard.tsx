@@ -2,9 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileHeader from '../../components/customer/Dashboard/ProfileHeader';
 import ReviewSection from '../../components/customer/Dashboard/ReviewSection';
-import AddressSection from '../../components/customer/Dashboard/AddressSection';
+import AddressSection from '../../components/customer/Dashboard/AddressSection'; // Địa chỉ động mới
 import OrderItem from '../../components/customer/Dashboard/OrderItem';
 
+// Fake user profile cho demo UI (địa chỉ đã bỏ, các trường còn lại dùng cho các section khác)
 const userProfile = {
   name: 'Nguyễn Văn A',
   phone: '+84 123 456 789',
@@ -14,10 +15,6 @@ const userProfile = {
   reviews: [
     { review: 'Tôi rất thích Terrarium này, dễ chăm sóc và đẹp mắt!', rating: 5 },
     { review: 'Dịch vụ hỗ trợ khách hàng tuyệt vời, giao hàng nhanh.', rating: 4 },
-  ],
-  addresses: [
-    '123 Đường Lê Lợi, Quận 1, TP. Hồ Chí Minh',
-    '456 Đường Nguyễn Huệ, Quận 3, TP. Hồ Chí Minh',
   ],
   orders: [
     {
@@ -49,7 +46,10 @@ const CustomerDashboard: React.FC = () => {
         avatar={userProfile.avatar}
         backgroundImage={userProfile.backgroundImage}
       />
-      <h2 className="text-2xl font-bold mb-4">Đơn Mua</h2>
+      {/* Địa chỉ động mới */}
+      <AddressSection />
+
+      <h2 className="text-2xl font-bold mb-4 mt-8">Đơn Mua</h2>
       {userProfile.orders.map((order, index) => (
         <OrderItem
           key={index}
@@ -61,7 +61,6 @@ const CustomerDashboard: React.FC = () => {
         />
       ))}
       <ReviewSection reviews={userProfile.reviews} />
-      <AddressSection addresses={userProfile.addresses} />
     </div>
   );
 };

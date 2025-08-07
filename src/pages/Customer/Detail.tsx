@@ -8,7 +8,7 @@ import {
 } from '@/api/terrarium';
 import { getCart, updateCartItem, addMultipleToCart, addTerrariumToCart, addMultipleAccessoriesToCart } from '@/api/cart';
 import TerrariumDetail from '@/components/customer/Terrarium/TerrariumDetail';
-import Loading from '@/components/Loading';
+import Loading from '@/components/common/Loading';
 import { toast } from 'react-toastify';
 
 const Detail: React.FC = () => {
@@ -104,8 +104,6 @@ const Detail: React.FC = () => {
     toast.success('Đã thêm variant vào giỏ hàng (local)!');
   }
 };
-
-
   const handleBuyAsAccessories = async (accessories: any[]) => {
   if (!accessories?.length) {
     toast.info('Không có phụ kiện nào để mua.');
