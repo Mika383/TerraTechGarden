@@ -76,15 +76,24 @@ export const forgotPassword = async (email: string): Promise<{ message: string }
   }
 };
 
-export const resetPassword = async (token: string, newPassword: string): Promise<{ message: string }> => {
+export const resetPassword = async (
+  token: string,
+  newPassword: string,
+  confirmPassword: string
+): Promise<{ message: string }> => {
   try {
-    const response = await api.post('/Users/reset-password', { token, newPassword });
+    const response = await api.post('/Users/reset-password', {
+      token,
+      newPassword,
+      confirmPassword,
+    });
     return response.data;
   } catch (error: any) {
     const message = error.response?.data?.message || 'Đặt lại mật khẩu thất bại.';
     throw new Error(message);
   }
 };
+
 
 export const checkAvailability = async (
   field: 'username' | 'email' | 'phoneNumber',

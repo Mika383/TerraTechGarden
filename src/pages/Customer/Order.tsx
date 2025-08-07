@@ -1,39 +1,88 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import OrderItem from '../../components/customer/Dashboard/OrderItem';
-import { SearchOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getOrdersByUser } from "@/api/order";
+import OrderItem from "../../components/customer/Dashboard/OrderItem";
+import { SearchOutlined } from "@ant-design/icons";
+import { Spin, Pagination } from "antd";
 
-const orders = [
-  {
-    name: 'Terrarium mini cây xanh',
-    price: 513500,
-    image: 'https://via.placeholder.com/100',
-    date: '18-06-2025',
-    status: 'Hoàn thành',
-  },
-  {
-    name: 'Terrarium mini cây xanh',
-    price: 182160,
-    image: 'https://via.placeholder.com/100',
-    date: '13-06-2025',
-    status: 'Hoàn thành',
-  },
-];
+const statusMap: Record<string, string> = {
+  pending: "Chờ thanh toán",
+  shipping: "Đang vận chuyển",
+  completed: "Hoàn thành",
+  cancelled: "Đã hủy",
+};
+
+const filterOptions = ["Tất cả", "Chờ thanh toán", "Đang vận chuyển", "Hoàn thành", "Đã hủy"];
+
+// Hàm lấy thêm info cho item đầu tiên (phân biệt accessory hoặc variant)
+const fetchItemInfo = async (item: any) => {
+  if (item.accessoryId) {
+    const res = await fetch(`https://terarium.shop/api/Accessory/get-${item.accessoryId}`);
+    const json = await res.json();
+    return {
+      name: json.data.name,
+      image: json.data.accessoryImages?.[0]?.imageUrl || "/default.jpg",
+    };
+  } else if (item.terrariumVariantId) {
+    const res = await fetch(
+      `https://terarium.shop/api/TerrariumVariant/get-terrariumVariant/${item.terrariumVariantId}`
+    );
+    const json = await res.json();
+    return {
+      name: json.data.variantName,
+      image: json.data.urlImage || "/default.jpg",
+    };
+  }
+  return { name: "Sản phẩm", image: "/default.jpg" };
+};
 
 const Orders: React.FC = () => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState('Tất cả');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState("Tất cả");
+  const [orders, setOrders] = useState<any[]>([]);
+  const [itemInfos, setItemInfos] = useState<{ [key: string]: { name: string; image: string } }>({});
+  const [loading, setLoading] = useState(false);
+
+  const userId = Number(localStorage.getItem("userId") || 0);
+
+  useEffect(() => {
+    setLoading(true);
+    getOrdersByUser(userId)
+      .then(async (ordersData) => {
+        setOrders(ordersData);
+
+        // Lấy info của item đầu tiên mỗi order (tối ưu cache)
+        const cache: { [key: string]: { name: string; image: string } } = {};
+        const promises = ordersData.map(async (order: any) => {
+          const item = order.orderItems?.[0];
+          if (!item) return null;
+          const cacheKey = `${item.accessoryId ? "a" + item.accessoryId : ""}${item.terrariumVariantId ? "v" + item.terrariumVariantId : ""}`;
+          if (cache[cacheKey]) return { key: order.orderId, ...cache[cacheKey] };
+          const info = await fetchItemInfo(item);
+          cache[cacheKey] = info;
+          return { key: order.orderId, ...info };
+        });
+        const infos = await Promise.all(promises);
+
+        const infoObj: any = {};
+        infos.forEach((info) => {
+          if (info) infoObj[info.key] = { name: info.name, image: info.image };
+        });
+        setItemInfos(infoObj);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [userId]);
+
+  const getStatusVN = (status: string) => statusMap[status] || status;
 
   const filteredOrders = orders.filter((order) => {
-    const matchesSearch = order.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter =
-      filter === 'Tất cả' ||
-      order.status === filter ||
-      (filter === 'Chờ thanh toán' && order.status === 'Chờ thanh toán') ||
-      (filter === 'Đang vận chuyển' && order.status === 'Đang vận chuyển') ||
-      (filter === 'Hoàn thành' && order.status === 'Hoàn thành') ||
-      (filter === 'Đã hủy' && order.status === 'Đã hủy');
+    const info = itemInfos[order.orderId] || {};
+    const name = info.name || "Sản phẩm";
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
+    const statusVN = getStatusVN(order.status);
+    const matchesFilter = filter === "Tất cả" || statusVN === filter;
     return matchesSearch && matchesFilter;
   });
 
@@ -52,16 +101,17 @@ const Orders: React.FC = () => {
           <SearchOutlined className="absolute left-3 top-2 text-gray-400" />
         </div>
       </div>
+
       <div className="mb-6">
         <div className="flex space-x-4 overflow-x-auto pb-2 border-b border-gray-200">
-          {['Tất cả', 'Chờ thanh toán', 'Đang vận chuyển', 'Hoàn thành', 'Đã hủy'].map((status) => (
+          {filterOptions.map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
               className={`px-4 py-2 rounded-t-md font-medium transition-colors ${
                 filter === status
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? "bg-green-600 text-white"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
               {status}
@@ -69,22 +119,37 @@ const Orders: React.FC = () => {
           ))}
         </div>
       </div>
-      <div className="space-y-4">
-        {filteredOrders.length > 0 ? (
-          filteredOrders.map((order, index) => (
-            <OrderItem
-              key={index}
-              name={order.name}
-              price={order.price}
-              image={order.image}
-              date={order.date}
-              status={order.status}
-            />
-          ))
-        ) : (
-          <p className="text-center text-gray-500">Không có đơn hàng nào.</p>
-        )}
-      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center min-h-[200px]">
+          <Spin size="large" />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredOrders.length > 0 ? (
+            filteredOrders.map((order) => {
+              const info = itemInfos[order.orderId] || {};
+              return (
+                <OrderItem
+                  key={order.orderId}
+                  name={info.name || "Sản phẩm"}
+                  price={order.totalAmount}
+                  image={info.image || "/default.jpg"}
+                  date={
+                    order.orderDate
+                      ? new Date(order.orderDate).toLocaleDateString("vi-VN")
+                      : ""
+                  }
+                  status={getStatusVN(order.status)}
+                  onClick={() => navigate(`/order/${order.orderId}`)}
+                />
+              );
+            })
+          ) : (
+            <p className="text-center text-gray-500">Không có đơn hàng nào.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 };

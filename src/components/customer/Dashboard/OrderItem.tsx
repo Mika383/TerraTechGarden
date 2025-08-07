@@ -8,6 +8,7 @@ interface OrderItemProps {
   image: string;
   date: string;
   status: string;
+  onClick?: () => void;
 }
 
 const OrderItem: React.FC<OrderItemProps> = ({ name, price, image, date, status }) => {
