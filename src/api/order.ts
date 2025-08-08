@@ -13,17 +13,11 @@ const authHeader = () => {
 };
 
 // Lấy tất cả đơn hàng của user
-// src/api/order.ts
 export const getOrdersByUser = async (userId: number): Promise<any[]> => {
-  const res = await axios.get(`${BASE_URL}/Order/getbyuserid/${userId}?userId=${userId}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-    },
-  });
-  // backend trả về mảng order, bạn có thể map lại data nếu muốn
+  const res = await axios.get(`${BASE_URL}/Order/getbyuserid/${userId}?userId=${userId}`, authHeader());
+  // API trả mảng trực tiếp
   return res.data || [];
 };
-
 
 // Lấy một đơn hàng cụ thể từ danh sách theo orderId
 export const getOrderByIdFromUser = async (userId: number, orderId: number): Promise<Order | null> => {
@@ -33,12 +27,13 @@ export const getOrderByIdFromUser = async (userId: number, orderId: number): Pro
 // src/api/order.ts
 export const getOrderById = async (orderId: number): Promise<any> => {
   const res = await axios.get(`${BASE_URL}/Order/${orderId}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-    },
+    headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` },
   });
-  return res.data || null;
+  // backend trả về { status, message, data }, nên lấy res.data?.data
+  return res.data?.data || null;
 };
+
+
 
 
 
@@ -88,4 +83,6 @@ export const deleteVoucher = async (id: number): Promise<any> => {
   );
   return res.data;
 };
+
+
 
