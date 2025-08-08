@@ -2,7 +2,7 @@ import api from '@/lib/axios/axiosInstance';
 import { Account } from '../types/accounts';
 
 export const getAccounts = async () => {
-  const response = await api.get('/Accounts');
+  const response = await api.get('/Accounts/get-all');
   return response.data.data || [];
 };
 

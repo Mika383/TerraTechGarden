@@ -44,6 +44,10 @@ const Orders: React.FC = () => {
   const [itemInfos, setItemInfos] = useState<{ [key: string]: { name: string; image: string } }>({});
   const [loading, setLoading] = useState(false);
 
+  // 🆕 State phân trang
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+
   const userId = Number(localStorage.getItem("userId") || 0);
 
   useEffect(() => {
@@ -86,6 +90,10 @@ const Orders: React.FC = () => {
     return matchesSearch && matchesFilter;
   });
 
+  // 🆕 Cắt dữ liệu theo trang
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedOrders = filteredOrders.slice(startIndex, startIndex + pageSize);
+
   return (
     <div className="container mx-auto py-8 px-6">
       <div className="flex justify-between items-center mb-6">
@@ -126,8 +134,8 @@ const Orders: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredOrders.length > 0 ? (
-            filteredOrders.map((order) => {
+          {paginatedOrders.length > 0 ? (
+            paginatedOrders.map((order) => {
               const info = itemInfos[order.orderId] || {};
               return (
                 <OrderItem
@@ -148,6 +156,23 @@ const Orders: React.FC = () => {
           ) : (
             <p className="text-center text-gray-500">Không có đơn hàng nào.</p>
           )}
+        </div>
+      )}
+
+      {/* 🆕 Pagination */}
+      {filteredOrders.length > pageSize && (
+        <div className="flex justify-center mt-6">
+          <Pagination
+          current={currentPage}
+          pageSize={pageSize}
+          total={filteredOrders.length}
+          onChange={(page, size) => {
+            setCurrentPage(page);
+            setPageSize(size);
+          }}
+          showSizeChanger
+        />
+
         </div>
       )}
     </div>
