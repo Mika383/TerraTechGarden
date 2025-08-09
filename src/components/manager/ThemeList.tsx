@@ -22,7 +22,7 @@ const ThemeList: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://terarium.shop/api/Environment');
+        const response = await fetch('https://terarium.shop/api/Environment/get-all');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

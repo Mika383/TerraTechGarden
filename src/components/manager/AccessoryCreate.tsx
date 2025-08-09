@@ -39,7 +39,7 @@ const AccessoryCreate: React.FC = () => {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await axios.get('https://terarium.shop/api/Category');
+        const response = await axios.get('https://terarium.shop/api/Category/get-all');
         if (response.data.status === 200) {
           setCategories(response.data.data);
         } else {

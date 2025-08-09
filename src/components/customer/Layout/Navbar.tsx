@@ -91,7 +91,7 @@ const Navbar: React.FC = () => {
           {
             key: '2',
             label: 'Bảng Điều Khiển Nhân Viên',
-            onClick: () => handleNavigate('/staff-dashboard'),
+            onClick: () => handleNavigate('/staff/dashboard'),
           },
         ]
       : []),

@@ -584,7 +584,7 @@ const TerrariumCreate: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phương pháp Tank *</label>
                     <ApiDropdown<TankMethod>
-                      apiUrl="https://terarium.shop/api/TankMethod"
+                      apiUrl="https://terarium.shop/api/TankMethod/get-all"
                       placeholder="Chọn phương pháp tank"
                       valueKey="tankMethodId"
                       labelKey="tankMethodType"
@@ -615,7 +615,7 @@ const TerrariumCreate: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Môi trường *</label>
                     <ApiDropdown<Environment>
-                      apiUrl="https://terarium.shop/api/Environment"
+                      apiUrl="https://terarium.shop/api/Environment/get-all"
                       placeholder="Chọn môi trường"
                       valueKey="environmentId"
                       labelKey="environmentName"

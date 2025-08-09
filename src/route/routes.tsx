@@ -12,6 +12,9 @@ import CategoryList from '../components/manager/CategoryList';
 import CategoryCreate from '../components/manager/CategoryCreate';
 import CategoryEdit from '../components/manager/CategoryEdit';
 import TerrariumVariants from '../components/manager/TerrariumVariants';
+import OrderList from '@/components/staff/OrderList';
+import ChatWithCustomer from '@/components/staff/ChatWithCustomer';
+import StaffLayout from '@/components/staff/StaffLayout';
 import ThankYou from '@/pages/Customer/ThankYou';
 import PaymentSuccess from '@/pages/Customer/PaymentSuccess';
 
@@ -121,9 +124,13 @@ const AppRoutes = () => {
           </Route>
         </Route>
       </Route>
-      <Route path="staff-dashboard" element={<PrivateRoute allowedRoles={['Staff', 'Manager', 'Admin']} />}>
-        <Route index element={<Suspense fallback={<Loading />}><StaffDashboard /></Suspense>} />
-      </Route>
+      <Route path="staff" element={<PrivateRoute allowedRoles={['Staff', 'Manager', 'Admin']} />}>
+  <Route element={<Suspense fallback={<Loading />}><StaffLayout /></Suspense>}>
+    <Route path="dashboard" element={<Suspense fallback={<Loading />}><StaffDashboard /></Suspense>} />
+    <Route path="order/list" element={<Suspense fallback={<Loading />}><OrderList /></Suspense>} />
+    <Route path="support/messages" element={<Suspense fallback={<Loading />}><ChatWithCustomer /></Suspense>} />
+  </Route>
+</Route>
       <Route path="manager" element={<PrivateRoute allowedRoles={['Manager', 'Admin']} />}>
         <Route element={<Suspense fallback={<Loading />}><ManagerLayout /></Suspense>}>
           <Route path="dashboard" element={<Suspense fallback={<Loading />}><ManagerDashboard /></Suspense>} />

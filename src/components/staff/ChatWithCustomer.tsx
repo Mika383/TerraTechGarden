@@ -60,26 +60,25 @@ interface ApiResponse<T> {
   data: T;
 }
 
-const ChatWithStaff: React.FC = () => {
+const ChatWithCustomer: React.FC = () => {
   const navigate = useNavigate();
-  const [staffUsers, setStaffUsers] = useState<User[]>([]);
   const [myChats, setMyChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<number>(2);
+  const [currentUserId, setCurrentUserId] = useState<number>(1);
   const [currentUserFullName, setCurrentUserFullName] = useState<string>(''); // Thêm state cho fullName
   const [searchTerm, setSearchTerm] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set([1, 3])); // Mock online users
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set([2, 3])); // Mock online users
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Thêm lại ref để scroll
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const getAuthToken = () => {
-    return localStorage.getItem('authToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidW5pcXVlX25hbWUiOiJhZG1pbiIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwiZW1haWwiOiJzdHJpbmdAZ21haWwuY29tIiwiZnVsbE5hbWUiOiJOWFF1YW5nbmciLCJwaG9uZU51bWJlciI6InN0cmluZyIsImdlbmRlciI6Im1hbGUiLCJzdGF0dXMiOiJBY3RpdmUiLCJleHAiOjE3NTQ1NzkxNjEsImlzcyI6IlRlcnJhcml1bUdhcmRlblRlY2hBUEkiLCJhdWQiOiJUZXJyYXJpdW1HYXJkZW5UZWNoQ2xpZW50In0.acoY5Elcd1FnqR8bIzQPso52QkxkIN2uPfQocV8PvfY';
+    return localStorage.getItem('authToken') || '';
   };
 
   // Hàm decode JWT để lấy thông tin user
@@ -112,7 +111,8 @@ const ChatWithStaff: React.FC = () => {
     }
   }, []);
 
-// Hàm scroll xuống cuối tin nhắn - chỉ trong khung chat
+  
+ // Hàm scroll xuống cuối tin nhắn - chỉ trong khung chat
 const scrollToBottom = () => {
   if (messagesContainerRef.current) {
     messagesContainerRef.current.scrollTo({
@@ -126,6 +126,7 @@ const scrollToBottom = () => {
 useEffect(() => {
   scrollToBottom();
 }, [messages]);
+  // Auto resize textarea
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -138,7 +139,7 @@ useEffect(() => {
     adjustTextareaHeight();
   }, [newMessage]);
 
-  // Fetch my chats (both existing and potential staff chats)
+  // Fetch chats
   useEffect(() => {
     const fetchMyChats = async () => {
       try {
@@ -168,89 +169,11 @@ useEffect(() => {
     return () => clearInterval(chatListInterval);
   }, []);
 
-  // Fetch danh sách staff
-  useEffect(() => {
-    const fetchAvailableUsers = async () => {
-      try {
-        const response = await fetch('https://terarium.shop/api/Chat/available-users', {
-          headers: {
-            'Authorization': `Bearer ${getAuthToken()}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        if (response.ok) {
-          const result: ApiResponse<User[]> = await response.json();
-          // Lọc chỉ lấy Staff và Manager
-          const staffOnly = result.data.filter(user => 
-            user.roleName === 'Staff' || user.roleName === 'Manager'
-          );
-          setStaffUsers(staffOnly);
-        }
-      } catch (error) {
-        console.error('Error fetching users:', error);
-      }
-    };
-
-    fetchAvailableUsers();
-  }, []);
-
   const handleOpenChat = async (chat: Chat) => {
     setSelectedChat(chat);
     await fetchMessages(chat.chatId);
     await markChatAsRead(chat.chatId);
     startMessagePolling(chat.chatId);
-  };
-
-  // Tạo hoặc mở chat với staff
-  const handleChatWithStaff = async (staff: User) => {
-    setLoading(true);
-    try {
-      if (staff.hasExistingChat && staff.existingChatId) {
-        // Mở chat đã có
-        await openExistingChat(staff.existingChatId);
-      } else {
-        // Tạo chat mới
-        const response = await fetch('https://terarium.shop/api/Chat/create', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${getAuthToken()}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            targetUserId: staff.userId
-          }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          if (result.data && result.data.chatId) {
-            await openExistingChat(result.data.chatId);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error creating/opening chat:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Mở chat đã có
-  const openExistingChat = async (chatId: number) => {
-    try {
-      // Lấy thông tin chat từ danh sách đã có
-      const chat = myChats.find(c => c.chatId === chatId);
-      
-      if (chat) {
-        setSelectedChat(chat);
-        await fetchMessages(chatId);
-        await markChatAsRead(chatId);
-        startMessagePolling(chatId);
-      }
-    } catch (error) {
-      console.error('Error opening chat:', error);
-    }
   };
 
   const fetchMessages = async (chatId: number) => {
@@ -283,7 +206,7 @@ useEffect(() => {
       chatId: selectedChat.chatId,
       senderId: currentUserId,
       senderName: currentUserFullName || 'Bạn', // Sử dụng fullName từ token
-      senderRole: 'Customer', // hoặc role từ token
+      senderRole: 'Staff',
       content: newMessage.trim(),
       sentAt: new Date().toISOString(),
       isRead: false,
@@ -432,10 +355,6 @@ useEffect(() => {
     return otherUserName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const filteredStaff = staffUsers.filter(staff =>
-    staff.fullName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   if (selectedChat) {
     const otherUser = selectedChat.user1Id === currentUserId ? 
       { 
@@ -504,12 +423,9 @@ useEffect(() => {
                   }`}
                 >
                   <div className="relative">
-                    <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
                       {otherUserInList.name.charAt(0).toUpperCase()}
                     </div>
-                    {isOnline(otherUserInList.id) && (
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                    )}
                   </div>
                   
                   <div className="flex-1 ml-3 min-w-0">
@@ -551,43 +467,6 @@ useEffect(() => {
                 </div>
               );
             })}
-
-            {/* Available Staff for New Chats */}
-            {filteredStaff.length > 0 && (
-              <>
-                <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-t">
-                  Staff có sẵn
-                </div>
-                {filteredStaff.map((staff) => (
-                  <div
-                    key={`staff-${staff.userId}`}
-                    onClick={() => handleChatWithStaff(staff)}
-                    className="flex items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="relative">
-                      <div className="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                        {staff.fullName.charAt(0).toUpperCase()}
-                      </div>
-                      {staff.status === 'Active' && (
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 ml-3 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate text-sm">
-                        {staff.fullName}
-                      </h3>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-600">{staff.roleName}</span>
-                        {!staff.hasExistingChat && (
-                          <span className="text-xs text-blue-600 font-medium">Chat mới</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
           </div>
         </div>
 
@@ -605,33 +484,27 @@ useEffect(() => {
                 </button>
                 
                 <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
                     {otherUser.name.charAt(0).toUpperCase()}
                   </div>
-                  {isOnline(otherUser.id) && (
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
-                  )}
                 </div>
                 
                 <div>
                   <h2 className="font-semibold text-gray-900">{otherUser.name}</h2>
-                  <p className="text-sm text-gray-500">
-                    {isOnline(otherUser.id) ? 'Đang hoạt động' : 'Không hoạt động'} • {otherUser.role}
-                  </p>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full">
+              {/* <div className="flex items-center space-x-2">
+                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-full">
                   <PhoneOutlined className="w-5 h-5" />
                 </button>
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full">
+                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-full">
                   <VideoCameraOutlined className="w-5 h-5" />
                 </button>
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full">
+                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-full">
                   <InfoCircleOutlined className="w-5 h-5" />
                 </button>
-              </div>
+              </div> */}
             </div>
           </div>
 
@@ -639,7 +512,7 @@ useEffect(() => {
           <div 
               ref={messagesContainerRef}
               className="flex-1 overflow-y-auto p-4 bg-gray-50"
-            >
+              >
             <div className="max-w-4xl mx-auto">
               {messages.map((message, index) => {
                 const messageIsMyMessage = isMyMessage(message);
@@ -658,7 +531,7 @@ useEffect(() => {
                     <div className={`max-w-xs lg:max-w-md ${messageIsMyMessage ? 'order-2' : 'order-1'}`}>
                       {!messageIsMyMessage && (index === 0 || messages[index - 1].senderName !== message.senderName) && (
                         <div className="flex items-center space-x-2 mb-1">
-                          <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                          <div className="w-6 h-6 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
                             {message.senderName.charAt(0).toUpperCase()}
                           </div>
                           <span className="text-xs text-gray-600 font-medium">{message.senderName}</span>
@@ -668,7 +541,7 @@ useEffect(() => {
                       <div
                         className={`px-4 py-2 rounded-2xl ${
                           messageIsMyMessage
-                            ? 'bg-green-600 text-white'
+                            ? 'bg-blue-600 text-white'
                             : 'bg-white text-gray-900 border border-gray-200'
                         } ${
                           isLastInGroup 
@@ -688,7 +561,7 @@ useEffect(() => {
                           </span>
                           {messageIsMyMessage && (
                             <CheckOutlined className={`w-3 h-3 ${
-                              message.isRead ? 'text-green-500' : 'text-gray-400'
+                              message.isRead ? 'text-blue-500' : 'text-gray-400'
                             }`} />
                           )}
                         </div>
@@ -719,7 +592,7 @@ useEffect(() => {
           <div className="bg-white border-t border-gray-200 p-4">
             <div className="max-w-4xl mx-auto">
               <div className="flex items-end space-x-3">
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full flex-shrink-0">
+                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-full flex-shrink-0">
                   <PlusOutlined className="w-5 h-5" />
                 </button>
                 
@@ -730,11 +603,11 @@ useEffect(() => {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Aa"
-                    className="w-full px-4 py-2 bg-gray-100 rounded-2xl border-none outline-none focus:bg-white focus:ring-2 focus:ring-green-500 resize-none max-h-32 text-sm"
+                    className="w-full px-4 py-2 bg-gray-100 rounded-2xl border-none outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 resize-none max-h-32 text-sm"
                     rows={1}
                     disabled={loading}
                   />
-                  <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-green-600">
+                  <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-blue-600">
                     <SmileOutlined className="w-5 h-5" />
                   </button>
                 </div>
@@ -743,13 +616,13 @@ useEffect(() => {
                   <button
                     onClick={handleSendMessage}
                     disabled={loading}
-                    className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                    className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
                     <SendOutlined className="w-5 h-5" />
                   </button>
                 ) : (
-                  <button className="p-2 text-green-600 hover:bg-green-50 rounded-full flex-shrink-0">
-                    <div className="w-5 h-5 bg-green-600 rounded-full"></div>
+                  <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-full flex-shrink-0">
+                    <div className="w-5 h-5 bg-blue-600 rounded-full"></div>
                   </button>
                 )}
               </div>
@@ -760,7 +633,7 @@ useEffect(() => {
     );
   }
 
-  // Main chat list view (when no chat is selected)
+  // Main chat list view
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto">
@@ -769,16 +642,16 @@ useEffect(() => {
           <div className="border-b border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <div className="p-3 bg-green-100 rounded-xl">
-                  <MessageOutlined className="text-2xl text-green-600" />
+                <div className="p-3 bg-blue-100 rounded-xl">
+                  <CustomerServiceOutlined className="text-2xl text-blue-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Trò chuyện với Staff</h1>
-                  <p className="text-gray-600">Liên hệ với đội ngũ hỗ trợ</p>
+                  <h1 className="text-2xl font-bold text-gray-900">Hỗ trợ khách hàng</h1>
+                  <p className="text-gray-600">Quản lý các cuộc trò chuyện với khách hàng</p>
                 </div>
               </div>
               <button
-                onClick={() => navigate('/customer-dashboard')}
+                onClick={() => navigate('/staff-dashboard')}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 ← Quay lại Dashboard
@@ -786,26 +659,19 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Search Bar */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="relative max-w-md">
-              <SearchOutlined className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm staff..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500"
-              />
-            </div>
-          </div>
-
-          {/* Existing Chats */}
-          {myChats.length > 0 && (
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuộc trò chuyện gần đây</h3>
+          {/* Chat List */}
+          <div className="p-6">
+            {myChats.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MessageOutlined className="text-3xl text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có tin nhắn</h3>
+                <p className="text-gray-600">Khách hàng sẽ liên hệ với bạn khi cần hỗ trợ</p>
+              </div>
+            ) : (
               <div className="grid gap-1 max-w-3xl">
-                {filteredChats.map((chat) => {
+                {myChats.map((chat) => {
                   const otherUser = chat.user1Id === currentUserId ? 
                     { 
                       id: chat.user2Id,
@@ -827,7 +693,7 @@ useEffect(() => {
                       className="flex items-center p-4 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
                     >
                       <div className="relative flex-shrink-0">
-                        <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-xl">
+                        <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-xl">
                           {otherUser.name.charAt(0).toUpperCase()}
                         </div>
                         {isOnline(otherUser.id) && (
@@ -854,7 +720,7 @@ useEffect(() => {
                               <>
                                 {chat.lastMessage.senderId === currentUserId && (
                                   <CheckOutlined className={`w-4 h-4 flex-shrink-0 ${
-                                    chat.lastMessage.isRead ? 'text-green-500' : 'text-gray-400'
+                                    chat.lastMessage.isRead ? 'text-blue-500' : 'text-gray-400'
                                   }`} />
                                 )}
                                 <span className={`text-gray-600 truncate ${
@@ -866,7 +732,7 @@ useEffect(() => {
                             )}
                           </div>
                           {unreadCount > 0 && (
-                            <div className="w-6 h-6 bg-green-600 text-white text-sm rounded-full flex items-center justify-center flex-shrink-0 ml-3">
+                            <div className="w-6 h-6 bg-blue-600 text-white text-sm rounded-full flex items-center justify-center flex-shrink-0 ml-3">
                               {unreadCount}
                             </div>
                           )}
@@ -876,70 +742,6 @@ useEffect(() => {
                   );
                 })}
               </div>
-            </div>
-          )}
-
-          {/* Available Staff */}
-          <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Staff có sẵn</h3>
-            {filteredStaff.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserOutlined className="text-3xl text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Không tìm thấy staff</h3>
-                <p className="text-gray-600">Thử tìm kiếm với từ khóa khác</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-5xl">
-                {filteredStaff.map((staff) => (
-                  <div
-                    key={staff.userId}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer hover:border-green-300"
-                    onClick={() => handleChatWithStaff(staff)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="relative">
-                        <div className="bg-green-100 p-3 rounded-full">
-                          <UserOutlined className="text-green-600 text-xl" />
-                        </div>
-                        {staff.status === 'Active' && (
-                          <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-lg truncate">{staff.fullName}</h3>
-                        <p className="text-gray-600 text-sm">@{staff.username}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-sm text-gray-500 px-2 py-1 bg-gray-100 rounded-full">
-                            {staff.roleName}
-                          </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            staff.status === 'Active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {staff.status === 'Active' ? 'Trực tuyến' : 'Offline'}
-                          </span>
-                        </div>
-                        {staff.hasExistingChat && (
-                          <div className="mt-2">
-                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                              Đã có cuộc trò chuyện
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center justify-center">
-                      <MessageOutlined className="text-green-600 mr-2" />
-                      <span className="text-green-600 font-medium text-sm">
-                        {staff.hasExistingChat ? 'Tiếp tục trò chuyện' : 'Bắt đầu trò chuyện'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
         </div>
@@ -948,4 +750,4 @@ useEffect(() => {
   );
 };
 
-export default ChatWithStaff;
+export default ChatWithCustomer;
