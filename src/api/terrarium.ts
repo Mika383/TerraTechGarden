@@ -44,7 +44,7 @@ export const getTerrariumImagesByTerrariumId = async (
   terrariumId: number
 ): Promise<TerrariumImage[]> => {
   const res = await axios.get(
-    `${BASE_URL}/TerrariumImage/terrariumId/${terrariumId}`
+    `${BASE_URL}/TerrariumImage/get-by-terrariumId/${terrariumId}`
   );
   return res.data?.data || [];
 };
@@ -57,7 +57,7 @@ export const getAllTerrariumImages = async (): Promise<TerrariumImage[]> => {
 export const getTerrariumImageById = async (
   imageId: number
 ): Promise<TerrariumImage | null> => {
-  const res = await axios.get(`${BASE_URL}/TerrariumImage/get-${imageId}`);
+  const res = await axios.get(`${BASE_URL}/TerrariumImage/get/${imageId}`);
   return res.data?.data || null;
 };
 
@@ -72,7 +72,7 @@ export const getVariantById = async (
   variantId: number
 ): Promise<TerrariumVariant | null> => {
   const res = await axios.get(
-    `${BASE_URL}/TerrariumVariant/get-terrariumVariant-${variantId}`
+    `${BASE_URL}/TerrariumVariant/get-terrariumVariant/${variantId}`
   );
   return res.data?.data || null;
 };
@@ -81,7 +81,7 @@ export const getVariantsByTerrariumId = async (
   terrariumId: number
 ): Promise<TerrariumVariant[]> => {
   const res = await axios.get(
-    `${BASE_URL}/TerrariumVariant/get-VariantByTerrarium-${terrariumId}`
+    `${BASE_URL}/TerrariumVariant/get-VariantByTerrarium/${terrariumId}`
   );
   return res.data?.data || [];
 };
@@ -120,11 +120,20 @@ export const getFeaturedTerrariums = async (
 };
 
 export const getAllEnvironments = async (): Promise<Environment[]> => {
-  const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/Environment`);
+  const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/Environment/get-all`);
   return response.data?.data || [];
 };
 
 export const getAllTankMethods = async (): Promise<TankMethod[]> => {
-  const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/TankMethod`);
+  const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/TankMethod/get-all`);
   return response.data?.data || [];
+};
+
+export const getTerrariumVariantById = async (
+  variantId: number
+): Promise<TerrariumVariant | null> => {
+  const res = await axios.get(
+    `${BASE_URL}/TerrariumVariant/get-terrariumVariant/${variantId}`
+  );
+  return res.data?.data || null;
 };

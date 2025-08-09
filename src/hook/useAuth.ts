@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register, login, loginWithGoogle, verifyOTP } from '../api';
-import { RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, VerifyOTPRequest, VerifyOTPResponse } from '@/types';
-import { getRoleFromToken } from '../utils/jwt';
+import {
+  RegisterRequest, RegisterResponse,
+  LoginRequest, LoginResponse,
+  VerifyOTPResponse
+} from '@/types';
+import { getRoleFromToken, getUserIdFromToken } from '../utils/jwt';
 
 interface AuthHook {
   handleRegister: (data: RegisterRequest) => Promise<void>;
@@ -32,12 +36,19 @@ export const useAuth = (): AuthHook => {
   const saveTokens = (token: string, refreshToken: string) => {
     localStorage.setItem('authToken', token);
     localStorage.setItem('refreshToken', refreshToken);
+
+    const userId = getUserIdFromToken();
+    if (userId) {
+      localStorage.setItem('userId', userId.toString()); // Optional: dùng khi cần
+    }
+
     window.dispatchEvent(new Event('tokenRefreshed'));
   };
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('userId');
     navigate('/login');
   };
 
@@ -46,13 +57,11 @@ export const useAuth = (): AuthHook => {
     setError(null);
     try {
       const response: RegisterResponse = await register(data);
-      if (response && response.message === 'Save data success') {
+      if (response?.message === 'Save data success') {
         setRegisteredEmail(data.email);
         setShowOTP(true);
-      } else if (response && response.message) {
-        setError(response.message);
       } else {
-        setError('Đăng ký thất bại. Phản hồi từ server không hợp lệ.');
+        setError(response?.message || 'Đăng ký thất bại.');
       }
     } catch (error: any) {
       setError(error.message || 'Đăng ký thất bại. Vui lòng thử lại.');
@@ -74,15 +83,16 @@ export const useAuth = (): AuthHook => {
 
         const role = getRoleFromToken();
         if (!role) {
-          setError('Đăng nhập thất bại: Không tìm thấy vai trò trong token.');
+          setError('Không tìm thấy vai trò trong token.');
           handleLogout();
           return false;
         }
+
         navigate('/');
         return true;
       }
 
-      setError('Đăng nhập thất bại: Không nhận được token hoặc refreshToken.');
+      setError('Không nhận được token hoặc refreshToken.');
       return false;
     } catch (error: any) {
       setError(error.message);
@@ -93,52 +103,44 @@ export const useAuth = (): AuthHook => {
   };
 
   const handleGoogleLogin = async (accessToken: string): Promise<boolean> => {
-  setLoading(true);
-  setError(null);
-  try {
-    const response: any = await loginWithGoogle(accessToken);
-    const token = response.data;
+    setLoading(true);
+    setError(null);
+    try {
+      const response: any = await loginWithGoogle(accessToken);
+      const token = response.data;
 
-    if (token) {
-      localStorage.setItem('authToken', token);
-      window.dispatchEvent(new Event('tokenRefreshed'));
+      if (token) {
+        saveTokens(token, ''); // Google login thường không có refresh token
 
-      const role = getRoleFromToken();
-      if (!role) {
-        setError('Đăng nhập Google thất bại: Không tìm thấy vai trò trong token.');
-        handleLogout();
-        return false;
+        const role = getRoleFromToken();
+        if (!role) {
+          setError('Không tìm thấy vai trò trong token.');
+          handleLogout();
+          return false;
+        }
+
+        navigate('/');
+        return true;
       }
-      navigate('/');
-      return true;
+
+      setError('Không nhận được token.');
+      return false;
+    } catch (error: any) {
+      setError(error.message);
+      return false;
+    } finally {
+      setLoading(false);
     }
-
-    setError('Đăng nhập Google thất bại: Không nhận được token.');
-    return false;
-  } catch (error: any) {
-    setError(error.message);
-    return false;
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   const verifyOTPHandler = async (otp: string, email: string) => {
     setLoading(true);
     setError(null);
     try {
       const response: VerifyOTPResponse = await verifyOTP({ email, otp });
-      if (response.success || (response.message && response.message.includes('thành công'))) {
+      if (response.success || response.message?.includes('thành công')) {
         if (response.token) {
-          localStorage.setItem('authToken', response.token);
-          window.dispatchEvent(new Event('tokenRefreshed'));
-          const role = getRoleFromToken();
-          if (!role) {
-            setError('Xác minh OTP thành công nhưng không tìm thấy vai trò trong token.');
-            handleLogout();
-            return false;
-          }
+          saveTokens(response.token, '');
         }
         setShowOTP(false);
         setOtp('');

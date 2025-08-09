@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import {
+  addToCart,
+  updateCartItem,
+  getCart,
+  addAccessoryToCart
+} from '@/api/cart';
 import { useParams } from 'react-router-dom';
-import { getAccessoryById, getAccessoryImagesByAccessoryId, getAllAccessoryCategories } from '@/api/accessory';
-import { Accessory, AccessoryCategory } from '@/types/accessory';
+import {
+  getAccessoryById,
+  getAccessoryImagesByAccessoryId,
+  getAllAccessoryCategories,
+} from '@/api/accessory';
+import { Accessory } from '@/types/accessory';
 import { Button, Image, Spin } from 'antd';
 import { toast } from 'react-toastify';
 import { HeartFilled, HeartOutlined } from '@ant-design/icons';
@@ -13,7 +23,7 @@ const AccessoryDetail: React.FC = () => {
   const [categoryName, setCategoryName] = useState<string>('Không rõ');
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
-  const [quantity, setQuantity] = useState<number>(1); // ✅ Số lượng
+  const [quantity, setQuantity] = useState<number>(1);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,14 +59,49 @@ const AccessoryDetail: React.FC = () => {
     fetchData();
   }, [id]);
 
-  const handleAddToCart = () => {
-    toast.info(`Sẽ thêm ${quantity} sản phẩm vào giỏ khi backend sẵn sàng.`);
-  };
+  const handleAddToCart = async () => {
+  if (!accessory) return;
+
+  const isLoggedIn = !!localStorage.getItem('authToken');
+
+  if (isLoggedIn) {
+    try {
+      await addAccessoryToCart(accessory.accessoryId, quantity); // chỉ gửi field cần
+      toast.success('Đã thêm sản phẩm vào giỏ hàng!');
+    } catch (err) {
+      toast.error('Không thể thêm vào giỏ hàng. Vui lòng thử lại!');
+    }
+  } else {
+    const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+
+    const newItem = {
+      id: `accessory-${accessory.accessoryId}`,
+      accessoryId: accessory.accessoryId,
+      name: accessory.name,
+      price: accessory.price, // ✅ Fix lỗi: lấy giá từ object accessory
+      image: images[0] || accessory.accessoryImages?.[0]?.imageUrl || '/default.jpg', // ✅ Fix lỗi: lấy ảnh từ mảng images hoặc từ accessoryImages
+      quantity,
+      selected: false,
+    };
+
+    const existingIndex = cartItems.findIndex((item: any) => item.id === newItem.id);
+
+    if (existingIndex >= 0) {
+      cartItems[existingIndex].quantity += quantity;
+      toast.info('Đã tăng số lượng trong giỏ hàng (local)');
+    } else {
+      cartItems.push(newItem);
+      toast.success('Đã thêm sản phẩm vào giỏ hàng (local)');
+    }
+
+    localStorage.setItem('cartItems', JSON.stringify(cartItems));
+  }
+};
+
 
   const toggleWishlist = () => {
     const wishlist = JSON.parse(localStorage.getItem('wishlistAccessories') || '[]');
     const exists = wishlist.findIndex((item: any) => item.id === id);
-
     if (exists >= 0) {
       wishlist.splice(exists, 1);
       toast.info('Đã xóa khỏi danh sách yêu thích');
@@ -66,14 +111,18 @@ const AccessoryDetail: React.FC = () => {
       toast.success('Đã thêm vào danh sách yêu thích');
       setLiked(true);
     }
-
     localStorage.setItem('wishlistAccessories', JSON.stringify(wishlist));
   };
 
   const increaseQuantity = () => setQuantity((prev) => prev + 1);
   const decreaseQuantity = () => setQuantity((prev) => Math.max(1, prev - 1));
 
-  if (loading || !accessory) return <div className="text-center mt-20"><Spin size="large" /></div>;
+  if (loading || !accessory)
+    return (
+      <div className="text-center mt-20">
+        <Spin size="large" />
+      </div>
+    );
 
   return (
     <div className="container mx-auto py-10 px-4 md:px-8">
@@ -119,7 +168,11 @@ const AccessoryDetail: React.FC = () => {
 
           {/* Nút hành động */}
           <div className="flex items-center gap-4 mt-6">
-            <Button type="primary" className="bg-green-600 hover:bg-green-700" onClick={handleAddToCart}>
+            <Button
+              type="primary"
+              className="bg-green-600 hover:bg-green-700"
+              onClick={handleAddToCart}
+            >
               Thêm vào giỏ
             </Button>
             <Button

@@ -1,56 +1,54 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Form, Input, Button } from 'antd';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import { resetPassword } from '@/api/auth'; // ✅ Đã chuẩn hóa
+import { resetPassword } from '@/api/auth';
 
 const ResetPassword: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { token: paramToken } = useParams<{ token?: string }>();
+
+  // Lấy token từ query nếu có
+  const query = new URLSearchParams(location.search);
+  const queryToken = query.get('token');
+
+  // Ưu tiên paramToken, nếu không có thì lấy queryToken
+  const token = paramToken || queryToken || '';
+
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
-  const { token } = useParams<{ token?: string }>();
 
   const onFinish = async (values: { password: string; confirmPassword: string }) => {
-    if (!token) {
-      toast.error('Token không hợp lệ. Vui lòng yêu cầu liên kết khôi phục mới.', {
-        position: 'top-right',
-        autoClose: 3000,
-      });
-      return;
-    }
+  if (!token) {
+    toast.error('Token không hợp lệ. Vui lòng yêu cầu liên kết khôi phục mới.');
+    return;
+  }
 
-    if (values.password !== values.confirmPassword) {
-      toast.error('Mật khẩu xác nhận không khớp!', {
-        position: 'top-right',
-        autoClose: 3000,
-      });
-      return;
-    }
+  if (values.password !== values.confirmPassword) {
+    toast.error('Mật khẩu xác nhận không khớp!');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const response = await resetPassword(token, values.password); // ✅ Gọi API đã chuẩn hóa
+  setLoading(true);
+  try {
+    const response = await resetPassword(token, values.password, values.confirmPassword);
 
-      if (response.message?.includes('thành công')) {
-        toast.success('Mật khẩu đã được đặt lại thành công! Vui lòng đăng nhập.', {
-          position: 'top-right',
-          autoClose: 3000,
-        });
-        navigate('/login');
-      } else {
-        toast.error(response.message || 'Không rõ phản hồi từ server.');
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.', {
-        position: 'top-right',
-        autoClose: 3000,
-      });
-    } finally {
-      setLoading(false);
+    if (response.message?.includes('thành công')) {
+      toast.success('Mật khẩu đã được đặt lại thành công! Vui lòng đăng nhập.');
+      navigate('/login');
+    } else {
+      toast.error(response.message || 'Không rõ phản hồi từ server.');
     }
-  };
+  } catch (error: any) {
+    toast.error(error.message || 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen flex flex-col">

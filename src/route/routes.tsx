@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
-import Loading from '../components/Loading';
+import Loading from '../components/common/Loading';
 import TankMethodList from '../components/manager/TankMethodList';
 import TankMethodCreate from '../components/manager/TankMethodCreate';
 import TankMethodEdit from '../components/manager/TankMethodEdit';
@@ -15,6 +15,8 @@ import TerrariumVariants from '../components/manager/TerrariumVariants';
 import OrderList from '@/components/staff/OrderList';
 import ChatWithCustomer from '@/components/staff/ChatWithCustomer';
 import StaffLayout from '@/components/staff/StaffLayout';
+import ThankYou from '@/pages/Customer/ThankYou';
+import PaymentSuccess from '@/pages/Customer/PaymentSuccess';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -101,6 +103,8 @@ const AppRoutes = () => {
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
         <Route path="accessory/:id" element={<Suspense fallback={<Loading />}><AccessoryDetail /></Suspense>} />
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
+        <Route path="thank-you/:id" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
+        <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
