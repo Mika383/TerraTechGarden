@@ -4,7 +4,7 @@ import ManagerHeader from '../../components/manager/ManagerHeader';
 import ManagerSidebar from '../../components/manager/ManagerSidebar';
 import TerrariumList from '../../components/manager/TerrariumList';
 
-const AdminDashboard: React.FC = () => {
+const ManagerDashboard: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* <ManagerSidebar /> */}
@@ -20,4 +20,4 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-export default AdminDashboard;
+export default ManagerDashboard;

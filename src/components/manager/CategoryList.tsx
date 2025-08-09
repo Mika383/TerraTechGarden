@@ -22,7 +22,7 @@ const CategoryList: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://terarium.shop/api/Category');
+        const response = await fetch('https://terarium.shop/api/Category/get-all');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

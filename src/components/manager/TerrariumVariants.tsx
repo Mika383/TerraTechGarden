@@ -65,7 +65,7 @@ const TerrariumVariants: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`https://terarium.shop/api/TerrariumVariant/get-VariantByTerrarium-${terrariumId}`);
+      const response = await fetch(`https://terarium.shop/api/TerrariumVariant/get-VariantByTerrarium/${terrariumId}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -236,7 +236,7 @@ const TerrariumVariants: React.FC = () => {
   const handleDeleteVariant = async (variantId: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa variant này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/TerrariumVariant/delete-terrariumVariant-${variantId}`, {
+        const response = await fetch(`https://terarium.shop/api/TerrariumVariant/delete-terrariumVariant/${variantId}`, {
           method: 'DELETE',
         });
 
@@ -317,7 +317,7 @@ const TerrariumVariants: React.FC = () => {
     return (
       <div className="space-y-4">
         <Link
-          to="/manager/terrarium"
+          to="/manager/terrarium/list"
           className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -342,7 +342,7 @@ const TerrariumVariants: React.FC = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Link
-            to="/manager/terrarium"
+            to="/manager/terrarium/list"
             className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
