@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface Category {
   categoryId: number;
@@ -22,9 +23,22 @@ const CategoryList: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://terarium.shop/api/Category/get-all');
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch('https://terarium.shop/api/Category/get-all', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
         
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -38,6 +52,7 @@ const CategoryList: React.FC = () => {
       } catch (error) {
         console.error('Error fetching categories:', error);
         setError(error instanceof Error ? error.message : 'An error occurred while fetching categories');
+        toast.error('Không thể tải danh sách danh mục');
       } finally {
         setLoading(false);
       }
@@ -54,20 +69,31 @@ const CategoryList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa danh mục này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/Category/${id}`, {
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/Category/delete-category/${id}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         // Remove from local state
         setCategories(categories.filter((c) => c.categoryId !== id));
-        alert('Danh mục đã được xóa thành công!');
+        toast.success('Danh mục đã được xóa thành công!');
       } catch (error) {
         console.error('Error deleting category:', error);
-        alert('Có lỗi xảy ra khi xóa danh mục');
+        toast.error('Có lỗi xảy ra khi xóa danh mục');
       }
     }
   };
@@ -158,13 +184,13 @@ const CategoryList: React.FC = () => {
                   </td> */}
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
-                      <Link
+                      {/* <Link
                         to={`/category/${category.categoryId}`}
                         className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Xem chi tiết"
                       >
                         <Eye className="w-4 h-4" />
-                      </Link>
+                      </Link> */}
                       <Link
                         to={`/manager/category/edit/${category.categoryId}`}
                         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"

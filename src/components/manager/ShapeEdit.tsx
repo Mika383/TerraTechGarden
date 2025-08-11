@@ -65,9 +65,22 @@ const ShapeEdit: React.FC = () => {
     const loadShape = async () => {
       try {
         setInitialLoading(true);
-        const response = await fetch(`https://terarium.shop/api/Shape/get-${id}`);
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/Shape/get-${id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
         
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // navigate('/login');
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -119,6 +132,7 @@ const ShapeEdit: React.FC = () => {
     setLoading(true);
 
     try {
+      const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
       const updateData = {
         shapeId: formData.shapeId,
         shapeName: formData.shapeName,
@@ -126,15 +140,22 @@ const ShapeEdit: React.FC = () => {
         shapeMaterial: formData.shapeMaterial,
       };
 
-      const response = await fetch(`https://terarium.shop/api/Shape/update-shape-${id}`, {
+      const response = await fetch(`https://terarium.shop/api/Shape/update-shape/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify(updateData),
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          // Optionally redirect to login page
+          // navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 

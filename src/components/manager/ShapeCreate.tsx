@@ -6,14 +6,12 @@ import { toast } from 'react-toastify';
 interface ShapeFormData {
   shapeName: string;
   shapeDescription: string;
-  shapeSize: string;
   shapeMaterial: string;
 }
 
 interface ShapeFormErrors {
   shapeName?: string;
   shapeDescription?: string;
-  shapeSize?: string;
   shapeMaterial?: string;
 }
 
@@ -22,7 +20,6 @@ const ShapeCreate: React.FC = () => {
   const [formData, setFormData] = useState<ShapeFormData>({
     shapeName: '',
     shapeDescription: '',
-    shapeSize: '',
     shapeMaterial: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,9 +33,6 @@ const ShapeCreate: React.FC = () => {
     }
     if (!formData.shapeDescription.trim()) {
       errors.shapeDescription = 'Mô tả là bắt buộc';
-    }
-    if (!formData.shapeSize.trim()) {
-      errors.shapeSize = 'Kích thước là bắt buộc';
     }
     if (!formData.shapeMaterial.trim()) {
       errors.shapeMaterial = 'Chất liệu là bắt buộc';
@@ -69,15 +63,23 @@ const ShapeCreate: React.FC = () => {
     setIsSubmitting(true);
 
     try {
+      const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
       const response = await fetch('https://terarium.shop/api/Shape/add-shape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify(formData),
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          // Optionally redirect to login page
+          // navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -162,26 +164,6 @@ const ShapeCreate: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Kích thước *
-                    </label>
-                    <input
-                      type="text"
-                      name="shapeSize"
-                      value={formData.shapeSize}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        formErrors.shapeSize ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="Ví dụ: 20x15x10 cm"
-                      disabled={isSubmitting}
-                    />
-                    {formErrors.shapeSize && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.shapeSize}</p>
-                    )}
-                  </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Chất liệu *

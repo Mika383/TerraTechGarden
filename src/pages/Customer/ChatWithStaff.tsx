@@ -69,10 +69,11 @@ const ChatWithStaff: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<number>(2);
-  const [currentUserFullName, setCurrentUserFullName] = useState<string>(''); // Thêm state cho fullName
+  const [currentUserFullName, setCurrentUserFullName] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set([1, 3])); // Mock online users
+  const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set([1, 3]));
+  const [hasLoadedChats, setHasLoadedChats] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -104,7 +105,6 @@ const ChatWithStaff: React.FC = () => {
       const decoded = decodeToken(token);
       if (decoded) {
         setCurrentUserFullName(decoded.fullName || decoded.name || '');
-        // Nếu có userId trong token thì cập nhật luôn
         if (decoded.userId) {
           setCurrentUserId(decoded.userId);
         }
@@ -112,20 +112,61 @@ const ChatWithStaff: React.FC = () => {
     }
   }, []);
 
-// Hàm scroll xuống cuối tin nhắn - chỉ trong khung chat
-const scrollToBottom = () => {
-  if (messagesContainerRef.current) {
-    messagesContainerRef.current.scrollTo({
-      top: messagesContainerRef.current.scrollHeight,
-      behavior: 'smooth'
-    });
-  }
-};
+  // Hàm xác định tên cuộc trò chuyện dựa trên fullName từ token
+  const getChatDisplayName = (chat: Chat) => {
+    if (chat.user1Name === currentUserFullName) {
+      return chat.user2Name;
+    } else if (chat.user2Name === currentUserFullName) {
+      return chat.user1Name;
+    }
+    // Fallback nếu không khớp với fullName từ token
+    return chat.user1Id === currentUserId ? chat.user2Name : chat.user1Name;
+  };
 
-// Scroll xuống khi có tin nhắn mới
-useEffect(() => {
-  scrollToBottom();
-}, [messages]);
+  // Hàm xác định thông tin user khác trong chat
+  const getOtherUser = (chat: Chat) => {
+    if (chat.user1Name === currentUserFullName) {
+      return {
+        id: chat.user2Id,
+        name: chat.user2Name,
+        role: chat.user2Role
+      };
+    } else if (chat.user2Name === currentUserFullName) {
+      return {
+        id: chat.user1Id,
+        name: chat.user1Name,
+        role: chat.user1Role
+      };
+    }
+    // Fallback nếu không khớp với fullName từ token
+    return chat.user1Id === currentUserId ? 
+      { 
+        id: chat.user2Id,
+        name: chat.user2Name, 
+        role: chat.user2Role 
+      } :
+      { 
+        id: chat.user1Id,
+        name: chat.user1Name, 
+        role: chat.user1Role 
+      };
+  };
+
+  // Hàm scroll xuống cuối tin nhắn - chỉ trong khung chat
+  const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Scroll xuống khi có tin nhắn mới
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -138,7 +179,7 @@ useEffect(() => {
     adjustTextareaHeight();
   }, [newMessage]);
 
-  // Fetch my chats (both existing and potential staff chats)
+  // Fetch my chats - chỉ load một lần
   useEffect(() => {
     const fetchMyChats = async () => {
       try {
@@ -157,9 +198,13 @@ useEffect(() => {
             return timeB - timeA;
           });
           setMyChats(sortedChats);
+          setHasLoadedChats(true);
+        } else {
+          setHasLoadedChats(true);
         }
       } catch (error) {
         console.error('Error fetching chats:', error);
+        setHasLoadedChats(true);
       }
     };
 
@@ -168,9 +213,13 @@ useEffect(() => {
     return () => clearInterval(chatListInterval);
   }, []);
 
-  // Fetch danh sách staff
+  // Fetch danh sách staff - chỉ gọi khi đã load chats và không có chat nào
   useEffect(() => {
     const fetchAvailableUsers = async () => {
+      if (!hasLoadedChats || myChats.length > 0) {
+        return;
+      }
+
       try {
         const response = await fetch('https://terarium.shop/api/Chat/available-users', {
           headers: {
@@ -181,7 +230,6 @@ useEffect(() => {
         
         if (response.ok) {
           const result: ApiResponse<User[]> = await response.json();
-          // Lọc chỉ lấy Staff và Manager
           const staffOnly = result.data.filter(user => 
             user.roleName === 'Staff' || user.roleName === 'Manager'
           );
@@ -193,7 +241,7 @@ useEffect(() => {
     };
 
     fetchAvailableUsers();
-  }, []);
+  }, [hasLoadedChats, myChats.length]);
 
   const handleOpenChat = async (chat: Chat) => {
     setSelectedChat(chat);
@@ -207,10 +255,8 @@ useEffect(() => {
     setLoading(true);
     try {
       if (staff.hasExistingChat && staff.existingChatId) {
-        // Mở chat đã có
         await openExistingChat(staff.existingChatId);
       } else {
-        // Tạo chat mới
         const response = await fetch('https://terarium.shop/api/Chat/create', {
           method: 'POST',
           headers: {
@@ -226,6 +272,7 @@ useEffect(() => {
           const result = await response.json();
           if (result.data && result.data.chatId) {
             await openExistingChat(result.data.chatId);
+            await refreshMyChats();
           }
         }
       }
@@ -236,10 +283,33 @@ useEffect(() => {
     }
   };
 
+  // Hàm refresh danh sách chats
+  const refreshMyChats = async () => {
+    try {
+      const response = await fetch('https://terarium.shop/api/Chat/my-chats', {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const result: ApiResponse<Chat[]> = await response.json();
+        const sortedChats = result.data.sort((a, b) => {
+          const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+          return timeB - timeA;
+        });
+        setMyChats(sortedChats);
+      }
+    } catch (error) {
+      console.error('Error refreshing chats:', error);
+    }
+  };
+
   // Mở chat đã có
   const openExistingChat = async (chatId: number) => {
     try {
-      // Lấy thông tin chat từ danh sách đã có
       const chat = myChats.find(c => c.chatId === chatId);
       
       if (chat) {
@@ -264,7 +334,6 @@ useEffect(() => {
 
       if (response.ok) {
         const result: ApiResponse<Message[]> = await response.json();
-        // Sắp xếp tin nhắn theo thời gian tăng dần (tin nhắn cũ ở trên, mới ở dưới)
         const sortedMessages = result.data.sort((a, b) => 
           new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
         );
@@ -282,15 +351,14 @@ useEffect(() => {
       messageId: Date.now(),
       chatId: selectedChat.chatId,
       senderId: currentUserId,
-      senderName: currentUserFullName || 'Bạn', // Sử dụng fullName từ token
-      senderRole: 'Customer', // hoặc role từ token
+      senderName: currentUserFullName || 'Bạn',
+      senderRole: 'Customer',
       content: newMessage.trim(),
       sentAt: new Date().toISOString(),
       isRead: false,
       isDeleted: false
     };
 
-    // Optimistic update - thêm tin nhắn vào cuối mảng
     setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
     setLoading(true);
@@ -332,7 +400,6 @@ useEffect(() => {
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg.messageId !== tempMessage.messageId));
     } finally {
       setLoading(false);
@@ -386,18 +453,26 @@ useEffect(() => {
     setMessages([]);
   };
 
+  // Cập nhật hàm formatTime để sử dụng múi giờ Việt Nam
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('vi-VN', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'Asia/Ho_Chi_Minh'
     });
   };
 
+  // Cập nhật hàm formatChatTime để sử dụng múi giờ Việt Nam
   const formatChatTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = now.getTime() - date.getTime();
+    
+    // Chuyển đổi sang múi giờ Việt Nam
+    const vnDate = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+    const vnNow = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+    
+    const diffTime = vnNow.getTime() - vnDate.getTime();
     const diffMinutes = Math.floor(diffTime / (1000 * 60));
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
@@ -407,9 +482,10 @@ useEffect(() => {
     if (diffHours < 24) return `${diffHours}h`;
     if (diffDays < 7) return `${diffDays} ngày`;
     
-    return date.toLocaleDateString('vi-VN', {
+    return vnDate.toLocaleDateString('vi-VN', {
       day: '2-digit',
-      month: '2-digit'
+      month: '2-digit',
+      timeZone: 'Asia/Ho_Chi_Minh'
     });
   };
 
@@ -423,31 +499,31 @@ useEffect(() => {
 
   // Hàm kiểm tra tin nhắn có phải của user hiện tại không
   const isMyMessage = (message: Message) => {
-    // So sánh fullName từ token với senderName của tin nhắn
     return currentUserFullName && message.senderName === currentUserFullName;
   };
 
   const filteredChats = myChats.filter(chat => {
-    const otherUserName = chat.user1Id === currentUserId ? chat.user2Name : chat.user1Name;
-    return otherUserName.toLowerCase().includes(searchTerm.toLowerCase());
+    const displayName = getChatDisplayName(chat);
+    return displayName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const filteredStaff = staffUsers.filter(staff =>
     staff.fullName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (!hasLoadedChats) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Đang tải...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedChat) {
-    const otherUser = selectedChat.user1Id === currentUserId ? 
-      { 
-        id: selectedChat.user2Id,
-        name: selectedChat.user2Name, 
-        role: selectedChat.user2Role 
-      } :
-      { 
-        id: selectedChat.user1Id,
-        name: selectedChat.user1Name, 
-        role: selectedChat.user1Role 
-      };
+    const otherUser = getOtherUser(selectedChat);
 
     return (
       <div className="flex h-screen bg-white">
@@ -481,18 +557,8 @@ useEffect(() => {
           {/* Chat List */}
           <div className="flex-1 overflow-y-auto">
             {filteredChats.map((chat) => {
-              const otherUserInList = chat.user1Id === currentUserId ? 
-                { 
-                  id: chat.user2Id,
-                  name: chat.user2Name, 
-                  role: chat.user2Role 
-                } :
-                { 
-                  id: chat.user1Id,
-                  name: chat.user1Name, 
-                  role: chat.user1Role 
-                };
-              
+              const otherUserInList = getOtherUser(chat);
+              const displayName = getChatDisplayName(chat);
               const unreadCount = getUnreadCount(chat);
               
               return (
@@ -505,7 +571,7 @@ useEffect(() => {
                 >
                   <div className="relative">
                     <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                      {otherUserInList.name.charAt(0).toUpperCase()}
+                      {displayName.charAt(0).toUpperCase()}
                     </div>
                     {isOnline(otherUserInList.id) && (
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
@@ -515,7 +581,7 @@ useEffect(() => {
                   <div className="flex-1 ml-3 min-w-0">
                     <div className="flex items-center justify-between">
                       <h3 className="font-semibold text-gray-900 truncate text-sm">
-                        {otherUserInList.name}
+                        {displayName}
                       </h3>
                       <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                         {formatChatTime(chat.updatedAt || chat.createdAt)}
@@ -614,23 +680,9 @@ useEffect(() => {
                 </div>
                 
                 <div>
-                  <h2 className="font-semibold text-gray-900">{otherUser.name}</h2>
-                  <p className="text-sm text-gray-500">
-                    {isOnline(otherUser.id) ? 'Đang hoạt động' : 'Không hoạt động'} • {otherUser.role}
-                  </p>
+                  <h3 className="font-semibold text-gray-900">{otherUser.name}</h3>
+                  <p className="text-xs text-gray-500">{otherUser.role}</p>
                 </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full">
-                  <PhoneOutlined className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full">
-                  <VideoCameraOutlined className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full">
-                  <InfoCircleOutlined className="w-5 h-5" />
-                </button>
               </div>
             </div>
           </div>
@@ -646,7 +698,7 @@ useEffect(() => {
                 const nextMessage = messages[index + 1];
                 const isLastInGroup = !nextMessage || 
                   nextMessage.senderName !== message.senderName ||
-                  (new Date(nextMessage.sentAt).getTime() - new Date(message.sentAt).getTime()) > 300000; // 5 minutes
+                  (new Date(nextMessage.sentAt).getTime() - new Date(message.sentAt).getTime()) > 300000;
 
                 return (
                   <div
@@ -710,7 +762,6 @@ useEffect(() => {
                 </div>
               )}
               
-              {/* Ref để scroll xuống cuối */}
               <div ref={messagesEndRef} />
             </div>
           </div>
@@ -792,7 +843,7 @@ useEffect(() => {
               <SearchOutlined className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Tìm kiếm staff..."
+                placeholder="Tìm kiếm..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500"
@@ -803,21 +854,11 @@ useEffect(() => {
           {/* Existing Chats */}
           {myChats.length > 0 && (
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuộc trò chuyện gần đây</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuộc trò chuyện của bạn</h3>
               <div className="grid gap-1 max-w-3xl">
                 {filteredChats.map((chat) => {
-                  const otherUser = chat.user1Id === currentUserId ? 
-                    { 
-                      id: chat.user2Id,
-                      name: chat.user2Name, 
-                      role: chat.user2Role 
-                    } :
-                    { 
-                      id: chat.user1Id,
-                      name: chat.user1Name, 
-                      role: chat.user1Role 
-                    };
-                  
+                  const otherUser = getOtherUser(chat);
+                  const displayName = getChatDisplayName(chat);
                   const unreadCount = getUnreadCount(chat);
                   
                   return (
@@ -828,7 +869,7 @@ useEffect(() => {
                     >
                       <div className="relative flex-shrink-0">
                         <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-xl">
-                          {otherUser.name.charAt(0).toUpperCase()}
+                          {displayName.charAt(0).toUpperCase()}
                         </div>
                         {isOnline(otherUser.id) && (
                           <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-3 border-white rounded-full"></div>
@@ -838,7 +879,7 @@ useEffect(() => {
                       <div className="flex-1 ml-4 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <h3 className="font-semibold text-gray-900 truncate text-lg">
-                            {otherUser.name}
+                            {displayName}
                           </h3>
                           <span className="text-sm text-gray-500 flex-shrink-0 ml-3">
                             {formatChatTime(chat.updatedAt || chat.createdAt)}
@@ -880,68 +921,76 @@ useEffect(() => {
           )}
 
           {/* Available Staff */}
-          <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Staff có sẵn</h3>
-            {filteredStaff.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserOutlined className="text-3xl text-gray-400" />
+          {(myChats.length === 0 || searchTerm) && (
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {myChats.length === 0 ? 'Bắt đầu trò chuyện với Staff' : 'Staff có sẵn'}
+              </h3>
+              {filteredStaff.length === 0 && myChats.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <UserOutlined className="text-3xl text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Không có staff nào</h3>
+                  <p className="text-gray-600">Hiện tại không có staff nào có sẵn để trò chuyện</p>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Không tìm thấy staff</h3>
-                <p className="text-gray-600">Thử tìm kiếm với từ khóa khác</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-5xl">
-                {filteredStaff.map((staff) => (
-                  <div
-                    key={staff.userId}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer hover:border-green-300"
-                    onClick={() => handleChatWithStaff(staff)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="relative">
-                        <div className="bg-green-100 p-3 rounded-full">
-                          <UserOutlined className="text-green-600 text-xl" />
+              ) : filteredStaff.length === 0 && myChats.length > 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">Không tìm thấy staff phù hợp</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-5xl">
+                  {filteredStaff.map((staff) => (
+                    <div
+                      key={staff.userId}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer hover:border-green-300"
+                      onClick={() => handleChatWithStaff(staff)}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="relative">
+                          <div className="bg-green-100 p-3 rounded-full">
+                            <UserOutlined className="text-green-600 text-xl" />
+                          </div>
+                          {staff.status === 'Active' && (
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                          )}
                         </div>
-                        {staff.status === 'Active' && (
-                          <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-lg truncate">{staff.fullName}</h3>
-                        <p className="text-gray-600 text-sm">@{staff.username}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-sm text-gray-500 px-2 py-1 bg-gray-100 rounded-full">
-                            {staff.roleName}
-                          </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            staff.status === 'Active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {staff.status === 'Active' ? 'Trực tuyến' : 'Offline'}
-                          </span>
-                        </div>
-                        {staff.hasExistingChat && (
-                          <div className="mt-2">
-                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                              Đã có cuộc trò chuyện
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-lg truncate">{staff.fullName}</h3>
+                          <p className="text-gray-600 text-sm">@{staff.username}</p>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-sm text-gray-500 px-2 py-1 bg-gray-100 rounded-full">
+                              {staff.roleName}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              staff.status === 'Active' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {staff.status === 'Active' ? 'Trực tuyến' : 'Offline'}
                             </span>
                           </div>
-                        )}
+                          {staff.hasExistingChat && (
+                            <div className="mt-2">
+                              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                                Đã có cuộc trò chuyện
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-center">
+                        <MessageOutlined className="text-green-600 mr-2" />
+                        <span className="text-green-600 font-medium text-sm">
+                          {staff.hasExistingChat ? 'Tiếp tục trò chuyện' : 'Bắt đầu trò chuyện'}
+                        </span>
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-center">
-                      <MessageOutlined className="text-green-600 mr-2" />
-                      <span className="text-green-600 font-medium text-sm">
-                        {staff.hasExistingChat ? 'Tiếp tục trò chuyện' : 'Bắt đầu trò chuyện'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

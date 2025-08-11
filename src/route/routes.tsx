@@ -17,6 +17,7 @@ import ChatWithCustomer from '@/components/staff/ChatWithCustomer';
 import StaffLayout from '@/components/staff/StaffLayout';
 import ThankYou from '@/pages/Customer/ThankYou';
 import PaymentSuccess from '@/pages/Customer/PaymentSuccess';
+import EditTerrariumVariant from '@/components/manager/TerrariumVariantEdit';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -136,6 +137,7 @@ const AppRoutes = () => {
           <Route path="dashboard" element={<Suspense fallback={<Loading />}><ManagerDashboard /></Suspense>} />
           <Route path="terrarium/list" element={<Suspense fallback={<Loading />}><TerrariumList /></Suspense>} />
           <Route path="terrarium/:id/variants" element={<Suspense fallback={<Loading />}><TerrariumVariants /></Suspense>} />
+          <Route path="terrarium/:id/variant/edit/:id" element={<Suspense fallback={<Loading />}><EditTerrariumVariant /></Suspense>} />
           <Route path="terrarium/create" element={<Suspense fallback={<Loading />}><TerrariumCreate /></Suspense>} />
           <Route path="terrarium/edit/:id" element={<Suspense fallback={<Loading />}><TerrariumEdit /></Suspense>} />
           <Route path="accessory/list" element={<Suspense fallback={<Loading />}><AccessoryList /></Suspense>} />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface Theme {
   environmentId: number;
@@ -22,9 +23,22 @@ const ThemeList: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://terarium.shop/api/Environment/get-all');
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch('https://terarium.shop/api/Environment/get-all', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
         
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -38,6 +52,7 @@ const ThemeList: React.FC = () => {
       } catch (error) {
         console.error('Error fetching themes:', error);
         setError(error instanceof Error ? error.message : 'An error occurred while fetching themes');
+        toast.error('Không thể tải danh sách chủ đề');
       } finally {
         setLoading(false);
       }
@@ -54,20 +69,31 @@ const ThemeList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa chủ đề này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/Environment/${id}`, {
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/Environment/delete-environment/${id}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         // Remove from local state
         setThemes(themes.filter((t) => t.environmentId !== id));
-        alert('Chủ đề đã được xóa thành công!');
+        toast.success('Chủ đề đã được xóa thành công!');
       } catch (error) {
         console.error('Error deleting theme:', error);
-        alert('Có lỗi xảy ra khi xóa chủ đề');
+        toast.error('Có lỗi xảy ra khi xóa chủ đề');
       }
     }
   };
@@ -152,13 +178,13 @@ const ThemeList: React.FC = () => {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
-                      <Link
+                      {/* <Link
                         to={`/theme/${theme.environmentId}`}
                         className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Xem chi tiết"
                       >
                         <Eye className="w-4 h-4" />
-                      </Link>
+                      </Link> */}
                       <Link
                         to={`/manager/theme/edit/${theme.environmentId}`}
                         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // Added useNavigate
 import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon, Upload, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { notification } from 'antd';
 
@@ -38,6 +38,7 @@ interface ApiResponse {
 }
 
 const TerrariumList: React.FC = () => {
+  const navigate = useNavigate(); // Added for redirecting to login
   const [terrariums, setTerrariums] = useState<Terrarium[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -61,10 +62,25 @@ const TerrariumList: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      const token = localStorage.getItem('authToken'); // Retrieve token
       const url = `https://terarium.shop/api/Terrarium/get-all?Pagination.PageNumber=${pagination.pageNumber}&Pagination.PageSize=${pagination.pageSize}&IncludeProperties=TerrariumImages`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+      });
       
       if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          navigate('/login');
+          return;
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -104,11 +120,25 @@ const TerrariumList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa terrarium này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/Terrarium/delete-terraium-${id}`, {
+        const token = localStorage.getItem('authToken'); // Retrieve token
+        const response = await fetch(`https://terarium.shop/api/Terrarium/delete-terraium/${id}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            notification.error({
+              message: 'Lỗi',
+              description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+              placement: 'topRight',
+            });
+            navigate('/login');
+            return;
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
@@ -138,12 +168,25 @@ const TerrariumList: React.FC = () => {
       formData.append('TerrariumId', terrariumId.toString());
       formData.append('ImageFile', file);
 
+      const token = localStorage.getItem('authToken'); // Retrieve token
       const response = await fetch('https://terarium.shop/api/TerrariumImage/upload', {
         method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
         body: formData,
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          navigate('/login');
+          return;
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -175,11 +218,25 @@ const TerrariumList: React.FC = () => {
   const handleImageDelete = async (imageId: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa hình ảnh này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/TerrariumImage/delete-terrariumImage-${imageId}`, {
+        const token = localStorage.getItem('authToken'); // Retrieve token
+        const response = await fetch(`https://terarium.shop/api/TerrariumImage/delete-terrariumImage/${imageId}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            notification.error({
+              message: 'Lỗi',
+              description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+              placement: 'topRight',
+            });
+            navigate('/login');
+            return;
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 

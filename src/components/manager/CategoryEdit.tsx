@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { notification } from 'antd';
@@ -7,6 +7,11 @@ interface CategoryFormData {
   categoryId: number;
   categoryName: string;
   description: string;
+}
+
+interface CategoryFormErrors {
+  categoryName?: string;
+  description?: string;
 }
 
 const CategoryEdit: React.FC = () => {
@@ -20,6 +25,21 @@ const CategoryEdit: React.FC = () => {
     categoryName: '',
     description: '',
   });
+  const [formErrors, setFormErrors] = useState<CategoryFormErrors>({});
+
+  const validateForm = useCallback((): boolean => {
+    const errors: CategoryFormErrors = {};
+
+    if (!formData.categoryName.trim()) {
+      errors.categoryName = 'Tên danh mục là bắt buộc';
+    }
+    if (!formData.description.trim()) {
+      errors.description = 'Mô tả là bắt buộc';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData]);
 
   // Load existing category data
   useEffect(() => {
@@ -28,9 +48,26 @@ const CategoryEdit: React.FC = () => {
         setInitialLoading(true);
         setError(null);
         
-        const response = await fetch(`https://terarium.shop/api/Category/${id}`);
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/Category/get/${id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
         
         if (!response.ok) {
+          if (response.status === 401) {
+            notification.error({
+              message: 'Lỗi',
+              description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+              placement: 'topRight',
+            });
+            // Optionally redirect to login page
+            // navigate('/login');
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -48,6 +85,11 @@ const CategoryEdit: React.FC = () => {
       } catch (error) {
         console.error('Error loading category:', error);
         setError(error instanceof Error ? error.message : 'An error occurred while loading category');
+        notification.error({
+          message: 'Lỗi',
+          description: 'Có lỗi xảy ra khi tải dữ liệu danh mục',
+          placement: 'topRight',
+        });
       } finally {
         setInitialLoading(false);
       }
@@ -56,7 +98,7 @@ const CategoryEdit: React.FC = () => {
     if (id) {
       loadCategory();
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -64,18 +106,33 @@ const CategoryEdit: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+    
+    if (formErrors[name as keyof CategoryFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      notification.error({
+        message: 'Lỗi',
+        description: 'Vui lòng điền đầy đủ thông tin bắt buộc',
+        placement: 'topRight',
+      });
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`https://terarium.shop/api/Category/${id}`, {
+      const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+      const response = await fetch(`https://terarium.shop/api/Category/update-category/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           categoryId: formData.categoryId,
@@ -85,6 +142,16 @@ const CategoryEdit: React.FC = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          // Optionally redirect to login page
+          // navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -152,6 +219,7 @@ const CategoryEdit: React.FC = () => {
         <button
           onClick={() => navigate('/manager/category/list')}
           className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+          disabled={loading}
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -175,12 +243,17 @@ const CategoryEdit: React.FC = () => {
                   <input
                     type="text"
                     name="categoryName"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.categoryName ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.categoryName}
                     onChange={handleInputChange}
                     placeholder="Nhập tên danh mục"
+                    disabled={loading}
                   />
+                  {formErrors.categoryName && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.categoryName}</p>
+                  )}
                 </div>
 
                 <div>
@@ -189,13 +262,18 @@ const CategoryEdit: React.FC = () => {
                   </label>
                   <textarea
                     name="description"
-                    required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.description ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.description}
                     onChange={handleInputChange}
                     placeholder="Mô tả chi tiết về danh mục"
+                    disabled={loading}
                   />
+                  {formErrors.description && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.description}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -223,7 +301,7 @@ const CategoryEdit: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/manager/category/list')}
-                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={loading}
                 >
                   Hủy

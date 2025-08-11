@@ -27,14 +27,28 @@ const ShapeList: React.FC = () => {
     const fetchShapes = async () => {
       try {
         setLoading(true);
-        const response = await fetch('https://terarium.shop/api/Shape/get-all');
-        
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+
+        const response = await fetch('https://terarium.shop/api/Shape/get-all', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
+
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const result: ApiResponse = await response.json();
-        
+
         if (result.status === 200) {
           setShapes(result.data);
         } else {
@@ -61,11 +75,22 @@ const ShapeList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa hình dạng này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/Shape/delete-shape-${id}`, {
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/Shape/delete-shape/${id}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
@@ -95,7 +120,7 @@ const ShapeList: React.FC = () => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <p className="text-red-600 mb-4">Lỗi: {error}</p>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
@@ -159,13 +184,13 @@ const ShapeList: React.FC = () => {
                   <td className="py-3 px-4 text-gray-600">{shape.shapeMaterial}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
-                      <Link
+                      {/* <Link
                         to={`/shape/${shape.shapeId}`}
                         className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Xem chi tiết"
                       >
                         <Eye className="w-4 h-4" />
-                      </Link>
+                      </Link> */}
                       <Link
                         to={`/manager/shape/edit/${shape.shapeId}`}
                         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"

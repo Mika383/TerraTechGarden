@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle, X, Check } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
 import axios from 'axios';
+import {notification} from 'antd';
+import { useNavigate } from 'react-router-dom';
 
 const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
 const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
@@ -465,7 +467,7 @@ const TerrariumCreate: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
+  const navigate = useNavigate();
   // Navigation function
   const navigateToTerrariumList = () => {
     window.location.href = '/manager/terrarium/list';
@@ -497,32 +499,39 @@ const TerrariumCreate: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validationError = validateForm();
-    if (validationError) {
-      setSubmitMessage(validationError);
-      return;
-    }
-
     setLoading(true);
-    try {
-      const payload = {
-        environmentId: formData.environmentId,
-        shapeId: formData.shapeId,
-        tankMethodId: formData.tankMethodId,
-        accessoryNames: formData.accessories.map(a => a.name),
-        terrariumName: formData.terrariumName,
-        description: formData.description,
-        status: formData.status,
-        bodyHTML: formData.bodyHTML
-      };
+    setSubmitMessage(null);
 
+    const payload = {
+      ...formData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      accessoryIds: formData.accessories.map(a => a.accessoryId),
+    };
+
+    try {
+      const token = localStorage.getItem('authToken');
       const response = await fetch('https://terarium.shop/api/Terrarium/add-terrarium', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error((await response.json())?.message || `HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          navigate('/login');
+          return;
+        }
+        throw new Error((await response.json())?.message || `HTTP error! status: ${response.status}`);
+      }
       const result = await response.json();
 
       if (result.status === 200 || result.message === "Save data success") {
@@ -666,7 +675,7 @@ const TerrariumCreate: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nội dung HTML (Tùy chọn)</label>
                     <Editor
-                      apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
+                      apiKey="x5fqg3l1tmt910ftwynyu0w42dnh80scufc7l1eilb0y7ktj"
                       value={formData.bodyHTML}
                       init={{
                         height: 500,

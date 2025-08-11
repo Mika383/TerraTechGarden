@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Trash2, Eye, Plus, Search, Filter, Archive } from 'lucide-react';
+import { Plus, Search, Archive } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface OrderItem {
@@ -10,48 +10,57 @@ interface OrderItem {
 interface Order {
   orderId: number;
   userId: number;
+  addressId: number | null;
   totalAmount: number;
   deposit: number;
+  discountAmount: number | null;
   orderDate: string;
-  status: number; // Numeric status code
+  status: string | null; // Allow null status
   paymentStatus: string;
-  shippingStatus: string;
   transactionId: string | null;
   paymentMethod: string;
   orderItems: OrderItem[];
 }
 
-// Status mapping for numeric status codes
-const getStatusText = (statusCode: number): string => {
-  switch (statusCode) {
-    case 0: return 'Chờ xử lí';
-    case 1: return 'Đang chuẩn bị';
-    case 2: return 'Đang giao';
-    case 3: return 'Đã giao';
-    case 4: return 'Hoàn tiền';
-    case 5: return 'Đã hủy';
+// Status mapping for string status codes
+const getStatusText = (status: string | null | undefined): string => {
+  if (!status) return 'Không xác định';
+  
+  switch (status.toLowerCase()) {
+    case 'failed': return 'Giao thất bại';
+    case 'cancel':
+    case 'cancle': return 'Đơn bị hủy'; // Handle both spellings
+    case 'pending': return 'Chờ xử lý';
+    case 'confirmed': return 'Đã xác nhận';
+    case 'processing': return 'Đang xử lý';
+    case 'shipping': return 'Đang vận chuyển';
+    case 'completed': return 'Hoàn thành';
+    case 'requestrefund': return 'Yêu cầu hoàn tiền';
+    case 'refuning': return 'Đang hoàn tiền';
+    case 'refunded': return 'Đã hoàn tiền';
     default: return 'Không xác định';
   }
 };
 
 // Status color mapping
-const getStatusColor = (status: string | number, type: 'order' | 'payment' | 'shipping') => {
-  let normalizedStatus: string;
+const getStatusColor = (status: string | null | undefined, type: 'order' | 'payment' | 'shipping') => {
+  if (!status) return 'text-gray-600 bg-gray-50';
   
-  if (type === 'order' && typeof status === 'number') {
-    normalizedStatus = getStatusText(status).toLowerCase();
-  } else {
-    normalizedStatus = status.toString().toLowerCase();
-  }
+  const normalizedStatus = status.toLowerCase();
   
   if (type === 'order') {
     switch (normalizedStatus) {
-      case 'chờ xử lí': return 'text-yellow-600 bg-yellow-50';
-      case 'đang chuẩn bị': return 'text-purple-600 bg-purple-50';
-      case 'đang giao': return 'text-blue-600 bg-blue-50';
-      case 'đã giao': return 'text-green-600 bg-green-50';
-      case 'hoàn tiền': return 'text-orange-600 bg-orange-50';
-      case 'đã hủy': return 'text-red-600 bg-red-50';
+      case 'pending': return 'text-yellow-600 bg-yellow-50';
+      case 'confirmed': return 'text-blue-600 bg-blue-50';
+      case 'processing': return 'text-purple-600 bg-purple-50';
+      case 'shipping': return 'text-indigo-600 bg-indigo-50';
+      case 'completed': return 'text-green-600 bg-green-50';
+      case 'failed': return 'text-red-600 bg-red-50';
+      case 'cancel':
+      case 'cancle': return 'text-gray-600 bg-gray-50';
+      case 'requestrefund': return 'text-orange-600 bg-orange-50';
+      case 'refuning': return 'text-orange-500 bg-orange-50';
+      case 'refunded': return 'text-green-500 bg-green-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   }
@@ -104,7 +113,6 @@ const OrderList: React.FC = () => {
   // Filter states
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
-  const [shippingFilter, setShippingFilter] = useState('all');
 
   // Fetch orders from API
   useEffect(() => {
@@ -135,8 +143,10 @@ const OrderList: React.FC = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const result: Order[] = await response.json();
-        setOrders(result);
+        const result = await response.json();
+        // Extract data array from the response
+        const orderData = result.data || result;
+        setOrders(orderData);
       } catch (error) {
         console.error('Error fetching orders:', error);
         const errorMessage = error instanceof Error ? error.message : 'An error occurred';
@@ -157,57 +167,24 @@ const OrderList: React.FC = () => {
 
   // Filter orders
   const filteredOrders = orders.filter((order) => {
+    // Safe string conversion for search
+    const orderStatus = order.status || '';
+    const paymentStatus = order.paymentStatus || '';
+    
     const matchesSearch = 
       order.orderId.toString().includes(searchTerm) ||
       order.userId.toString().includes(searchTerm) ||
-      getStatusText(order.status).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.paymentStatus.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.shippingStatus.toLowerCase().includes(searchTerm.toLowerCase());
+      getStatusText(orderStatus).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (paymentStatus && paymentStatus.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (orderStatus && orderStatus.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesStatus = statusFilter === 'all' || getStatusText(order.status).toLowerCase() === statusFilter.toLowerCase();
-    const matchesPayment = paymentFilter === 'all' || order.paymentStatus.toLowerCase() === paymentFilter.toLowerCase();
-    const matchesShipping = shippingFilter === 'all' || order.shippingStatus.toLowerCase() === shippingFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'all' || (orderStatus && orderStatus.toLowerCase() === statusFilter.toLowerCase());
+    const matchesPayment = paymentFilter === 'all' || (paymentStatus && paymentStatus.toLowerCase() === paymentFilter.toLowerCase());
     
-    return matchesSearch && matchesStatus && matchesPayment && matchesShipping;
+    return matchesSearch && matchesStatus && matchesPayment;
   });
 
-  const handleDelete = async (id: number) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
-      try {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
-        
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch(`https://terarium.shop/api/Order/${id}`, {
-          method: 'DELETE',
-          headers: headers,
-        });
-
-        if (response.status === 401) {
-          toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        setOrders(orders.filter((order) => order.orderId !== id));
-        toast.success('Xóa đơn hàng thành công');
-      } catch (error) {
-        console.error('Error deleting order:', error);
-        toast.error('Không thể xóa đơn hàng');
-      }
-    }
-  };
-
-  const handleStatusUpdate = async (orderId: number, newStatus: string, type: 'status' | 'paymentStatus' | 'shippingStatus') => {
+  const handleStatusUpdate = async (orderId: number, newStatus: string) => {
     try {
       const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
       
@@ -219,12 +196,10 @@ const OrderList: React.FC = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const response = await fetch(`https://terarium.shop/api/Order/${orderId}`, {
+      const response = await fetch(`https://terarium.shop/api/Order/${orderId}/status`, {
         method: 'PUT',
         headers: headers,
-        body: JSON.stringify({
-          [type]: newStatus
-        }),
+        body: JSON.stringify(newStatus),
       });
 
       if (response.status === 401) {
@@ -236,9 +211,10 @@ const OrderList: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // Update the order status in state
       setOrders(orders.map(order => 
         order.orderId === orderId 
-          ? { ...order, [type]: newStatus }
+          ? { ...order, status: newStatus }
           : order
       ));
       
@@ -301,7 +277,7 @@ const OrderList: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -317,15 +293,19 @@ const OrderList: React.FC = () => {
             className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            >
+          >
             <option value="all">Tất cả trạng thái</option>
-            <option value="chờ xử lí">Chờ xử lí</option>
-            <option value="đang chuẩn bị">Đang chuẩn bị</option>
-            <option value="đang giao">Đang giao</option>
-            <option value="đã giao">Đã giao</option>
-            <option value="hoàn tiền">Hoàn tiền</option>
-            <option value="đã hủy">Đã hủy</option>
-         </select>
+            <option value="pending">Chờ xử lý</option>
+            <option value="confirmed">Đã xác nhận</option>
+            <option value="processing">Đang xử lý</option>
+            <option value="shipping">Đang vận chuyển</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="failed">Giao thất bại</option>
+            <option value="cancel">Đơn bị hủy</option>
+            <option value="requestrefund">Yêu cầu hoàn tiền</option>
+            <option value="refuning">Đang hoàn tiền</option>
+            <option value="refunded">Đã hoàn tiền</option>
+          </select>
 
           <select 
             className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -338,24 +318,11 @@ const OrderList: React.FC = () => {
             <option value="cancelled">Cancelled</option>
           </select>
 
-          <select 
-            className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            value={shippingFilter}
-            onChange={(e) => setShippingFilter(e.target.value)}
-          >
-            <option value="all">Tất cả giao hàng</option>
-            <option value="unprocessed">Unprocessed</option>
-            <option value="pending">Pending</option>
-            <option value="shipped">Shipped</option>
-            <option value="delivered">Delivered</option>
-          </select>
-
           <button 
             onClick={() => {
               setSearchTerm('');
               setStatusFilter('all');
               setPaymentFilter('all');
-              setShippingFilter('all');
             }}
             className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
           >
@@ -365,7 +332,7 @@ const OrderList: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Tổng đơn hàng</div>
           <div className="text-2xl font-bold text-gray-900">{orders.length}</div>
@@ -373,21 +340,27 @@ const OrderList: React.FC = () => {
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Đã thanh toán</div>
           <div className="text-2xl font-bold text-green-600">
-            {orders.filter(o => o.paymentStatus.toLowerCase() === 'paid').length}
+            {orders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'paid').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Chưa thanh toán</div>
           <div className="text-2xl font-bold text-red-600">
-            {orders.filter(o => o.paymentStatus.toLowerCase() === 'unpaid').length}
+            {orders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'unpaid').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-sm text-gray-600">Đã giao hàng</div>
+          <div className="text-sm text-gray-600">Hoàn thành</div>
           <div className="text-2xl font-bold text-green-600">
-            {orders.filter(o => getStatusText(o.status).toLowerCase() === 'đã giao').length}
+            {orders.filter(o => o.status && o.status.toLowerCase() === 'completed').length}
+          </div>
         </div>
-</div>
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="text-sm text-gray-600">Đã hủy</div>
+          <div className="text-2xl font-bold text-red-600">
+            {orders.filter(o => o.status && (o.status.toLowerCase() === 'cancel' || o.status.toLowerCase() === 'cancle')).length}
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -401,9 +374,9 @@ const OrderList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Khách hàng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Trạng thái đơn hàng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Thanh toán</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Giao hàng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Tổng tiền</th>
-                <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Cọc</th>
+                <th className="text-center py-3 px-4 font-medium text-gray-700">Cập nhật trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -433,38 +406,30 @@ const OrderList: React.FC = () => {
                       {order.paymentStatus}
                     </span>
                   </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.shippingStatus, 'shipping')}`}>
-                      {order.shippingStatus}
-                    </span>
-                  </td>
                   <td className="py-3 px-4 font-medium text-gray-900">
                     {formatCurrency(order.totalAmount)}
                   </td>
+                  <td className="py-3 px-4 font-medium text-gray-600">
+                    {formatCurrency(order.deposit)}
+                  </td>
                   <td className="py-3 px-4">
-                    <div className="flex items-center justify-center space-x-2">
-                      <Link
-                        to={`/order/${order.orderId}`}
-                        className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                        title="Xem chi tiết"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Link>
-                      <Link
-                        to={`/manager/order/edit/${order.orderId}`}
-                        className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
-                        title="Chỉnh sửa"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(order.orderId)}
-                        className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                        title="Xóa"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <select
+                      value={order.status || ''}
+                      onChange={(e) => handleStatusUpdate(order.orderId, e.target.value)}
+                      className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="">Chọn trạng thái</option>
+                      <option value="pending">Chờ xử lý</option>
+                      <option value="confirmed">Đã xác nhận</option>
+                      <option value="processing">Đang xử lý</option>
+                      <option value="shipping">Đang vận chuyển</option>
+                      <option value="completed">Hoàn thành</option>
+                      <option value="failed">Giao thất bại</option>
+                      <option value="cancel">Đơn bị hủy</option>
+                      <option value="requestrefund">Yêu cầu hoàn tiền</option>
+                      <option value="refuning">Đang hoàn tiền</option>
+                      <option value="refunded">Đã hoàn tiền</option>
+                    </select>
                   </td>
                 </tr>
               ))}
@@ -474,7 +439,7 @@ const OrderList: React.FC = () => {
 
         {filteredOrders.length === 0 && !loading && (
           <div className="text-center py-8 text-gray-500">
-            {searchTerm || statusFilter !== 'all' || paymentFilter !== 'all' || shippingFilter !== 'all' 
+            {searchTerm || statusFilter !== 'all' || paymentFilter !== 'all'
               ? 'Không tìm thấy đơn hàng nào phù hợp với tiêu chí tìm kiếm' 
               : 'Chưa có đơn hàng nào được tạo'
             }

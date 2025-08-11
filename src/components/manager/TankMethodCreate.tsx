@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { notification } from 'antd';
@@ -8,6 +8,11 @@ interface TankMethodFormData {
   tankMethodDescription: string;
 }
 
+interface TankMethodFormErrors {
+  tankMethodType?: string;
+  tankMethodDescription?: string;
+}
+
 const TankMethodCreate: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -15,6 +20,21 @@ const TankMethodCreate: React.FC = () => {
     tankMethodType: '',
     tankMethodDescription: '',
   });
+  const [formErrors, setFormErrors] = useState<TankMethodFormErrors>({});
+
+  const validateForm = useCallback((): boolean => {
+    const errors: TankMethodFormErrors = {};
+
+    if (!formData.tankMethodType.trim()) {
+      errors.tankMethodType = 'Loại bể là bắt buộc';
+    }
+    if (!formData.tankMethodDescription.trim()) {
+      errors.tankMethodDescription = 'Mô tả là bắt buộc';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -22,17 +42,32 @@ const TankMethodCreate: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+
+    if (formErrors[name as keyof TankMethodFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      notification.error({
+        message: 'Lỗi',
+        description: 'Vui lòng điền đầy đủ thông tin bắt buộc',
+        placement: 'topRight',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await fetch('https://terarium.shop/api/TankMethod', {
+      const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+      const response = await fetch('https://terarium.shop/api/TankMethod/add-tankmethod', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           tankMethodType: formData.tankMethodType,
@@ -41,15 +76,25 @@ const TankMethodCreate: React.FC = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          // Optionally redirect to login page
+          // navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      
+
       if (result.status === 200 || result.status === 201) {
         notification.success({
           message: 'Thành công',
-          description: 'Phương pháp tank đã được tạo thành công!',
+          description: 'Loại bể đã được tạo thành công!',
           placement: 'topRight',
         });
         navigate('/manager/tank-method/list');
@@ -60,7 +105,7 @@ const TankMethodCreate: React.FC = () => {
       console.error('Error creating tank method:', error);
       notification.error({
         message: 'Lỗi',
-        description: `Có lỗi xảy ra khi tạo phương pháp tank: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        description: `Có lỗi xảy ra khi tạo loại bể: ${error instanceof Error ? error.message : 'Unknown error'}`,
         placement: 'topRight',
       });
     } finally {
@@ -75,12 +120,13 @@ const TankMethodCreate: React.FC = () => {
         <button
           onClick={() => navigate('/manager/tank-method/list')}
           className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+          disabled={loading}
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Thêm Phương pháp Tank Mới</h1>
-          <p className="text-gray-600">Tạo một phương pháp tank mới trong hệ thống</p>
+          <h1 className="text-2xl font-bold text-gray-900">Thêm loại bể Mới</h1>
+          <p className="text-gray-600">Tạo một loại bể mới trong hệ thống</p>
         </div>
       </div>
 
@@ -93,17 +139,22 @@ const TankMethodCreate: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Loại Phương pháp *
+                    Loại bể *
                   </label>
                   <input
                     type="text"
                     name="tankMethodType"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.tankMethodType ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.tankMethodType}
                     onChange={handleInputChange}
-                    placeholder="Nhập loại phương pháp"
+                    placeholder="Nhập loại bể"
+                    disabled={loading}
                   />
+                  {formErrors.tankMethodType && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.tankMethodType}</p>
+                  )}
                 </div>
 
                 <div>
@@ -112,13 +163,18 @@ const TankMethodCreate: React.FC = () => {
                   </label>
                   <textarea
                     name="tankMethodDescription"
-                    required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.tankMethodDescription ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.tankMethodDescription}
                     onChange={handleInputChange}
-                    placeholder="Mô tả chi tiết về phương pháp tank"
+                    placeholder="Mô tả chi tiết về loại bể"
+                    disabled={loading}
                   />
+                  {formErrors.tankMethodDescription && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.tankMethodDescription}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -140,13 +196,14 @@ const TankMethodCreate: React.FC = () => {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>{loading ? 'Đang lưu...' : 'Lưu Phương pháp'}</span>
+                  <span>{loading ? 'Đang lưu...' : 'Lưu'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => navigate('/manager/tank-method/list')}
-                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={loading}
                 >
                   Hủy
                 </button>
