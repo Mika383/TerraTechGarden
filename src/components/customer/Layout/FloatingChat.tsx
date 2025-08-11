@@ -16,8 +16,8 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 // Hook chat (giữ đường dẫn bạn đang dùng)
-import { useOpenAIChat } from "../../../hook/useOpenAIChat";
-import type { ChatType } from "../../../hook/useOpenAIChat";
+import { useOpenAIChat } from "../../../hooks/useOpenAIChat";
+import type { ChatType } from "../../../hooks/useOpenAIChat";
 
 gsap.registerPlugin(ScrollTrigger);
 
