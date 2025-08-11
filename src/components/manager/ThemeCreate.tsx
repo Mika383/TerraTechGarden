@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { notification } from 'antd';
@@ -8,6 +8,11 @@ interface ThemeFormData {
   environmentDescription: string;
 }
 
+interface ThemeFormErrors {
+  environmentName?: string;
+  environmentDescription?: string;
+}
+
 const ThemeCreate: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -15,6 +20,21 @@ const ThemeCreate: React.FC = () => {
     environmentName: '',
     environmentDescription: '',
   });
+  const [formErrors, setFormErrors] = useState<ThemeFormErrors>({});
+
+  const validateForm = useCallback((): boolean => {
+    const errors: ThemeFormErrors = {};
+
+    if (!formData.environmentName.trim()) {
+      errors.environmentName = 'Tên chủ đề là bắt buộc';
+    }
+    if (!formData.environmentDescription.trim()) {
+      errors.environmentDescription = 'Mô tả là bắt buộc';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -22,17 +42,32 @@ const ThemeCreate: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+
+    if (formErrors[name as keyof ThemeFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      notification.error({
+        message: 'Lỗi',
+        description: 'Vui lòng điền đầy đủ thông tin bắt buộc',
+        placement: 'topRight',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await fetch('https://terarium.shop/api/Environment', {
+      const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+      const response = await fetch('https://terarium.shop/api/Environment/add-environment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           environmentName: formData.environmentName,
@@ -41,11 +76,21 @@ const ThemeCreate: React.FC = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          // Optionally redirect to login page
+          // navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      
+
       if (result.status === 200 || result.status === 201) {
         notification.success({
           message: 'Thành công',
@@ -75,6 +120,7 @@ const ThemeCreate: React.FC = () => {
         <button
           onClick={() => navigate('/manager/theme/list')}
           className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+          disabled={loading}
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -98,12 +144,17 @@ const ThemeCreate: React.FC = () => {
                   <input
                     type="text"
                     name="environmentName"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.environmentName ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.environmentName}
                     onChange={handleInputChange}
                     placeholder="Nhập tên chủ đề"
+                    disabled={loading}
                   />
+                  {formErrors.environmentName && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.environmentName}</p>
+                  )}
                 </div>
 
                 <div>
@@ -112,13 +163,18 @@ const ThemeCreate: React.FC = () => {
                   </label>
                   <textarea
                     name="environmentDescription"
-                    required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.environmentDescription ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.environmentDescription}
                     onChange={handleInputChange}
                     placeholder="Mô tả chi tiết về chủ đề"
+                    disabled={loading}
                   />
+                  {formErrors.environmentDescription && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.environmentDescription}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -146,7 +202,8 @@ const ThemeCreate: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/manager/theme/list')}
-                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  disabled={loading}
+                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Hủy
                 </button>

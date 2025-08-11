@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { notification } from 'antd';
@@ -7,6 +7,11 @@ interface ThemeFormData {
   environmentId: number;
   environmentName: string;
   environmentDescription: string;
+}
+
+interface ThemeFormErrors {
+  environmentName?: string;
+  environmentDescription?: string;
 }
 
 const ThemeEdit: React.FC = () => {
@@ -20,6 +25,21 @@ const ThemeEdit: React.FC = () => {
     environmentName: '',
     environmentDescription: '',
   });
+  const [formErrors, setFormErrors] = useState<ThemeFormErrors>({});
+
+  const validateForm = useCallback((): boolean => {
+    const errors: ThemeFormErrors = {};
+
+    if (!formData.environmentName.trim()) {
+      errors.environmentName = 'Tên chủ đề là bắt buộc';
+    }
+    if (!formData.environmentDescription.trim()) {
+      errors.environmentDescription = 'Mô tả là bắt buộc';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData]);
 
   // Load existing theme data
   useEffect(() => {
@@ -28,9 +48,26 @@ const ThemeEdit: React.FC = () => {
         setInitialLoading(true);
         setError(null);
         
-        const response = await fetch(`https://terarium.shop/api/Environment/${id}`);
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/Environment/get/${id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
         
         if (!response.ok) {
+          if (response.status === 401) {
+            notification.error({
+              message: 'Lỗi',
+              description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+              placement: 'topRight',
+            });
+            // Optionally redirect to login page
+            // navigate('/login');
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -48,6 +85,11 @@ const ThemeEdit: React.FC = () => {
       } catch (error) {
         console.error('Error loading theme:', error);
         setError(error instanceof Error ? error.message : 'An error occurred while loading theme');
+        notification.error({
+          message: 'Lỗi',
+          description: 'Có lỗi xảy ra khi tải dữ liệu chủ đề',
+          placement: 'topRight',
+        });
       } finally {
         setInitialLoading(false);
       }
@@ -56,7 +98,7 @@ const ThemeEdit: React.FC = () => {
     if (id) {
       loadTheme();
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -64,18 +106,33 @@ const ThemeEdit: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+    
+    if (formErrors[name as keyof ThemeFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      notification.error({
+        message: 'Lỗi',
+        description: 'Vui lòng điền đầy đủ thông tin bắt buộc',
+        placement: 'topRight',
+      });
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`https://terarium.shop/api/Environment/${id}`, {
+      const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+      const response = await fetch(`https://terarium.shop/api/Environment/update-environment/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           environmentId: formData.environmentId,
@@ -85,6 +142,16 @@ const ThemeEdit: React.FC = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          // Optionally redirect to login page
+          // navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -152,6 +219,7 @@ const ThemeEdit: React.FC = () => {
         <button
           onClick={() => navigate('/manager/theme/list')}
           className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+          disabled={loading}
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -175,12 +243,17 @@ const ThemeEdit: React.FC = () => {
                   <input
                     type="text"
                     name="environmentName"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.environmentName ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.environmentName}
                     onChange={handleInputChange}
                     placeholder="Nhập tên chủ đề"
+                    disabled={loading}
                   />
+                  {formErrors.environmentName && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.environmentName}</p>
+                  )}
                 </div>
 
                 <div>
@@ -189,13 +262,18 @@ const ThemeEdit: React.FC = () => {
                   </label>
                   <textarea
                     name="environmentDescription"
-                    required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.environmentDescription ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     value={formData.environmentDescription}
                     onChange={handleInputChange}
                     placeholder="Mô tả chi tiết về chủ đề"
+                    disabled={loading}
                   />
+                  {formErrors.environmentDescription && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.environmentDescription}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -223,7 +301,7 @@ const ThemeEdit: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/manager/theme/list')}
-                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={loading}
                 >
                   Hủy

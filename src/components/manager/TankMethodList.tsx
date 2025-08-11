@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Trash2, Eye, Plus, Search } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface TankMethod {
   tankMethodId: number;
@@ -22,9 +23,22 @@ const TankMethodList: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://terarium.shop/api/TankMethod/get-all');
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch('https://terarium.shop/api/TankMethod/get-all', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
         
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -38,6 +52,7 @@ const TankMethodList: React.FC = () => {
       } catch (error) {
         console.error('Error fetching tank methods:', error);
         setError(error instanceof Error ? error.message : 'An error occurred while fetching tank methods');
+        toast.error('Không thể tải danh sách loại bể');
       } finally {
         setLoading(false);
       }
@@ -52,22 +67,33 @@ const TankMethodList: React.FC = () => {
   );
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa phương pháp này?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa loại này?')) {
       try {
-        const response = await fetch(`https://terarium.shop/api/TankMethod/${id}`, {
+        const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
+        const response = await fetch(`https://terarium.shop/api/TankMethod/delete-tankmethod/${id}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            // Optionally redirect to login page
+            // window.location.href = '/login';
+            throw new Error('Unauthorized');
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         // Remove from local state
         setTankMethods(tankMethods.filter((t) => t.tankMethodId !== id));
-        alert('Phương pháp đã được xóa thành công!');
+        toast.success('Xóa thành công!');
       } catch (error) {
         console.error('Error deleting tank method:', error);
-        alert('Có lỗi xảy ra khi xóa phương pháp');
+        toast.error('Có lỗi xảy ra khi xóa');
       }
     }
   };
@@ -102,15 +128,15 @@ const TankMethodList: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quản lý Phương pháp Tank</h1>
-          <p className="text-gray-600">Quản lý danh sách phương pháp tank trong hệ thống</p>
+          <h1 className="text-2xl font-bold text-gray-900">Quản lý loại bể</h1>
+          <p className="text-gray-600">Quản lý danh sách loại bể trong hệ thống</p>
         </div>
         <Link
           to="/manager/tank-method/create"
           className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>Thêm Phương pháp</span>
+          <span>Thêm loại bể</span>
         </Link>
       </div>
 
@@ -120,7 +146,7 @@ const TankMethodList: React.FC = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
-            placeholder="Tìm kiếm phương pháp..."
+            placeholder="Tìm kiếm loại bể..."
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -152,13 +178,13 @@ const TankMethodList: React.FC = () => {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
-                      <Link
+                      {/* <Link
                         to={`/tank-method/${method.tankMethodId}`}
                         className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Xem chi tiết"
                       >
                         <Eye className="w-4 h-4" />
-                      </Link>
+                      </Link> */}
                       <Link
                         to={`/manager/tank-method/edit/${method.tankMethodId}`}
                         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
@@ -183,7 +209,7 @@ const TankMethodList: React.FC = () => {
 
         {filteredTankMethods.length === 0 && !loading && (
           <div className="text-center py-8 text-gray-500">
-            {searchTerm ? 'Không tìm thấy phương pháp nào phù hợp với tiêu chí tìm kiếm' : 'Chưa có phương pháp nào'}
+            {searchTerm ? 'Không tìm thấy loại nào phù hợp với tiêu chí tìm kiếm' : 'Chưa có loại bể nào'}
           </div>
         )}
       </div>

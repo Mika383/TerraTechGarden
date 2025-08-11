@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, ChevronDown, Loader2, AlertCircle, X, Check } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
 import axios from 'axios';
+import {notification} from 'antd';
 
 const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
 const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
@@ -484,7 +485,7 @@ const TerrariumEdit: React.FC = () => {
   useEffect(() => {
     const loadTerrarium = async () => {
       try {
-        const response = await fetch(`https://terarium.shop/api/Terrarium/get-${id}`);
+        const response = await fetch(`https://terarium.shop/api/Terrarium/get/${id}`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result: ApiResponse<FormData> = await response.json();
         if (result.status !== 200) throw new Error(result.message || 'Failed to load terrarium data');
@@ -540,67 +541,54 @@ const TerrariumEdit: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validationError = validateForm();
-    if (validationError) {
-      setSubmitMessage(validationError);
-      return;
-    }
-
     setLoading(true);
-    try {
-      const updateData = {
-        terrariumId: formData.terrariumId,
-        tankMethodId: formData.tankMethodId,
-        shapeId: formData.shapeId,
-        environmentId: formData.environmentId,
-        tankMethodType: '',
-        shape: '',
-        environment: '',
-        accessoryNames: formData.accessories.map(a => a.name),
-        terrariumName: formData.terrariumName,
-        description: formData.description,
-        status: formData.status,
-        bodyHTML: formData.bodyHTML
-      };
 
-      const response = await fetch(`https://terarium.shop/api/Terrarium/update-terrarium-${id}`, {
+    const payload = {
+      ...formData,
+      updatedAt: new Date().toISOString(),
+      accessoryIds: formData.accessories.map((a) => a.accessoryId),
+    };
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`https://terarium.shop/api/Terrarium/update-terrarium/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.message || errorMessage;
-        } catch {
-          // Nếu không parse được JSON thì dùng error message mặc định
+        if (response.status === 401) {
+          notification.error({
+            message: 'Lỗi',
+            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+            placement: 'topRight',
+          });
+          navigate('/login');
+          return;
         }
-        throw new Error(errorMessage);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const result = await response.json();
-        if (result.status === 200 || result.message === "Save data success") {
-          setSubmitMessage({ type: 'success', text: 'Terrarium đã được cập nhật thành công!' });
-          setTimeout(() => navigate('/manager/terrarium/list'), 2000);
-        } else {
-          throw new Error(result.message || 'Có lỗi xảy ra khi cập nhật terrarium');
-        }
+      const result = await response.json();
+      if (result.status === 200) {
+        notification.success({
+          message: 'Thành công',
+          description: 'Terrarium đã được cập nhật thành công!',
+          placement: 'topRight',
+        });
+        navigate('/manager/terrarium/list');
       } else {
-        if (response.status === 200) {
-          setSubmitMessage({ type: 'success', text: 'Terrarium đã được cập nhật thành công!' });
-          setTimeout(() => navigate('/manager/terrarium/list'), 2000);
-        } else {
-          throw new Error('Có lỗi xảy ra khi cập nhật terrarium');
-        }
+        throw new Error(result.message || 'Có lỗi xảy ra');
       }
     } catch (error) {
-      setSubmitMessage({ 
-        type: 'error', 
-        text: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật terrarium' 
+      notification.error({
+        message: 'Lỗi',
+        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật terrarium',
+        placement: 'topRight',
       });
     } finally {
       setLoading(false);
@@ -611,7 +599,7 @@ const TerrariumEdit: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex items-center space-x-2">
-          <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
           <span className="text-gray-600">Đang tải dữ liệu...</span>
         </div>
       </div>
@@ -746,7 +734,7 @@ const TerrariumEdit: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nội dung HTML (Tùy chọn)</label>
                     <Editor
-                      apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
+                      apiKey="x5fqg3l1tmt910ftwynyu0w42dnh80scufc7l1eilb0y7ktj"
                       value={formData.bodyHTML}
                       init={{
                         height: 500,

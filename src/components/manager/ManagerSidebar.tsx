@@ -101,7 +101,7 @@ const ManagerSidebar: React.FC = () => {
           path: '/manager/tank-method/list',
         },
         {
-          title: 'Thêm Chủ đề',
+          title: 'Thêm loại bể',
           icon: Plus,
           path: '/manager/tank-method/create',
         },

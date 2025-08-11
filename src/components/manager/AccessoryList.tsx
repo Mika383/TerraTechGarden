@@ -40,6 +40,53 @@ interface ApiResponse<T> {
   data: T;
 }
 
+// Create axios instance with default config
+const apiClient = axios.create({
+  baseURL: 'https://terarium.shop/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add request interceptor to include auth token
+apiClient.interceptors.request.use(
+  (config) => {
+    // Get token from localStorage, sessionStorage, or your auth context
+    const token = localStorage.getItem('authToken') || 
+                  sessionStorage.getItem('authToken') || 
+                  localStorage.getItem('token') ||
+                  sessionStorage.getItem('token');
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle 401 errors globally
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Handle unauthorized access
+      notification.error({
+        message: 'Lỗi xác thực',
+        description: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+        placement: 'topRight',
+      });
+      
+      // Optionally redirect to login
+      // window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 const AccessoryList: React.FC = () => {
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -63,8 +110,8 @@ const AccessoryList: React.FC = () => {
     try {
       setLoading(true);
       
-      const accessoryResponse = await axios.get<ApiResponse<AccessoryApiResponse>>(
-        `https://terarium.shop/api/Accessory/get-all?Pagination.PageNumber=${page}&Pagination.PageSize=${size}&IncludeProperties=AccessoryImages`
+      const accessoryResponse = await apiClient.get<ApiResponse<AccessoryApiResponse>>(
+        `/Accessory/get-all?Pagination.PageNumber=${page}&Pagination.PageSize=${size}&IncludeProperties=AccessoryImages`
       );
       
       if (accessoryResponse.data.status === 200) {
@@ -94,7 +141,19 @@ const AccessoryList: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const categoryResponse = await axios.get<ApiResponse<Category[]>>('https://terarium.shop/api/Category');
+      // Try the correct endpoint first
+      let categoryResponse;
+      
+      try {
+        categoryResponse = await apiClient.get<ApiResponse<Category[]>>('/Category/get-all');
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          // If get-all doesn't exist, try the base endpoint
+          categoryResponse = await apiClient.get<ApiResponse<Category[]>>('/Category');
+        } else {
+          throw error;
+        }
+      }
       
       if (categoryResponse.data.status === 200) {
         setCategories(categoryResponse.data.data);
@@ -105,13 +164,22 @@ const AccessoryList: React.FC = () => {
           placement: 'topRight',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching categories:', error);
-      notification.error({
-        message: 'Lỗi',
-        description: 'Có lỗi xảy ra khi tải danh mục',
-        placement: 'topRight',
-      });
+      
+      if (error.response?.status === 401) {
+        notification.error({
+          message: 'Lỗi xác thực',
+          description: 'Bạn cần đăng nhập để truy cập dữ liệu danh mục',
+          placement: 'topRight',
+        });
+      } else {
+        notification.error({
+          message: 'Lỗi',
+          description: 'Có lỗi xảy ra khi tải danh mục',
+          placement: 'topRight',
+        });
+      }
     }
   };
 
@@ -137,7 +205,7 @@ const AccessoryList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa phụ kiện này?')) {
       try {
-        const response = await axios.delete(`https://terarium.shop/api/Accessory/delete-accessory${id}`);
+        const response = await apiClient.delete(`/Accessory/delete-accessory/${id}`);
 
         if (response.data.status === 200 || response.status === 204) {
           // Refresh current page data
@@ -170,7 +238,7 @@ const AccessoryList: React.FC = () => {
 
     try {
       setUploadingImage(true);
-      const response = await axios.post('https://terarium.shop/api/AccessoryImage/upload', formData, {
+      const response = await apiClient.post('/AccessoryImage/add-accessoryimage', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -211,7 +279,7 @@ const AccessoryList: React.FC = () => {
 
     if (window.confirm('Bạn có chắc chắn muốn xóa ảnh này?')) {
       try {
-        const response = await axios.delete(`https://terarium.shop/api/AccessoryImage/${imageId}`);
+        const response = await apiClient.delete(`/AccessoryImage/delete-accessoryimage/${imageId}`);
 
         if (response.data.status === 200 || response.status === 204) {
           // Refresh accessories to get updated images
@@ -419,13 +487,13 @@ const AccessoryList: React.FC = () => {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
-                      <Link
+                      {/* <Link
                         to={`/accessory/${accessory.accessoryId}`}
                         className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Xem chi tiết"
                       >
                         <Eye className="w-4 h-4" />
-                      </Link>
+                      </Link> */}
                       <Link
                         to={`/manager/accessory/edit/${accessory.accessoryId}`}
                         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
