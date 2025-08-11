@@ -22,7 +22,7 @@ const TankMethodList: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://terarium.shop/api/TankMethod');
+        const response = await fetch('https://terarium.shop/api/TankMethod/get-all');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
