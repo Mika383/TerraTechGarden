@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { addAddress, updateAddress } from '@/api/profile';
-import { useVietnamAddress } from '@/hook/useVietnamAddress';
+import { useVietnamAddress } from '@/hooks/useVietnamAddress';
 import { Input, Select, message } from 'antd';
 import { Address } from '@/types/profile';
 

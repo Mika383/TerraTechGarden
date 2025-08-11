@@ -23,6 +23,7 @@ interface AuthHook {
   registeredEmail: string;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  userId: number | null; // 👈 Thêm userId vào type
 }
 
 export const useAuth = (): AuthHook => {
@@ -33,13 +34,16 @@ export const useAuth = (): AuthHook => {
   const [registeredEmail, setRegisteredEmail] = useState<string>('');
   const navigate = useNavigate();
 
+  // 👇 Lấy userId ngay khi hook khởi tạo
+  const userId = getUserIdFromToken();
+
   const saveTokens = (token: string, refreshToken: string) => {
     localStorage.setItem('authToken', token);
     localStorage.setItem('refreshToken', refreshToken);
 
-    const userId = getUserIdFromToken();
-    if (userId) {
-      localStorage.setItem('userId', userId.toString()); // Optional: dùng khi cần
+    const uid = getUserIdFromToken();
+    if (uid) {
+      localStorage.setItem('userId', uid.toString());
     }
 
     window.dispatchEvent(new Event('tokenRefreshed'));
@@ -110,7 +114,7 @@ export const useAuth = (): AuthHook => {
       const token = response.data;
 
       if (token) {
-        saveTokens(token, ''); // Google login thường không có refresh token
+        saveTokens(token, '');
 
         const role = getRoleFromToken();
         if (!role) {
@@ -172,5 +176,6 @@ export const useAuth = (): AuthHook => {
     registeredEmail,
     setError,
     setLoading,
+    userId, // 👈 Trả userId ra ngoài
   };
 };

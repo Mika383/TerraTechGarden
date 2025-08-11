@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Select, Input } from 'antd';
-import { useVietnamAddress } from '@/hook/useVietnamAddress';
+import { useVietnamAddress } from '@/hooks/useVietnamAddress';
 import { Province, District, Ward } from '@/types';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 

@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Modal, Button, Input } from 'antd';
-import { useAuth } from '../../../hook/useAuth';
+import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRightOutlined, SyncOutlined } from '@ant-design/icons';
 import { toast } from 'react-toastify';
