@@ -22,7 +22,7 @@ export const getAllAccessories = async (
 export const getAccessoryById = async (
   id: number
 ): Promise<Accessory | null> => {
-  const res = await axios.get(`${BASE_URL}/Accessory/get-${id}`);
+  const res = await axios.get(`${BASE_URL}/Accessory/get/${id}`);
   return res.data?.data || null;
 };
 

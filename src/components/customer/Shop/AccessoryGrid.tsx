@@ -1,10 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AccessoryCard from './AccessoryCard';
-import {
-  getAllAccessories,
-  getAccessoryImagesByAccessoryId,
-  getAllAccessoryCategories,
-} from '@/api/accessory';
+import { getAllAccessories, getAccessoryImagesByAccessoryId, getAllAccessoryCategories } from '@/api/accessory';
 import { Accessory, AccessoryCategory } from '@/types/accessory';
 
 interface AccessoryGridProps {
@@ -39,10 +35,7 @@ const AccessoryGrid: React.FC<AccessoryGridProps> = ({
           (accessoryRes || []).map(async (item) => {
             if (item.accessoryImages?.length > 0) return item;
             const images = await getAccessoryImagesByAccessoryId(item.accessoryId);
-            return {
-              ...item,
-              accessoryImages: images || [],
-            };
+            return { ...item, accessoryImages: images || [] };
           })
         );
 
@@ -60,21 +53,22 @@ const AccessoryGrid: React.FC<AccessoryGridProps> = ({
     .filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter((a) => (selectedType ? a.status?.toLowerCase() === selectedType.toLowerCase() : true));
 
-  const sorted = [...filtered].sort((a, b) => {
-    let comparison = 0;
-    if (sortCriteria === 'rating') comparison = 0;
-    else if (sortCriteria === 'purchases') comparison = 0;
-    else if (sortCriteria === 'price') comparison = a.price - b.price;
-    return sortOrder === 'ASC' ? comparison : -comparison;
-  });
+  const sorted = [...filtered]
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortCriteria === 'rating') comparison = 0;
+      else if (sortCriteria === 'purchases') comparison = 0;
+      else if (sortCriteria === 'price') comparison = a.price - b.price;
+      return sortOrder === 'ASC' ? comparison : -comparison;
+    })
+    .slice(0, 9); // Giới hạn tối đa 9 sản phẩm
 
-  const getCategoryName = (categoryId: number): string => {
-    return categories.find((cat) => cat.categoryId === categoryId)?.categoryName || 'Không rõ';
-  };
+  const getCategoryName = (categoryId: number): string =>
+    categories.find((cat) => cat.categoryId === categoryId)?.categoryName || 'Không rõ';
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {sorted.map((item) => (
           <AccessoryCard
             key={item.accessoryId}
@@ -89,18 +83,19 @@ const AccessoryGrid: React.FC<AccessoryGridProps> = ({
         ))}
       </div>
 
-      <div className="flex justify-center mt-6 space-x-4">
+      <div className="flex justify-center mt-6 space-x-3 md:space-x-4">
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page === 1}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+          className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
         >
           Trang trước
         </button>
-        <span className="px-4 py-2">Trang {page}</span>
+        <span className="px-3 md:px-4 py-2 text-sm md:text-base font-roboto">Trang {page}</span>
         <button
           onClick={() => setPage((p) => p + 1)}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+          disabled={sorted.length < 9}
+          className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
         >
           Trang tiếp
         </button>
