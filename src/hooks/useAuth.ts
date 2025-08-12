@@ -7,6 +7,8 @@ import {
   VerifyOTPResponse
 } from '@/types';
 import { getRoleFromToken, getUserIdFromToken } from '../utils/jwt';
+import { getUserMembership } from '@/api/membership'; // 👈 THÊM
+import { Taggo } from "@/lib/taggoai"; 
 
 interface AuthHook {
   handleRegister: (data: RegisterRequest) => Promise<void>;
@@ -23,7 +25,7 @@ interface AuthHook {
   registeredEmail: string;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  userId: number | null; // 👈 Thêm userId vào type
+  userId: number | null;
 }
 
 export const useAuth = (): AuthHook => {
@@ -34,7 +36,6 @@ export const useAuth = (): AuthHook => {
   const [registeredEmail, setRegisteredEmail] = useState<string>('');
   const navigate = useNavigate();
 
-  // 👇 Lấy userId ngay khi hook khởi tạo
   const userId = getUserIdFromToken();
 
   const saveTokens = (token: string, refreshToken: string) => {
@@ -49,12 +50,43 @@ export const useAuth = (): AuthHook => {
     window.dispatchEvent(new Event('tokenRefreshed'));
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('userId');
-    navigate('/login');
+  // 👇 helper: phát sự kiện membershipChanged + set localStorage
+  const broadcastMembership = (has: boolean) => {
+    localStorage.setItem('hasMembership', has ? '1' : '0');
+    window.dispatchEvent(new CustomEvent('membershipChanged', { detail: { hasMembership: has } }));
   };
+
+  // 👇 helper: gọi API kiểm tra membership đang active (nếu BE trả danh sách)
+  const checkAndBroadcastMembership = async (uid: number) => {
+    try {
+      const list = await getUserMembership(uid);
+      const active = Array.isArray(list) && list.length > 0;
+      broadcastMembership(active);
+    } catch (e) {
+      // Nếu lỗi → coi như chưa có để user vẫn có thể mua
+      broadcastMembership(false);
+    }
+  };
+
+  const handleLogout = () => {
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userId');
+
+  // Thông báo cho ChatFab & các nơi khác
+  try {
+    window.dispatchEvent(new Event('tokenRefreshed'));
+    window.dispatchEvent(new Event('membershipChanged'));
+  } catch {}
+
+  // Ẩn widget NGAY (khỏi phải reload)
+  try {
+    Taggo.hide?.();
+    (Taggo as any).identify?.({}); // xoá nhận diện nếu lib có
+  } catch {}
+
+  navigate('/login');
+};
 
   const handleRegister = async (data: RegisterRequest) => {
     setLoading(true);
@@ -92,6 +124,9 @@ export const useAuth = (): AuthHook => {
           return false;
         }
 
+        const uid = getUserIdFromToken();
+        if (uid) await checkAndBroadcastMembership(uid); // 👈 CẬP NHẬT CHAT FAB NGAY
+
         navigate('/');
         return true;
       }
@@ -123,6 +158,9 @@ export const useAuth = (): AuthHook => {
           return false;
         }
 
+        const uid = getUserIdFromToken();
+        if (uid) await checkAndBroadcastMembership(uid); // 👈
+
         navigate('/');
         return true;
       }
@@ -145,6 +183,8 @@ export const useAuth = (): AuthHook => {
       if (response.success || response.message?.includes('thành công')) {
         if (response.token) {
           saveTokens(response.token, '');
+          const uid = getUserIdFromToken();
+          if (uid) await checkAndBroadcastMembership(uid); // 👈
         }
         setShowOTP(false);
         setOtp('');
@@ -176,6 +216,6 @@ export const useAuth = (): AuthHook => {
     registeredEmail,
     setError,
     setLoading,
-    userId, // 👈 Trả userId ra ngoài
+    userId,
   };
 };
