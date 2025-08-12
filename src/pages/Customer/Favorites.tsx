@@ -1,162 +1,181 @@
-// src/pages/Customer/EditProfile.tsx
-import React, { useEffect, useState } from 'react';
-import { getProfileMe, updateProfileMe } from '@/api/profile';
-import { ProfileMe, UpdateProfileRequest } from '@/types/profile';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useMemo } from 'react';
+import { FavoriteItem, getFavorites, removeFavorite } from '@/api/favorite';
 import { toast } from 'react-toastify';
+import { Link } from 'react-router-dom';
 
-const EditProfile: React.FC = () => {
-  const navigate = useNavigate();
+const ITEMS_PER_PAGE = 8;
 
+const Favorite: React.FC = () => {
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<'all' | 'accessory' | 'terrarium'>('all');
+  const [page, setPage] = useState(1);
 
-  const [fullName, setFullName] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | 'other' | string>('other');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState(''); // yyyy-MM-dd
-  const [email, setEmail] = useState('');
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await getProfileMe();
-        const data: ProfileMe = res.data;
-        setFullName(data.fullName ?? '');
-        setGender((data.gender as any) ?? 'other');
-        setPhoneNumber(data.phoneNumber ?? '');
-        setEmail(data.email ?? '');
-        // convert ISO -> yyyy-MM-dd
-        if (data.dateOfBirth) {
-          const d = new Date(data.dateOfBirth);
-          setDateOfBirth(d.toISOString().split('T')[0]);
-        }
-      } catch (e) {
-        console.error(e);
-        toast.error('Không tải được hồ sơ.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Load danh sách yêu thích
+  const fetchFavorites = async () => {
     try {
-      setSubmitting(true);
-      const payload: UpdateProfileRequest = {
-        fullName: fullName.trim(),
-        gender,
-        phoneNumber: phoneNumber.trim(),
-        dateOfBirth: dateOfBirth ? `${dateOfBirth}T00:00:00` : new Date().toISOString(),
-        email: email.trim(),
-      };
-      await updateProfileMe(payload);
-      toast.success('Cập nhật hồ sơ thành công');
-      navigate('/customer-dashboard');
-    } catch (e) {
-      console.error(e);
-      toast.error('Cập nhật thất bại');
+      setLoading(true);
+      const list = await getFavorites();
+      setFavorites(list);
+    } catch {
+      toast.error('Không thể tải danh sách yêu thích.');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="container mx-auto py-12 px-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 w-1/3 bg-gray-200 rounded" />
-          <div className="h-10 w-full bg-gray-200 rounded" />
-          <div className="h-10 w-full bg-gray-200 rounded" />
-          <div className="h-10 w-full bg-gray-200 rounded" />
-          <div className="h-10 w-full bg-gray-200 rounded" />
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    fetchFavorites();
+  }, []);
+
+  // Filter + Pagination
+  const filteredList = useMemo(() => {
+    if (filter === 'all') return favorites;
+    return favorites.filter(f => f.type === filter);
+  }, [favorites, filter]);
+
+  const totalPages = Math.ceil(filteredList.length / ITEMS_PER_PAGE);
+  const paginatedList = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return filteredList.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredList, page]);
+
+  // Xử lý bỏ thích
+  const onUnfavorite = async (favoriteId: number) => {
+    try {
+      setRemovingId(favoriteId);
+      await removeFavorite(favoriteId);
+      setFavorites(prev => prev.filter(f => f.favoriteId !== favoriteId));
+      toast.info('Đã xoá khỏi yêu thích.');
+    } catch {
+      toast.error('Không thể xoá. Vui lòng thử lại.');
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   return (
-    <div className="container mx-auto py-12 px-6 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-6">Chỉnh sửa hồ sơ</h1>
-
-      <form onSubmit={onSubmit} className="space-y-5">
-        <div>
-          <label className="block text-sm font-medium mb-1">Họ và tên</label>
-          <input
-            type="text"
-            className="w-full border rounded px-3 py-2"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Giới tính</label>
+    <div className="container mx-auto py-8 px-4 max-w-6xl">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 className="text-2xl font-bold">Sản phẩm yêu thích</h1>
+        <div className="flex items-center gap-2">
           <select
-            className="w-full border rounded px-3 py-2"
-            value={gender}
-            onChange={(e) => setGender(e.target.value)}
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value as any);
+              setPage(1);
+            }}
+            className="border rounded px-3 py-1.5"
           >
-            <option value="male">Nam</option>
-            <option value="female">Nữ</option>
-            <option value="other">Khác</option>
+            <option value="all">Tất cả</option>
+            <option value="accessory">Phụ kiện</option>
+            <option value="terrarium">Terrarium</option>
           </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Số điện thoại</label>
-          <input
-            type="tel"
-            className="w-full border rounded px-3 py-2"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            placeholder="Ví dụ: 0987654321"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Ngày sinh</label>
-          <input
-            type="date"
-            className="w-full border rounded px-3 py-2"
-            value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
-          <input
-            type="email"
-            className="w-full border rounded px-3 py-2"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="flex items-center gap-3 pt-2">
           <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-60"
-            disabled={submitting}
+            onClick={fetchFavorites}
+            className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 text-sm"
           >
-            {submitting ? 'Đang lưu...' : 'Lưu thay đổi'}
-          </button>
-          <button
-            type="button"
-            className="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded"
-            onClick={() => navigate(-1)}
-          >
-            Hủy
+            Tải lại
           </button>
         </div>
-      </form>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
+            <div key={i} className="animate-pulse border rounded-lg p-3">
+              <div className="h-28 bg-gray-200 rounded mb-2" />
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-1" />
+              <div className="h-4 bg-gray-200 rounded w-1/2" />
+            </div>
+          ))}
+        </div>
+      ) : paginatedList.length === 0 ? (
+        <p className="text-gray-600">Không có sản phẩm yêu thích nào.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {paginatedList.map((f) => {
+              const href =
+                f.type === 'accessory'
+                  ? `/accessory/${f.productId}`
+                  : `/terrarium/${f.productId}`;
+              return (
+                <div
+                  key={f.favoriteId}
+                  className="border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col"
+                >
+                  <Link to={href} className="block flex-1">
+                    <img
+                      src={f.thumbnailUrl || '/placeholder.jpg'}
+                      alt={f.name}
+                      className="w-full h-28 object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg';
+                      }}
+                    />
+                    <div className="px-3 py-2">
+                      <div className="text-sm font-medium line-clamp-2">{f.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5 capitalize">{f.type}</div>
+                      <div className="text-sm font-semibold text-green-700 mt-1">
+                        {f.price.toLocaleString('vi-VN')} VND
+                      </div>
+                    </div>
+                  </Link>
+                  <div className="px-3 pb-3">
+                    <button
+                      onClick={() => onUnfavorite(f.favoriteId)}
+                      disabled={removingId === f.favoriteId}
+                      className={`w-full text-sm rounded px-3 py-1.5 border ${
+                        removingId === f.favoriteId
+                          ? 'opacity-60'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      {removingId === f.favoriteId ? 'Đang xoá...' : 'Bỏ thích'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-6">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                className="px-3 py-1.5 border rounded disabled:opacity-50"
+              >
+                Trước
+              </button>
+              {Array.from({ length: totalPages }).map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setPage(idx + 1)}
+                  className={`px-3 py-1.5 border rounded ${
+                    page === idx + 1 ? 'bg-green-600 text-white' : ''
+                  }`}
+                >
+                  {idx + 1}
+                </button>
+              ))}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage(p => p + 1)}
+                className="px-3 py-1.5 border rounded disabled:opacity-50"
+              >
+                Sau
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
 
-export default EditProfile;
+export default Favorite;

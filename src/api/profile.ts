@@ -1,17 +1,19 @@
 // src/api/profile.ts
 import axios from 'axios';
-import {
+import type {
   Address,
   ApiResponse,
   ProfileMe,
   UpdateProfileRequest,
+  CreateAddressRequest,
+  UpdateAddressRequest,
 } from '@/types/profile';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authHeader = () => ({
   headers: {
-    Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+    Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`,
   },
 });
 
@@ -19,44 +21,81 @@ const authHeader = () => ({
  *  Address APIs (User)
  *  ========================= */
 
-// Lấy danh sách địa chỉ theo userId
+/** Lấy danh sách địa chỉ theo userId */
 export const getAddressesByUserId = async (userId: number): Promise<Address[]> => {
   const res = await axios.get(
     `${BASE_URL}/Address/getall-by-user-id/${userId}`,
     authHeader()
   );
-  // Map đề phòng BE trả về addressId thay vì id
+
+  // Chuẩn hoá id (đề phòng BE trả addressId)
   return (res.data?.data || []).map((item: any) => ({
     ...item,
     id: item.addressId ?? item.id,
-  }));
+  })) as Address[];
 };
 
-// Thêm địa chỉ mới
-export const addAddress = async (address: Omit<Address, 'id'>): Promise<ApiResponse<null> | void> => {
-  const res = await axios.post(
-    `${BASE_URL}/Address/add-address`,
-    address,
+/** Thêm địa chỉ mới (KHÔNG dùng lat/long) */
+export const addAddress = async (
+  payload: CreateAddressRequest
+): Promise<ApiResponse<null> | void> => {
+  const body = {
+    tagName: payload.tagName,
+    receiverName: payload.receiverName,
+    receiverPhone: payload.receiverPhone,
+    receiverAddress: payload.receiverAddress,
+    provinceCode: payload.provinceCode,
+    districtCode: payload.districtCode,
+    wardCode: payload.wardCode,
+    isDefault: payload.isDefault,
+  };
+
+  const res = await axios.post(`${BASE_URL}/Address/add-address`, body, authHeader());
+  return res.data as ApiResponse<null>;
+};
+
+/** Cập nhật địa chỉ (KHÔNG dùng lat/long)
+ *  Lưu ý endpoint BE hiện tại (theo code cũ): uodate-adrress
+ *  Nếu BE sửa chính tả -> đổi về /Address/update-address/{id}
+ */
+export const updateAddress = async (
+  id: number,
+  payload: UpdateAddressRequest
+): Promise<ApiResponse<null> | void> => {
+  const body = {
+    id,
+    tagName: payload.tagName,
+    receiverName: payload.receiverName,
+    receiverPhone: payload.receiverPhone,
+    receiverAddress: payload.receiverAddress,
+    provinceCode: payload.provinceCode,
+    districtCode: payload.districtCode,
+    wardCode: payload.wardCode,
+    isDefault: payload.isDefault,
+  };
+
+  const res = await axios.put(
+    `${BASE_URL}/Address/uodate-adrress/${id}`,
+    body,
     authHeader()
   );
-  return res.data;
+  return res.data as ApiResponse<null>;
 };
 
-// Đặt làm mặc định
+/** Đặt địa chỉ làm mặc định (ép isDefault = true) */
 export const setDefaultAddress = async (
   id: number,
   currentData: Omit<Address, 'id'>
 ): Promise<ApiResponse<null> | void> => {
   const res = await axios.put(
-    // NOTE: nếu BE chuẩn là 'update-address' thì đổi lại giúp mình
     `${BASE_URL}/Address/uodate-adrress/${id}`,
     { ...currentData, id, isDefault: true },
     authHeader()
   );
-  return res.data;
+  return res.data as ApiResponse<null>;
 };
 
-// Bỏ mặc định
+/** Bỏ mặc định (ép isDefault = false) – tuỳ nhu cầu có thể dùng */
 export const unsetDefaultAddress = async (
   id: number,
   currentData: Omit<Address, 'id'>
@@ -66,55 +105,43 @@ export const unsetDefaultAddress = async (
     { ...currentData, id, isDefault: false },
     authHeader()
   );
-  return res.data;
+  return res.data as ApiResponse<null>;
 };
 
-// Sửa địa chỉ
-export const updateAddress = async (
-  id: number,
-  address: Omit<Address, 'id'>
-): Promise<ApiResponse<null> | void> => {
-  const res = await axios.put(
-    `${BASE_URL}/Address/uodate-adrress/${id}`,
-    { ...address, id },
-    authHeader()
-  );
-  return res.data;
-};
-
-// Xoá địa chỉ
+/** Xoá địa chỉ */
 export const deleteAddress = async (id: number): Promise<ApiResponse<null> | void> => {
   const res = await axios.delete(
     `${BASE_URL}/Address/delete-address/${id}`,
     authHeader()
   );
-  return res.data;
+  return res.data as ApiResponse<null>;
 };
 
 /** =========================
  *  Profile APIs (User /me)
  *  ========================= */
 
-// GET /Profile/me
+/** GET /Profile/me */
 export async function getProfileMe(): Promise<ApiResponse<ProfileMe>> {
   const res = await axios.get(`${BASE_URL}/Profile/me`, authHeader());
-  return res.data;
+  return res.data as ApiResponse<ProfileMe>;
 }
 
-// PUT /Profile/me
+/** PUT /Profile/me */
 export async function updateProfileMe(
   payload: UpdateProfileRequest
 ): Promise<ApiResponse<null>> {
   const res = await axios.put(`${BASE_URL}/Profile/me`, payload, authHeader());
-  return res.data;
+  return res.data as ApiResponse<null>;
 }
 
-// POST /Profile/me/avatar (multipart/form-data, key: "File")
+/** POST /Profile/me/avatar (multipart/form-data, key: "File") */
 export async function uploadAvatar(
   file: File
 ): Promise<ApiResponse<{ url?: string } | null>> {
   const form = new FormData();
   form.append('File', file);
+
   const res = await axios.post(`${BASE_URL}/Profile/me/avatar`, form, {
     ...authHeader(),
     headers: {
@@ -122,15 +149,16 @@ export async function uploadAvatar(
       'Content-Type': 'multipart/form-data',
     },
   });
-  return res.data;
+  return res.data as ApiResponse<{ url?: string } | null>;
 }
 
-// POST /Profile/me/background (multipart/form-data, key: "File")
+/** POST /Profile/me/background (multipart/form-data, key: "File") */
 export async function uploadBackground(
   file: File
 ): Promise<ApiResponse<{ url?: string } | null>> {
   const form = new FormData();
   form.append('File', file);
+
   const res = await axios.post(`${BASE_URL}/Profile/me/background`, form, {
     ...authHeader(),
     headers: {
@@ -138,64 +166,80 @@ export async function uploadBackground(
       'Content-Type': 'multipart/form-data',
     },
   });
-  return res.data;
+  return res.data as ApiResponse<{ url?: string } | null>;
 }
 
 /** =========================
  *  Profile APIs (Admin)
  *  ========================= */
 
-// GET /api/Admin/Profile/{userId}
-export async function adminGetProfileById(userId: number): Promise<ApiResponse<ProfileMe>> {
+/** GET /api/Admin/Profile/{userId} */
+export async function adminGetProfileById(
+  userId: number
+): Promise<ApiResponse<ProfileMe>> {
   const res = await axios.get(`${BASE_URL}/Admin/Profile/${userId}`, authHeader());
-  return res.data;
+  return res.data as ApiResponse<ProfileMe>;
 }
 
-// PUT /api/Admin/Profile/{userId}
+/** PUT /api/Admin/Profile/{userId} */
 export async function adminUpdateProfileById(
   userId: number,
   payload: UpdateProfileRequest
 ): Promise<ApiResponse<null>> {
-  const res = await axios.put(`${BASE_URL}/Admin/Profile/${userId}`, payload, authHeader());
-  return res.data;
+  const res = await axios.put(
+    `${BASE_URL}/Admin/Profile/${userId}`,
+    payload,
+    authHeader()
+  );
+  return res.data as ApiResponse<null>;
 }
 
-// POST /api/Admin/Profile/{userId}/avatar
+/** POST /api/Admin/Profile/{userId}/avatar */
 export async function adminUploadAvatar(
   userId: number,
   file: File
 ): Promise<ApiResponse<{ url?: string } | null>> {
   const form = new FormData();
   form.append('File', file);
-  const res = await axios.post(`${BASE_URL}/Admin/Profile/${userId}/avatar`, form, {
-    ...authHeader(),
-    headers: {
-      ...authHeader().headers,
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return res.data;
+
+  const res = await axios.post(
+    `${BASE_URL}/Admin/Profile/${userId}/avatar`,
+    form,
+    {
+      ...authHeader(),
+      headers: {
+        ...authHeader().headers,
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+  );
+  return res.data as ApiResponse<{ url?: string } | null>;
 }
 
-// POST /api/Admin/Profile/{userId}/background
+/** POST /api/Admin/Profile/{userId}/background */
 export async function adminUploadBackground(
   userId: number,
   file: File
 ): Promise<ApiResponse<{ url?: string } | null>> {
   const form = new FormData();
   form.append('File', file);
-  const res = await axios.post(`${BASE_URL}/Admin/Profile/${userId}/background`, form, {
-    ...authHeader(),
-    headers: {
-      ...authHeader().headers,
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return res.data;
+
+  const res = await axios.post(
+    `${BASE_URL}/Admin/Profile/${userId}/background`,
+    form,
+    {
+      ...authHeader(),
+      headers: {
+        ...authHeader().headers,
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+  );
+  return res.data as ApiResponse<{ url?: string } | null>;
 }
 
-// GET /api/Admin/Profile/all
+/** GET /api/Admin/Profile/all */
 export async function adminGetAllProfiles(): Promise<ApiResponse<ProfileMe[]>> {
   const res = await axios.get(`${BASE_URL}/Admin/Profile/all`, authHeader());
-  return res.data;
+  return res.data as ApiResponse<ProfileMe[]>;
 }

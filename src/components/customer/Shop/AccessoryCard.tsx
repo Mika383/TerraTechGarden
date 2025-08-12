@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { gsap } from 'gsap';
 import { Button, Card } from 'antd';
-import { HeartFilled, HeartOutlined } from '@ant-design/icons';
 import { addAccessoryToCart } from '@/api/cart';
+import FavoriteButton from '@/components/common/FavoriteButton';
 
 interface AccessoryCardProps {
   id: string;
@@ -33,29 +33,41 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
   const buttonsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    gsap.fromTo(imageRef.current, { opacity: 0, scale: 1.1 }, {
-      opacity: 1,
-      scale: 1,
-      duration: 0.8,
-      ease: 'power2.out',
-      scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
-    });
-    gsap.fromTo(contentRef.current, { opacity: 0, y: 20 }, {
-      opacity: 1,
-      y: 0,
-      duration: 0.8,
-      delay: 0.2,
-      ease: 'power2.out',
-      scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
-    });
-    gsap.fromTo(buttonsRef.current, { opacity: 0, y: 20 }, {
-      opacity: 1,
-      y: 0,
-      duration: 0.8,
-      delay: 0.4,
-      ease: 'back.out(1.7)',
-      scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
-    });
+    gsap.fromTo(
+      imageRef.current,
+      { opacity: 0, scale: 1.1 },
+      {
+        opacity: 1,
+        scale: 1,
+        duration: 0.8,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
+      }
+    );
+    gsap.fromTo(
+      contentRef.current,
+      { opacity: 0, y: 20 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        delay: 0.2,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
+      }
+    );
+    gsap.fromTo(
+      buttonsRef.current,
+      { opacity: 0, y: 20 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        delay: 0.4,
+        ease: 'back.out(1.7)',
+        scrollTrigger: { trigger: cardRef.current, start: 'top 85%' },
+      }
+    );
   }, []);
 
   const handleAddToCart = async () => {
@@ -93,28 +105,10 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
     navigate(`/accessory/${id}`);
   };
 
-  const handleAddToWishlist = () => {
-    const wishlistItem = { id, name, price, image };
-    const storedWishlist = JSON.parse(localStorage.getItem('wishlistAccessories') || '[]');
-    const existing = storedWishlist.findIndex((item: any) => item.id === id);
-    if (existing > -1) {
-      storedWishlist.splice(existing, 1);
-      toast.info(`${name} đã được xóa khỏi danh sách yêu thích!`);
-    } else {
-      storedWishlist.push(wishlistItem);
-      toast.success(`${name} đã được thêm vào danh sách yêu thích!`);
-    }
-    localStorage.setItem('wishlistAccessories', JSON.stringify(storedWishlist));
-  };
-
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
     target.src = '/src/assets/image/1.jpg';
   };
-
-  const isInWishlist = JSON.parse(localStorage.getItem('wishlistAccessories') || '[]').some(
-    (item: any) => item.id === id
-  );
 
   return (
     <Card
@@ -130,23 +124,26 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
         />
       }
     >
-      <Button
-        icon={isInWishlist ? <HeartFilled /> : <HeartOutlined />}
-        className={`absolute top-2 right-2 sm:top-3 sm:right-3 ${
-          isInWishlist ? 'text-pink-500' : 'text-gray-400'
-        } border-none hover:text-pink-500 transition duration-200 text-lg sm:text-xl`}
-        onClick={handleAddToWishlist}
+      {/* ❤️ Favorite */}
+      <FavoriteButton
+        type="accessory"
+        productId={Number(id)}
+        className="!absolute top-2 right-2 sm:top-3 sm:right-3 text-lg sm:text-xl"
       />
+
       <div ref={contentRef} className="flex-1 flex flex-col px-2 sm:px-3 md:px-4 py-2 sm:py-3">
-        <h3 className="text-base sm:text-lg md:text-xl font-semibold mt-1 sm:mt-2 font-roboto">{name}</h3>
+        <h3 className="text-base sm:text-lg md:text-xl font-semibold mt-1 sm:mt-2 font-roboto">
+          {name}
+        </h3>
         <p className="text-gray-600 text-xs sm:text-sm mt-1">
-          {description.length > 50 ? `${description.slice(0, 50)}...` : description}
+          {description.length > 50 ? `${description.slice(0, 50)}.` : description}
         </p>
         <p className="text-gray-600 text-xs sm:text-sm mt-1">Danh mục: {categoryName}</p>
         <p className="text-gray-800 font-semibold mt-1 text-sm sm:text-base md:text-lg">
           {price.toLocaleString('vi-VN')} VND
         </p>
       </div>
+
       <div ref={buttonsRef} className="flex space-x-2 mt-2 sm:mt-3 px-2 sm:px-3 md:px-4 pb-2 sm:pb-3">
         <Button
           type="primary"

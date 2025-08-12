@@ -17,7 +17,7 @@ const filterOptions = ["Tất cả", "Chờ thanh toán", "Đang vận chuyển"
 // Hàm lấy thêm info cho item đầu tiên (phân biệt accessory hoặc variant)
 const fetchItemInfo = async (item: any) => {
   if (item.accessoryId) {
-    const res = await fetch(`https://terarium.shop/api/Accessory/get-${item.accessoryId}`);
+    const res = await fetch(`https://terarium.shop/api/Accessory/get/${item.accessoryId}`);
     const json = await res.json();
     return {
       name: json.data.name,
