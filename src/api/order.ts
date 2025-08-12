@@ -70,3 +70,34 @@ export const deleteVoucher = async (id: number): Promise<any> => {
   const res = await axios.delete(`${BASE_URL}/Voucher/delete-voucher/${id}`, authHeader());
   return res.data;
 };
+
+// ===== WALLET APIs =====
+export const getWalletBalance = async (userId: number): Promise<number> => {
+  const res = await axios.get(`${BASE_URL}/Wallet/balance?userId=${userId}`, authHeader());
+  return res.data || 0;
+};
+
+export const useWalletForPayment = async (payload: {
+  userId: number;
+  amount: number;
+  orderId: number;
+}): Promise<any> => {
+  const res = await axios.post(`${BASE_URL}/Wallet/pay`, payload, authHeader());
+  return res.data;
+};
+
+// ===== PAYMENT API với body mới =====
+export const createVNPayPayment = async (payload: {
+  orderId: number;
+  orderType: string;
+  orderDescription: string;
+  name: string;
+  payAll: boolean;
+}): Promise<string> => {
+  const res = await axios.post(`${BASE_URL}/Payment/vn-pay`, payload, authHeader());
+  const payUrl = res?.data?.data || res?.data?.payUrl || res?.data?.url;
+  if (!payUrl) {
+    throw new Error('PAYMENT_URL_NOT_FOUND');
+  }
+  return payUrl;
+};

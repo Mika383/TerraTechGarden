@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Footer from './Footer';
-import FloatingChat from './FloatingChat';
+
 
 const Layout: React.FC = () => {
   const { pathname } = useLocation();
@@ -19,7 +19,6 @@ const Layout: React.FC = () => {
         <Outlet />
       </main>
       <Footer />
-      <FloatingChat />
     </div>
   );
 };

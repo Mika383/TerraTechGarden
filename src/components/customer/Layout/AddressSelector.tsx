@@ -1,11 +1,11 @@
+// AddressSelector.tsx
 import React, { useEffect, useState } from 'react';
-import { getAddressesByUserId, setDefaultAddress } from '@/api/profile';
+import { getAddressesByUserId, setDefaultAddress, unsetDefaultAddress } from '@/api/profile';
 import { Address } from '@/types/profile';
-import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { StarOutlined, PlusOutlined } from '@ant-design/icons';
+import { StarOutlined } from '@ant-design/icons';
 import { toast } from 'react-toastify';
-import NewAddressForm from './NewAddressForm'; // component nhập địa chỉ mới
 import Modal from 'antd/es/modal';
+import NewAddressForm from './NewAddressForm';
 
 interface Props {
   userId: number;
@@ -17,22 +17,23 @@ const AddressSelector: React.FC<Props> = ({ userId, onSelect }) => {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showList, setShowList] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<Address | undefined>(undefined);
 
-  // Load addresses
   const load = async () => {
     const res = await getAddressesByUserId(userId);
     setAddresses(res);
-    const defaultAddr = res.find(a => a.isDefault) || res[0];
-    if (defaultAddr) {
-      setSelectedId(defaultAddr.id);
-      onSelect(defaultAddr);
+    const def = res.find(a => a.isDefault) || res[0];
+    if (def) {
+      setSelectedId(def.id);
+      onSelect(def);
+    } else if (res[0]) {
+      // không có default nào -> chọn tạm cái đầu để hiển thị
+      setSelectedId(res[0].id);
+      onSelect(res[0]);
     }
   };
 
-  useEffect(() => {
-    if (userId) load();
-    // eslint-disable-next-line
-  }, [userId]);
+  useEffect(() => { if (userId) load(); /* eslint-disable-next-line */ }, [userId]);
 
   const handleSelect = (addr: Address) => {
     setSelectedId(addr.id);
@@ -40,20 +41,25 @@ const AddressSelector: React.FC<Props> = ({ userId, onSelect }) => {
     setShowList(false);
   };
 
-  // Đảm bảo chỉ 1 địa chỉ là mặc định, các địa chỉ khác set về false (do backend chưa xử lý)
-  const handleSetDefault = async (selected: Address) => {
-    const promises = addresses.map(addr =>
-      setDefaultAddress(addr.id, {
-        ...addr,
-        isDefault: addr.id === selected.id, // chỉ một địa chỉ được true
-      })
-    );
+  /** ✅ CHỈ gọi 1 API set default cho đúng địa chỉ – KHÔNG unset các địa chỉ khác trên FE */
+  const handleSetDefault = async (addr: Address) => {
     try {
-      await Promise.all(promises);
-      toast.success('Đã cập nhật địa chỉ mặc định');
-      await load();
+      await setDefaultAddress(addr.id, { ...addr, isDefault: true } as any);
+      toast.success('Đã đặt làm địa chỉ mặc định');
+      await load(); // BE đã đảm bảo duy nhất -> reload để đồng bộ
     } catch {
       toast.error('Cập nhật thất bại!');
+    }
+  };
+
+  /** tuỳ BE: nếu cho phép bỏ mặc định thì giữ; nếu yêu cầu luôn có 1 mặc định -> ẩn nút này */
+  const handleUnsetDefault = async (addr: Address) => {
+    try {
+      await unsetDefaultAddress(addr.id, { ...addr, isDefault: false } as any);
+      toast.success('Đã bỏ mặc định');
+      await load();
+    } catch {
+      toast.error('Thao tác thất bại!');
     }
   };
 
@@ -62,14 +68,13 @@ const AddressSelector: React.FC<Props> = ({ userId, onSelect }) => {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Địa chỉ giao hàng</h2>
         <button
-          className="text-sm text-blue-600 hover:underline flex items-center gap-1"
-          onClick={() => setShowModal(true)}
+          className="text-sm text-blue-600 hover:underline"
+          onClick={() => { setEditing(undefined); setShowModal(true); }}
         >
-          <PlusOutlined /> Thêm địa chỉ mới
+          + Thêm địa chỉ mới
         </button>
       </div>
 
-      {/* Địa chỉ đang chọn */}
       {selectedId && (
         <div
           className="border rounded p-3 cursor-pointer hover:border-blue-500"
@@ -91,17 +96,17 @@ const AddressSelector: React.FC<Props> = ({ userId, onSelect }) => {
         </div>
       )}
 
-      {/* Danh sách mở rộng */}
       {showList && (
         <div className="space-y-3">
           <p className="text-sm text-gray-500">Danh sách địa chỉ đã lưu:</p>
           {addresses.map(addr => (
             <div
               key={addr.id}
-              className={`relative border p-3 rounded cursor-pointer ${addr.id === selectedId ? 'border-green-500' : 'hover:border-gray-400'}`}
+              className={`relative border p-3 rounded cursor-pointer ${
+                addr.id === selectedId ? 'border-green-500' : 'hover:border-gray-400'
+              }`}
               onClick={() => handleSelect(addr)}
             >
-              {/* Badge mặc định */}
               {addr.isDefault && (
                 <span className="absolute top-2 right-3 bg-green-500 text-white text-xs px-2 py-1 rounded shadow">
                   Địa chỉ mặc định
@@ -109,39 +114,48 @@ const AddressSelector: React.FC<Props> = ({ userId, onSelect }) => {
               )}
               <p className="font-semibold">{addr.tagName}</p>
               <p>{addr.receiverName} - {addr.receiverPhone}</p>
-              <p>{addr.receiverAddress}</p>
+              <p className="mb-2">{addr.receiverAddress}</p>
 
-              {!addr.isDefault && (
+              <div className="flex gap-3">
+                {!addr.isDefault ? (
+                  <button
+                    className="text-yellow-600 text-sm"
+                    onClick={e => { e.stopPropagation(); handleSetDefault(addr); }}
+                  >
+                    <StarOutlined /> Đặt làm mặc định
+                  </button>
+                ) : (
+                  <button
+                    className="text-gray-600 text-sm"
+                    onClick={e => { e.stopPropagation(); handleUnsetDefault(addr); }}
+                  >
+                    Bỏ mặc định
+                  </button>
+                )}
                 <button
-                  className="text-yellow-500 mt-1 text-sm"
-                  onClick={e => {
-                    e.stopPropagation();
-                    handleSetDefault(addr);
-                  }}
+                  className="text-blue-600 text-sm"
+                  onClick={e => { e.stopPropagation(); setEditing(addr); setShowModal(true); }}
                 >
-                  <StarOutlined /> Đặt làm mặc định
+                  Sửa
                 </button>
-              )}
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Modal thêm mới */}
       <Modal
         open={showModal}
         onCancel={() => setShowModal(false)}
         footer={null}
-        title="Thêm địa chỉ mới"
-        width={800}
+        title={editing ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ mới'}
+        width={720}
         destroyOnClose
       >
         <NewAddressForm
           userId={userId}
-          onSuccess={() => {
-            setShowModal(false);
-            load();
-          }}
+          editingData={editing}
+          onSuccess={() => { setShowModal(false); load(); }}
         />
       </Modal>
     </div>

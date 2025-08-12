@@ -1,8 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  addToCart,
-  updateCartItem,
-  getCart,
   addAccessoryToCart
 } from '@/api/cart';
 import { useParams } from 'react-router-dom';
@@ -14,7 +11,7 @@ import {
 import { Accessory } from '@/types/accessory';
 import { Button, Image, Spin } from 'antd';
 import { toast } from 'react-toastify';
-import { HeartFilled, HeartOutlined } from '@ant-design/icons';
+import FavoriteButton from '@/components/common/FavoriteButton';
 
 const AccessoryDetail: React.FC = () => {
   const { id } = useParams();
@@ -22,7 +19,6 @@ const AccessoryDetail: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
   const [categoryName, setCategoryName] = useState<string>('Không rõ');
   const [loading, setLoading] = useState(true);
-  const [liked, setLiked] = useState(false);
   const [quantity, setQuantity] = useState<number>(1);
 
   useEffect(() => {
@@ -46,9 +42,6 @@ const AccessoryDetail: React.FC = () => {
         setImages((imgRes || []).map((img) => img.imageUrl));
         const foundCategory = categories.find((c) => c.categoryId === accRes.categoryId);
         setCategoryName(foundCategory?.categoryName || 'Không rõ');
-
-        const wishlist = JSON.parse(localStorage.getItem('wishlistAccessories') || '[]');
-        setLiked(wishlist.some((item: any) => item.id === id));
       } catch (err) {
         toast.error('Lỗi khi tải dữ liệu phụ kiện');
       } finally {
@@ -60,58 +53,42 @@ const AccessoryDetail: React.FC = () => {
   }, [id]);
 
   const handleAddToCart = async () => {
-  if (!accessory) return;
+    if (!accessory) return;
 
-  const isLoggedIn = !!localStorage.getItem('authToken');
+    const isLoggedIn = !!localStorage.getItem('authToken');
 
-  if (isLoggedIn) {
-    try {
-      await addAccessoryToCart(accessory.accessoryId, quantity); // chỉ gửi field cần
-      toast.success('Đã thêm sản phẩm vào giỏ hàng!');
-    } catch (err) {
-      toast.error('Không thể thêm vào giỏ hàng. Vui lòng thử lại!');
-    }
-  } else {
-    const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
-
-    const newItem = {
-      id: `accessory-${accessory.accessoryId}`,
-      accessoryId: accessory.accessoryId,
-      name: accessory.name,
-      price: accessory.price, // ✅ Fix lỗi: lấy giá từ object accessory
-      image: images[0] || accessory.accessoryImages?.[0]?.imageUrl || '/default.jpg', // ✅ Fix lỗi: lấy ảnh từ mảng images hoặc từ accessoryImages
-      quantity,
-      selected: false,
-    };
-
-    const existingIndex = cartItems.findIndex((item: any) => item.id === newItem.id);
-
-    if (existingIndex >= 0) {
-      cartItems[existingIndex].quantity += quantity;
-      toast.info('Đã tăng số lượng trong giỏ hàng (local)');
+    if (isLoggedIn) {
+      try {
+        await addAccessoryToCart(accessory.accessoryId, quantity);
+        toast.success('Đã thêm sản phẩm vào giỏ hàng!');
+      } catch (err) {
+        toast.error('Không thể thêm vào giỏ hàng. Vui lòng thử lại!');
+      }
     } else {
-      cartItems.push(newItem);
-      toast.success('Đã thêm sản phẩm vào giỏ hàng (local)');
+      const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+
+      const newItem = {
+        id: `accessory-${accessory.accessoryId}`,
+        accessoryId: accessory.accessoryId,
+        name: accessory.name,
+        price: accessory.price,
+        image: images[0] || accessory.accessoryImages?.[0]?.imageUrl || '/default.jpg',
+        quantity,
+        selected: false,
+      };
+
+      const existingIndex = cartItems.findIndex((item: any) => item.id === newItem.id);
+
+      if (existingIndex >= 0) {
+        cartItems[existingIndex].quantity += quantity;
+        toast.info('Đã tăng số lượng trong giỏ hàng (local)');
+      } else {
+        cartItems.push(newItem);
+        toast.success('Đã thêm sản phẩm vào giỏ hàng (local)');
+      }
+
+      localStorage.setItem('cartItems', JSON.stringify(cartItems));
     }
-
-    localStorage.setItem('cartItems', JSON.stringify(cartItems));
-  }
-};
-
-
-  const toggleWishlist = () => {
-    const wishlist = JSON.parse(localStorage.getItem('wishlistAccessories') || '[]');
-    const exists = wishlist.findIndex((item: any) => item.id === id);
-    if (exists >= 0) {
-      wishlist.splice(exists, 1);
-      toast.info('Đã xóa khỏi danh sách yêu thích');
-      setLiked(false);
-    } else {
-      wishlist.push({ id, name: accessory?.name, price: accessory?.price, image: images[0] });
-      toast.success('Đã thêm vào danh sách yêu thích');
-      setLiked(true);
-    }
-    localStorage.setItem('wishlistAccessories', JSON.stringify(wishlist));
   };
 
   const increaseQuantity = () => setQuantity((prev) => prev + 1);
@@ -175,11 +152,15 @@ const AccessoryDetail: React.FC = () => {
             >
               Thêm vào giỏ
             </Button>
-            <Button
-              icon={liked ? <HeartFilled /> : <HeartOutlined />}
-              onClick={toggleWishlist}
-              className={liked ? 'text-pink-500' : 'text-gray-400'}
-            />
+
+            {/* ❤️ Favorite */}
+            {id && (
+              <FavoriteButton
+                type="accessory"
+                productId={Number(id)}
+                size="middle"
+              />
+            )}
           </div>
         </div>
       </div>

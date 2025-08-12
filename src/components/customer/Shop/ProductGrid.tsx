@@ -83,7 +83,6 @@ const ProductGrid: React.FC<ProductGridProps> = ({
             purchases={0}
             image={product.terrariumImages?.[0]?.imageUrl || '/src/assets/image/1.jpg'}
             environmentName={getEnvironmentName(product.environmentId)}
-            page={page}
           />
         ))}
       </div>

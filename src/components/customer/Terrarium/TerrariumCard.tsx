@@ -1,10 +1,6 @@
-// TerrariumCard.tsx
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
+import { Button, Rate, Tag } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import { gsap } from 'gsap';
-import { Button, Card, Rate } from 'antd';
-import { HeartOutlined, HeartFilled } from '@ant-design/icons';
 
 interface TerrariumCardProps {
   id: string;
@@ -16,7 +12,7 @@ interface TerrariumCardProps {
   purchases: number;
   image: string;
   environmentName?: string;
-  page?: number;
+  isNew?: boolean;
 }
 
 const TerrariumCard: React.FC<TerrariumCardProps> = ({
@@ -28,138 +24,114 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
   rating,
   purchases,
   image,
-  environmentName,
-  page,
+  isNew = false
 }) => {
   const navigate = useNavigate();
-  const cardRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const buttonsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    gsap.fromTo(
-      imageRef.current,
-      { opacity: 0, scale: 1.1 },
-      {
-        opacity: 1,
-        scale: 1,
-        duration: 0.8,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: 'top 85%',
-        },
-      }
-    );
-    gsap.fromTo(
-      contentRef.current,
-      { opacity: 0, y: 20 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.8,
-        delay: 0.2,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: 'top 85%',
-        },
-      }
-    );
-    gsap.fromTo(
-      buttonsRef.current,
-      { opacity: 0, y: 20 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.8,
-        delay: 0.4,
-        ease: 'back.out(1.7)',
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: 'top 85%',
-        },
-      }
-    );
-  }, []);
-
-  const handleAddToWishlist = () => {
-    const wishlistItem = { id, name, price, image };
-    const storedWishlist = JSON.parse(localStorage.getItem('wishlistItems') || '[]');
-    const existingItemIndex = storedWishlist.findIndex((item: any) => item.id === id);
-
-    if (existingItemIndex > -1) {
-      storedWishlist.splice(existingItemIndex, 1);
-      toast.info(`${name} đã được xóa khỏi danh sách yêu thích!`);
-    } else {
-      storedWishlist.push(wishlistItem);
-      toast.success(`${name} đã được thêm vào danh sách yêu thích!`);
-    }
-    localStorage.setItem('wishlistItems', JSON.stringify(storedWishlist));
-  };
-
-  const handleViewDetail = () => {
-    navigate(`/terrarium/${id}`);
-  };
-
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    const target = e.target as HTMLImageElement;
-    target.src = '/src/assets/image/1.jpg';
-  };
-
-  const isInWishlist = JSON.parse(localStorage.getItem('wishlistItems') || '[]').some(
-    (item: any) => item.id === id
-  );
 
   return (
-    <Card
-      ref={cardRef}
-      className="shadow-lg rounded-lg transition-transform hover:scale-105 flex flex-col h-full font-roboto w-full max-w-sm mx-auto"
-      cover={
+    <div className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-50 overflow-hidden">
+      {/* Image section with terrarium styling */}
+      <div className="relative h-48 bg-gradient-to-br from-green-50 to-emerald-50 overflow-hidden">
         <img
-          ref={imageRef}
           src={image}
           alt={name}
-          className="w-full h-48 sm:h-56 md:h-64 object-cover rounded-t-lg"
-          onError={handleImageError}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src = '/assets/image/1.jpg';
+          }}
         />
-      }
-    >
-      <Button
-        icon={isInWishlist ? <HeartFilled /> : <HeartOutlined />}
-        className={`absolute top-2 right-2 sm:top-3 sm:right-3 ${
-          isInWishlist ? 'text-pink-500' : 'text-gray-400'
-        } border-none hover:text-pink-500 transition duration-200 text-lg sm:text-xl`}
-        onClick={handleAddToWishlist}
-      />
-      <div ref={contentRef} className="flex-1 flex flex-col px-2 sm:px-3 md:px-4 py-2 sm:py-3">
-        <h3 className="text-base sm:text-lg md:text-xl font-semibold mt-1 sm:mt-2 font-roboto">{name}</h3>
-        <p className="text-gray-600 text-xs sm:text-sm mt-1">
-          {description.length > 50 ? `${description.slice(0, 50)}...` : description}
-        </p>
-        <p className="text-gray-600 text-xs sm:text-sm mt-1">Loại bể: {type}</p>
-        {environmentName && (
-          <p className="text-gray-600 text-xs sm:text-sm mt-1">Môi trường: {environmentName}</p>
+        
+        {/* Overlay with terrarium icon */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <div className="absolute bottom-3 left-3 text-white/90">
+            <span className="text-2xl">🏺</span>
+          </div>
+        </div>
+        
+        {/* New badge */}
+        {isNew && (
+          <div className="absolute top-3 left-3">
+            <Tag color="green" className="border-none font-semibold">
+              🌟 Mới
+            </Tag>
+          </div>
         )}
-        <p className="text-gray-800 font-semibold mt-1 text-sm sm:text-base md:text-lg">
-          {price.toLocaleString('vi-VN')} VND
-        </p>
-        <div className="flex items-center mt-1">
-          <Rate disabled defaultValue={rating} className="text-xs sm:text-sm" />
-          <span className="ml-2 text-gray-600 text-xs sm:text-sm">({purchases} lượt mua)</span>
+        
+        {/* Category badge */}
+        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1">
+          <span className="text-xs font-medium text-emerald-700">🌿 Terrarium</span>
         </div>
       </div>
-      <div ref={buttonsRef} className="flex space-x-2 mt-2 sm:mt-3 px-2 sm:px-3 md:px-4 pb-2 sm:pb-3">
-        <Button
-          type="default"
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white border-none font-roboto text-xs sm:text-sm md:text-base py-1 sm:py-2"
-          onClick={handleViewDetail}
-        >
-          Xem chi tiết
-        </Button>
+
+      {/* Content section */}
+      <div className="p-5">
+        {/* Title */}
+        <h3 className="font-bold text-lg text-gray-800 mb-2 line-clamp-2 group-hover:text-emerald-700 transition-colors">
+          {name}
+        </h3>
+        
+        {/* Description */}
+        <p className="text-gray-600 text-sm mb-3 line-clamp-2 leading-relaxed">
+          {description || 'Một khu vườn mini tuyệt đẹp trong lọ thủy tinh, hoàn hảo để trang trí không gian sống.'}
+        </p>
+        
+        {/* Type tag */}
+        <div className="mb-3">
+          <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-medium">
+            {type}
+          </span>
+        </div>
+
+        {/* Price */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-emerald-600 font-bold text-xl">
+            {price.toLocaleString('vi-VN')} ₫
+          </div>
+          <div className="text-gray-500 text-xs bg-gray-50 px-2 py-1 rounded-full">
+            💚 {purchases} lượt mua
+          </div>
+        </div>
+
+        {/* Rating */}
+        <div className="flex items-center justify-between mb-4">
+          <Rate 
+            allowHalf 
+            disabled 
+            value={rating} 
+            className="text-sm"
+          />
+          <span className="text-xs text-gray-500 ml-2">
+            ({rating}/5)
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div className="space-y-2">
+          <Button
+            type="primary"
+            className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 border-none font-medium group-hover:shadow-lg transition-all"
+            onClick={() => navigate(`/terrarium/${id}`)}
+          >
+            🔍 Xem Chi Tiết
+          </Button>
+          
+          {/* Quick info */}
+          <div className="flex justify-center space-x-4 text-xs text-gray-500 pt-2">
+            <div className="flex items-center">
+              <span className="mr-1">💧</span>
+              Dễ chăm sóc
+            </div>
+            <div className="flex items-center">
+              <span className="mr-1">🌱</span>
+              Thân thiện
+            </div>
+          </div>
+        </div>
       </div>
-    </Card>
+
+      {/* Hover effect decoration */}
+      <div className="absolute inset-0 border-2 border-emerald-200 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+    </div>
   );
 };
 

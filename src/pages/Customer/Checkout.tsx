@@ -2,11 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import axios from 'axios';
 import AddressSelector from '@/components/customer/Layout/AddressSelector';
 import { Address } from '@/types/profile';
 import vnpayLogo from '@/assets/VNPAY.webp';
-import { createOrder, getVoucherByCode } from '@/api/order';
+import { 
+  createOrder, 
+  getVoucherByCode, 
+  getWalletBalance, 
+  useWalletForPayment,
+  createVNPayPayment 
+} from '@/api/order';
 import type { Voucher, CreateOrderRequest } from '@/types/order';
 
 interface CartItem {
@@ -30,8 +35,13 @@ const Checkout: React.FC = () => {
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [voucherError, setVoucherError] = useState('');
   const [customerNote, setCustomerNote] = useState('');
+  
+  // ===== WALLET STATES =====
+  const [useWallet, setUseWallet] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(false);
 
-  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const userId = Number(localStorage.getItem('userId') || 0);
 
   useEffect(() => {
     const selected = JSON.parse(localStorage.getItem('checkoutItems') || '[]');
@@ -43,20 +53,46 @@ const Checkout: React.FC = () => {
     }
   }, [navigate]);
 
+  // ===== LẤY SỐ DƯ VÍ =====
+  useEffect(() => {
+    if (userId) {
+      fetchWalletBalance();
+    }
+  }, [userId]);
+
+  const fetchWalletBalance = async () => {
+    try {
+      setWalletLoading(true);
+      const balance = await getWalletBalance(userId);
+      setWalletBalance(balance);
+    } catch (error) {
+      console.error('Error fetching wallet balance:', error);
+      setWalletBalance(0);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
   // ======= TÍNH TIỀN =======
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shippingFee = 30000;
   const discountFromVoucher = voucher ? voucher.discountAmount : 0;
   const discountFromFull = paymentOption === 'full' ? (subtotal - discountFromVoucher) * 0.1 : 0;
 
-  const totalRaw = subtotal - discountFromVoucher - discountFromFull + shippingFee;
-  const total = Math.max(0, Math.round(totalRaw));
+  const totalBeforeWallet = Math.max(0, Math.round(subtotal - discountFromVoucher - discountFromFull + shippingFee));
+  
+  // Tính số tiền cần thanh toán thực tế
+  const actualPaymentAmount = paymentOption === 'deposit' 
+    ? Math.max(0, Math.round((subtotal - discountFromVoucher) * 0.3 + shippingFee))
+    : totalBeforeWallet;
 
-  const depositRaw =
-    paymentOption === 'deposit'
-      ? (subtotal - discountFromVoucher) * 0.3 + shippingFee
-      : 0;
-  const deposit = Math.max(0, Math.round(depositRaw));
+  // Số tiền sử dụng từ ví
+  const walletUsageAmount = useWallet 
+    ? Math.min(walletBalance, actualPaymentAmount) 
+    : 0;
+
+  // Số tiền còn lại cần thanh toán qua gateway
+  const remainingPaymentAmount = Math.max(0, actualPaymentAmount - walletUsageAmount);
 
   // ======= ÁP DỤNG VOUCHER =======
   const applyVoucher = async () => {
@@ -125,47 +161,68 @@ const Checkout: React.FC = () => {
         return;
       }
 
-      // deposit: nếu chọn cọc -> gửi đúng số tiền cọc; nếu full -> 0
+      // Tạo order payload
       const payload: CreateOrderRequest = {
         voucherId: voucher?.voucherId ?? 0,
-        deposit: paymentOption === 'deposit' ? deposit : 0,
+        deposit: paymentOption === 'deposit' ? actualPaymentAmount : 0,
         addressId: (address as any).id,
         items,
       };
 
-      // tạo order: nhận { orderId } đã chuẩn hoá -> tránh lỗi TS
+      // Tạo order
       const { orderId } = await createOrder(payload);
       if (!orderId) {
         toast.error('Tạo đơn hàng thất bại!');
         return;
       }
 
-      if (paymentMethod === 'VNPAY') {
-        const res = await axios.post(
-          `${BASE_URL}/Payment/vn-pay`,
-          {
+      // Nếu sử dụng ví và có số dư ví
+      if (useWallet && walletUsageAmount > 0) {
+        try {
+          await useWalletForPayment({
+            userId,
+            amount: walletUsageAmount,
             orderId,
-            orderType: paymentOption === 'deposit' ? 'Deposit' : 'Bank',
-            orderDescription: customerNote || '',
-            name:
-              (address as any)?.receiverName ||
-              (address as any)?.recipientName ||
-              'Khách hàng',
-          },
-          {
-            headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` },
-          }
-        );
+          });
+        } catch (error) {
+          console.error('Error using wallet:', error);
+          toast.error('Lỗi khi sử dụng ví, vui lòng thử lại!');
+          return;
+        }
+      }
 
-        const payUrl = res?.data?.data || res?.data?.payUrl || res?.data?.url;
-        if (payUrl) {
+      // Nếu không còn số tiền cần thanh toán (ví đã thanh toán hết)
+      if (remainingPaymentAmount === 0) {
+        toast.success('Thanh toán thành công bằng ví!');
+        localStorage.removeItem('cartItems');
+        localStorage.removeItem('checkoutItems');
+        navigate(`/thank-you/${orderId}`);
+        return;
+      }
+
+      // Nếu còn số tiền cần thanh toán qua gateway
+      if (paymentMethod === 'VNPAY') {
+        const paymentPayload = {
+          orderId,
+          orderType: paymentOption === 'deposit' ? 'Cọc 30%' : 'Thanh toán toàn bộ',
+          orderDescription: customerNote || `Đơn hàng #${orderId}`,
+          name: (address as any)?.receiverName || (address as any)?.recipientName || 'Khách hàng',
+          payAll: paymentOption === 'full'
+        };
+
+        try {
+          const payUrl = await createVNPayPayment(paymentPayload);
           localStorage.removeItem('cartItems');
           localStorage.removeItem('checkoutItems');
           window.location.href = payUrl;
           return;
+        } catch (error) {
+          console.error('Payment error:', error);
+          toast.error('Không lấy được link thanh toán!');
+          return;
         }
-        toast.error('Không lấy được link thanh toán!');
       } else {
+        // PayOS hoặc phương thức khác
         toast.success('Tạo đơn hàng thành công!');
         localStorage.removeItem('cartItems');
         localStorage.removeItem('checkoutItems');
@@ -210,7 +267,7 @@ const Checkout: React.FC = () => {
           </div>
 
           <AddressSelector
-            userId={Number(localStorage.getItem('userId') || 0)}
+            userId={userId}
             onSelect={(addr) => setAddress(addr)}
           />
 
@@ -274,58 +331,100 @@ const Checkout: React.FC = () => {
             </div>
           </div>
 
+          {/* ===== KHU VỰC VÍ MỚI ===== */}
+          <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
+            <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-4">
+              Ví điện tử
+            </h2>
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="useWallet"
+                  checked={useWallet}
+                  onChange={(e) => setUseWallet(e.target.checked)}
+                  className="h-4 w-4 sm:h-5 sm:w-5 mr-3"
+                />
+                <label htmlFor="useWallet" className="text-sm sm:text-base md:text-lg font-medium">
+                  Sử dụng số dư ví
+                </label>
+              </div>
+              <div className="text-right">
+                <div className="text-sm sm:text-base font-semibold text-green-600">
+                  {walletLoading ? 'Đang tải...' : `${walletBalance.toLocaleString('vi-VN')} VND`}
+                </div>
+                {useWallet && walletUsageAmount > 0 && (
+                  <div className="text-xs sm:text-sm text-gray-600">
+                    Sử dụng: {walletUsageAmount.toLocaleString('vi-VN')} VND
+                  </div>
+                )}
+              </div>
+            </div>
+            {useWallet && walletBalance === 0 && (
+              <div className="mt-2 text-yellow-600 text-sm">
+                Số dư ví không đủ để thanh toán.
+              </div>
+            )}
+          </div>
+
           <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
             <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-4">
               Hình thức thanh toán
             </h2>
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <div
-                className={`flex-1 flex items-center gap-3 border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                  paymentMethod === 'VNPAY'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 bg-white'
-                } hover:border-blue-400`}
-                onClick={() => setPaymentMethod('VNPAY')}
-              >
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="VNPAY"
-                  checked={paymentMethod === 'VNPAY'}
-                  onChange={() => setPaymentMethod('VNPAY')}
-                  className="mr-2 h-4 w-4 sm:h-5 sm:w-5"
-                />
-                <img
-                  src={vnpayLogo}
-                  alt="VNPAY"
-                  className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded"
-                />
-                <span className="font-semibold text-blue-700 text-sm sm:text-base md:text-lg">
-                  VNPAY
-                </span>
-              </div>
+            {remainingPaymentAmount > 0 ? (
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <div
+                  className={`flex-1 flex items-center gap-3 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    paymentMethod === 'VNPAY'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-300 bg-white'
+                  } hover:border-blue-400`}
+                  onClick={() => setPaymentMethod('VNPAY')}
+                >
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="VNPAY"
+                    checked={paymentMethod === 'VNPAY'}
+                    onChange={() => setPaymentMethod('VNPAY')}
+                    className="mr-2 h-4 w-4 sm:h-5 sm:w-5"
+                  />
+                  <img
+                    src={vnpayLogo}
+                    alt="VNPAY"
+                    className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded"
+                  />
+                  <span className="font-semibold text-blue-700 text-sm sm:text-base md:text-lg">
+                    VNPAY
+                  </span>
+                </div>
 
-              <div
-                className={`flex-1 flex items-center gap-3 border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                  paymentMethod === 'PayOS'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 bg-white'
-                } hover:border-blue-400`}
-                onClick={() => setPaymentMethod('PayOS')}
-              >
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="PayOS"
-                  checked={paymentMethod === 'PayOS'}
-                  onChange={() => setPaymentMethod('PayOS')}
-                  className="mr-2 h-4 w-4 sm:h-5 sm:w-5"
-                />
-                <span className="font-semibold text-blue-700 text-sm sm:text-base md:text-lg">
-                  PayOS
-                </span>
+                <div
+                  className={`flex-1 flex items-center gap-3 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    paymentMethod === 'PayOS'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-300 bg-white'
+                  } hover:border-blue-400`}
+                  onClick={() => setPaymentMethod('PayOS')}
+                >
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="PayOS"
+                    checked={paymentMethod === 'PayOS'}
+                    onChange={() => setPaymentMethod('PayOS')}
+                    className="mr-2 h-4 w-4 sm:h-5 sm:w-5"
+                  />
+                  <span className="font-semibold text-blue-700 text-sm sm:text-base md:text-lg">
+                    PayOS
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-center text-green-600 font-medium p-4 bg-green-50 rounded-lg">
+                Đơn hàng sẽ được thanh toán hoàn toàn bằng ví điện tử
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col md:flex-row gap-4 sm:gap-6 w-full">
@@ -456,19 +555,31 @@ const Checkout: React.FC = () => {
               <hr className="my-2" />
               <div className="flex justify-between font-bold text-base sm:text-lg text-green-700">
                 <span>Tổng cộng</span>
-                <span>{total.toLocaleString('vi-VN')} VND</span>
+                <span>{totalBeforeWallet.toLocaleString('vi-VN')} VND</span>
               </div>
               <div className="flex justify-between font-medium text-blue-700">
                 <span>Số tiền cần thanh toán</span>
-                <span>{deposit.toLocaleString('vi-VN')} VND</span>
+                <span>{actualPaymentAmount.toLocaleString('vi-VN')} VND</span>
               </div>
+              {useWallet && walletUsageAmount > 0 && (
+                <div className="flex justify-between text-purple-600">
+                  <span>Thanh toán bằng ví</span>
+                  <span>-{walletUsageAmount.toLocaleString('vi-VN')} VND</span>
+                </div>
+              )}
+              {remainingPaymentAmount > 0 && (
+                <div className="flex justify-between font-bold text-red-600">
+                  <span>Còn lại cần thanh toán</span>
+                  <span>{remainingPaymentAmount.toLocaleString('vi-VN')} VND</span>
+                </div>
+              )}
             </div>
 
             <button
               onClick={handlePlaceOrder}
               className="mt-4 sm:mt-6 w-full bg-green-600 text-white py-2 sm:py-3 rounded hover:bg-green-700 text-sm sm:text-base"
             >
-              Thanh toán
+              {remainingPaymentAmount === 0 ? 'Thanh toán bằng ví' : 'Thanh toán'}
             </button>
           </div>
         </div>

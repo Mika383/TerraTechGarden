@@ -1,9 +1,9 @@
-
 import React, { useEffect, useRef } from 'react';
 import BodyDetail from './BodyDetail';
 import { Terrarium, TerrariumVariant } from '@/types/terrarium';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import gsap from 'gsap';
+import FavoriteButton from '@/components/common/FavoriteButton';
 
 interface Props {
   terrarium: Terrarium | null;
@@ -100,10 +100,19 @@ const TerrariumDetail: React.FC<Props> = ({
         </div>
 
         <div className="space-y-4">
-          <h2 className="text-3xl font-bold text-green-700">{terrarium.terrariumName}</h2>
+          {/* Tiêu đề + ❤️ Favorite */}
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-3xl font-bold text-green-700">{terrarium.terrariumName}</h2>
+            <FavoriteButton
+              type="terrarium"
+              productId={terrarium.terrariumId}
+              size="middle"
+            />
+          </div>
+
           <p className="text-gray-600">{terrarium.description}</p>
           <p className="text-gray-800 font-semibold">
-            Giá:{' '}
+            Giá{' '}
             {selectedVariant
               ? selectedVariant.price.toLocaleString('vi-VN')
               : terrarium.minPrice.toLocaleString('vi-VN')}{' '}
@@ -168,16 +177,23 @@ const TerrariumDetail: React.FC<Props> = ({
               className="text-sm text-gray-700 hover:underline flex items-center"
             >
               {showAccessories ? (
-                <><ChevronUp className="w-5 h-5 mr-1" /> Thu gọn</>
+                <>
+                  <ChevronUp className="w-5 h-5 mr-1" /> Thu gọn
+                </>
               ) : (
-                <><ChevronDown className="w-5 h-5 mr-1" /> Hiển thị</>
+                <>
+                  <ChevronDown className="w-5 h-5 mr-1" /> Hiển thị
+                </>
               )}
             </button>
           </div>
 
           <div className="text-right mb-2">
             <p className="text-sm text-gray-700 mb-1">
-              Tổng: <span className="font-semibold text-green-700">{totalSelectedPrice.toLocaleString('vi-VN')} VND</span>
+              Tổng:{' '}
+              <span className="font-semibold text-green-700">
+                {totalSelectedPrice.toLocaleString('vi-VN')} VND
+              </span>
             </p>
             <button
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
@@ -193,9 +209,11 @@ const TerrariumDetail: React.FC<Props> = ({
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4"
             >
               {terrarium.accessories.map((acc) => {
-                const accImage = Array.isArray((acc as any).accessoryImages) && (acc as any).accessoryImages.length > 0
-                  ? (acc as any).accessoryImages[0].imageUrl
-                  : null;
+                const accImage =
+                  Array.isArray((acc as any).accessoryImages) &&
+                  (acc as any).accessoryImages.length > 0
+                    ? (acc as any).accessoryImages[0].imageUrl
+                    : null;
 
                 const isChecked = selectedAccessories.includes(acc.accessoryId);
 
