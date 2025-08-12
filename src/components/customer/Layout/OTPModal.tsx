@@ -56,20 +56,26 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
     }
   };
 
-  const handleInputChange = (index: number, value: string) => {
+  // FIX: Tách biệt hoàn toàn logic OTP và form đăng ký
+  const handleOTPInputChange = (index: number, value: string) => {
+    // Chỉ xử lý số và 1 ký tự
+    const numericValue = value.replace(/[^0-9]/g, '').slice(-1);
+    
     const newOtp = otp.split('');
-    newOtp[index] = value.replace(/[^0-9]/g, '');
+    newOtp[index] = numericValue;
     setOtp(newOtp.join(''));
-    if (value && index < 5 && inputRefs.current[index + 1]) {
+    
+    // Auto-focus logic chỉ cho OTP inputs
+    if (numericValue && index < 5 && inputRefs.current[index + 1]) {
       inputRefs.current[index + 1].focus();
-    } else if (!value && index > 0 && inputRefs.current[index - 1]) {
+    } else if (!numericValue && index > 0 && inputRefs.current[index - 1]) {
       inputRefs.current[index - 1].focus();
-    } else if (index === 5 && value && inputRefs.current[index]) {
+    } else if (index === 5 && numericValue && inputRefs.current[index]) {
       inputRefs.current[index].blur();
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+  const handleOTPPaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
     if (pastedText.length > 0) {
@@ -79,6 +85,13 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
       if (inputRefs.current[lastFilledIndex]) {
         inputRefs.current[lastFilledIndex].focus();
       }
+    }
+  };
+
+  const handleOTPKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0 && inputRefs.current[index - 1]) {
+      e.preventDefault();
+      inputRefs.current[index - 1].focus();
     }
   };
 
@@ -112,16 +125,21 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
                 if (el) inputRefs.current[index] = el;
               }}
               value={otp[index] || ''}
-              onChange={(e) => handleInputChange(index, e.target.value)}
-              onPaste={(e) => handlePaste(e, index)}
-              onKeyDown={(e) => {
-                if (e.key === 'Backspace' && !otp[index] && index > 0 && inputRefs.current[index - 1]) {
-                  e.preventDefault();
-                  inputRefs.current[index - 1].focus();
-                }
-              }}
+              onChange={(e) => handleOTPInputChange(index, e.target.value)}
+              onPaste={(e) => handleOTPPaste(e, index)}
+              onKeyDown={(e) => handleOTPKeyDown(e, index)}
               maxLength={1}
-              style={{ width: '50px', height: '70px', textAlign: 'center', fontSize: '28px', fontWeight: 'bold' }}
+              style={{ 
+                width: '50px', 
+                height: '70px', 
+                textAlign: 'center', 
+                fontSize: '28px', 
+                fontWeight: 'bold' 
+              }}
+              // FIX: Thêm các thuộc tính để tránh xung đột với form
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              pattern="[0-9]*"
             />
           ))}
         </div>
@@ -131,7 +149,15 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
           icon={<ArrowRightOutlined />}
           onClick={handleOTPSubmit}
           disabled={otp.length !== 6 || loading}
-          style={{ background: '#1890ff', borderColor: '#1890ff', fontSize: '20px', width: '60px', height: '60px', marginTop: '20px', borderRadius: '8px' }}
+          style={{ 
+            background: '#1890ff', 
+            borderColor: '#1890ff', 
+            fontSize: '20px', 
+            width: '60px', 
+            height: '60px', 
+            marginTop: '20px', 
+            borderRadius: '8px' 
+          }}
         />
         <div className="mt-4">
           <Button
@@ -139,13 +165,25 @@ const OTPModal: React.FC<OTPModalProps> = ({ visible, onCancel, email }) => {
             icon={<SyncOutlined />}
             onClick={handleResendOTP}
             disabled={loading}
-            style={{ padding: '0', fontSize: '16px', color: loading ? '#ccc' : '#000' }}
+            style={{ 
+              padding: '0', 
+              fontSize: '16px', 
+              color: loading ? '#ccc' : '#000' 
+            }}
           >
             Gửi Lại Mã
           </Button>
         </div>
         <div className="mt-2">
-          <Button type="link" onClick={onCancel} style={{ padding: '0', fontSize: '16px', color: '#000' }}>
+          <Button 
+            type="link" 
+            onClick={onCancel} 
+            style={{ 
+              padding: '0', 
+              fontSize: '16px', 
+              color: '#000' 
+            }}
+          >
             Không Thể Đăng Nhập?
           </Button>
         </div>
