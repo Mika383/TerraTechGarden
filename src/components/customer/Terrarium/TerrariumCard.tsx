@@ -1,3 +1,4 @@
+// TerrariumCard.tsx
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -15,7 +16,7 @@ interface TerrariumCardProps {
   purchases: number;
   image: string;
   environmentName?: string;
-  page?: number; // ✅ Thêm prop page
+  page?: number;
 }
 
 const TerrariumCard: React.FC<TerrariumCardProps> = ({
@@ -83,20 +84,6 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
     );
   }, []);
 
-  // const handleAddToCart = () => {
-  //   const cartItem = { id, name, price, image, quantity: 1, selected: false };
-  //   const storedCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
-  //   const existingItemIndex = storedCart.findIndex((item: any) => item.id === id);
-  //   if (existingItemIndex > -1) {
-  //     storedCart[existingItemIndex].quantity += 1;
-  //     toast.success(`${name} đã được tăng số lượng trong giỏ hàng!`);
-  //   } else {
-  //     storedCart.push(cartItem);
-  //     toast.success(`${name} đã được thêm vào giỏ hàng!`);
-  //   }
-  //   localStorage.setItem('cartItems', JSON.stringify(storedCart));
-  // };
-
   const handleAddToWishlist = () => {
     const wishlistItem = { id, name, price, image };
     const storedWishlist = JSON.parse(localStorage.getItem('wishlistItems') || '[]');
@@ -112,20 +99,9 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
     localStorage.setItem('wishlistItems', JSON.stringify(storedWishlist));
   };
 
-//   const handleViewDetail = () => {
-//   const enableSessionRestore = false; // 👈 chỉ cần toggle true/false
-
-//   if (enableSessionRestore) {
-//     sessionStorage.setItem('scrollPosition', window.scrollY.toString());
-//     sessionStorage.setItem('shopPage', String(page || 1));
-//   }
-
-//   navigate(`/terrarium/${id}`); // hoặc `/accessory/${id}`
-// };
-
-const handleViewDetail = () => {
-  navigate(`/terrarium/${id}`);
-};
+  const handleViewDetail = () => {
+    navigate(`/terrarium/${id}`);
+  };
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.target as HTMLImageElement;
@@ -139,46 +115,45 @@ const handleViewDetail = () => {
   return (
     <Card
       ref={cardRef}
-      className="shadow-lg rounded-lg transition-transform hover:scale-105 flex flex-col h-full"
+      className="shadow-lg rounded-lg transition-transform hover:scale-105 flex flex-col h-full font-roboto w-full max-w-sm mx-auto"
       cover={
         <img
           ref={imageRef}
           src={image}
           alt={name}
-          className="w-full object-contain max-h-64"
+          className="w-full h-48 sm:h-56 md:h-64 object-cover rounded-t-lg"
           onError={handleImageError}
         />
       }
     >
       <Button
         icon={isInWishlist ? <HeartFilled /> : <HeartOutlined />}
-        className={`absolute top-4 right-4 ${
+        className={`absolute top-2 right-2 sm:top-3 sm:right-3 ${
           isInWishlist ? 'text-pink-500' : 'text-gray-400'
-        } border-none hover:text-pink-500 transition duration-200`}
+        } border-none hover:text-pink-500 transition duration-200 text-lg sm:text-xl`}
         onClick={handleAddToWishlist}
       />
-      <div ref={contentRef} className="flex-1 flex flex-col">
-        <h3 className="text-xl font-semibold mt-4 font-roboto">{name}</h3>
-        <p className="text-gray-600 text-sm mt-1">
+      <div ref={contentRef} className="flex-1 flex flex-col px-2 sm:px-3 md:px-4 py-2 sm:py-3">
+        <h3 className="text-base sm:text-lg md:text-xl font-semibold mt-1 sm:mt-2 font-roboto">{name}</h3>
+        <p className="text-gray-600 text-xs sm:text-sm mt-1">
           {description.length > 50 ? `${description.slice(0, 50)}...` : description}
         </p>
-        <p className="text-gray-600 text-sm mt-1">Loại bể: {type}</p>
+        <p className="text-gray-600 text-xs sm:text-sm mt-1">Loại bể: {type}</p>
         {environmentName && (
-          <p className="text-gray-600 text-sm mt-1">Môi trường: {environmentName}</p>
+          <p className="text-gray-600 text-xs sm:text-sm mt-1">Môi trường: {environmentName}</p>
         )}
-        <p className="text-gray-800 font-semibold mt-1">
+        <p className="text-gray-800 font-semibold mt-1 text-sm sm:text-base md:text-lg">
           {price.toLocaleString('vi-VN')} VND
         </p>
         <div className="flex items-center mt-1">
-          <Rate disabled defaultValue={rating} className="text-sm" />
-          <span className="ml-2 text-gray-600 text-sm">({purchases} lượt mua)</span>
+          <Rate disabled defaultValue={rating} className="text-xs sm:text-sm" />
+          <span className="ml-2 text-gray-600 text-xs sm:text-sm">({purchases} lượt mua)</span>
         </div>
       </div>
-      <div ref={buttonsRef} className="flex space-x-2 mt-4">
-        
+      <div ref={buttonsRef} className="flex space-x-2 mt-2 sm:mt-3 px-2 sm:px-3 md:px-4 pb-2 sm:pb-3">
         <Button
           type="default"
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white border-none font-roboto"
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white border-none font-roboto text-xs sm:text-sm md:text-base py-1 sm:py-2"
           onClick={handleViewDetail}
         >
           Xem chi tiết

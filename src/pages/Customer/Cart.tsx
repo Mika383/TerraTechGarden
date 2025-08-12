@@ -1,22 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import {
-  getCart,
-  deleteCartItem,
-  deleteAllCartItems,
-  updateCartItem,
-  getAccessoryById,
-  getTerrariumById,
-  addTerrariumToCart
-} from '@/api';
+import { getCart, deleteCartItem, deleteAllCartItems, updateCartItem, getAccessoryById, getTerrariumById, addTerrariumToCart } from '@/api';
 import { getTerrariumVariantById, getVariantsByTerrariumId } from '@/api';
 import { CartItem, RawCartItem } from '@/types';
 import { toast } from 'react-toastify';
 import { Modal } from 'antd';
-import {
-  PlusOutlined,
-  MinusOutlined,
-  DeleteOutlined
-} from '@ant-design/icons';
+import { PlusOutlined, MinusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 interface ExtendedCartItem extends CartItem {
@@ -27,7 +15,6 @@ interface ExtendedCartItem extends CartItem {
 const Cart: React.FC = () => {
   const isLoggedIn = !!localStorage.getItem('authToken');
   const navigate = useNavigate();
-
   const [cartItems, setCartItems] = useState<ExtendedCartItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -42,7 +29,6 @@ const Cart: React.FC = () => {
         const res = await getCart();
         let items = await Promise.all(
           res.cartItems.map(async (raw: RawCartItem) => {
-
             let imageUrl = '/default.jpg';
             let terrariumName = raw.item[0]?.productName || 'Sản phẩm không tên';
 
@@ -65,9 +51,9 @@ const Cart: React.FC = () => {
                     imageUrl = terrariumData.terrariumImages[0].imageUrl;
                   }
                   const variantsList = await getVariantsByTerrariumId(variant.terrariumId);
-                  setAvailableVariants(prev => ({
+                  setAvailableVariants((prev) => ({
                     ...prev,
-                    [raw.cartItemId]: variantsList
+                    [raw.cartItemId]: variantsList,
                   }));
                 }
               }
@@ -86,14 +72,13 @@ const Cart: React.FC = () => {
               cartItemId: raw.cartItemId,
               accessoryId: raw.accessoryId,
               variantId: raw.terrariumVariantId,
-              createdAt: raw.createdAt
+              createdAt: raw.createdAt,
             };
           })
         );
 
-        items.sort(
-          (a: ExtendedCartItem, b: ExtendedCartItem) =>
-            new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
+        items.sort((a: ExtendedCartItem, b: ExtendedCartItem) =>
+          new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
         );
 
         setCartItems(items);
@@ -102,9 +87,8 @@ const Cart: React.FC = () => {
       }
     } else {
       const local: ExtendedCartItem[] = JSON.parse(localStorage.getItem('cartItems') || '[]');
-      local.sort(
-        (a: ExtendedCartItem, b: ExtendedCartItem) =>
-          new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
+      local.sort((a: ExtendedCartItem, b: ExtendedCartItem) =>
+        new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
       );
       setCartItems(local);
     }
@@ -158,9 +142,7 @@ const Cart: React.FC = () => {
         toast.error('Cập nhật số lượng thất bại');
       }
     } else {
-      const updated = cartItems.map((i) =>
-        i.id === id ? { ...i, quantity: newQuantity } : i
-      );
+      const updated = cartItems.map((i) => (i.id === id ? { ...i, quantity: newQuantity } : i));
       updateLocal(updated);
     }
   };
@@ -225,7 +207,7 @@ const Cart: React.FC = () => {
   };
 
   const handleBuyNow = () => {
-    const itemsToCheckout = cartItems.filter(item => selectedItems.includes(item.id));
+    const itemsToCheckout = cartItems.filter((item) => selectedItems.includes(item.id));
     if (itemsToCheckout.length === 0) {
       toast.warn('Vui lòng chọn sản phẩm để thanh toán');
       return;
@@ -235,168 +217,236 @@ const Cart: React.FC = () => {
   };
 
   const totalPrice = cartItems.reduce(
-    (total, item) =>
-      selectedItems.includes(item.id) ? total + item.price * item.quantity : total,
+    (total, item) => (selectedItems.includes(item.id) ? total + item.price * item.quantity : total),
     0
   );
 
   return (
-  <div className="cart-page px-8 py-6">
-    <h2 className="text-3xl font-bold mb-6">🛒 Giỏ hàng của bạn</h2>
+    <div className="min-h-screen bg-gray-50 flex flex-col font-roboto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto">
+        <h2 className="text-2xl md:text-3xl font-bold text-green-700 mb-6 md:mb-8">
+          🛒 Giỏ hàng của bạn
+        </h2>
 
-    <div className="border border-gray-300 rounded-xl p-6 bg-white shadow-sm">
-      {cartItems.length === 0 ? (
-        <p className="text-gray-600 text-center">
-          Chưa có sản phẩm nào trong giỏ hàng.
-        </p>
-      ) : (
-        <>
-          <table className="min-w-full divide-y divide-gray-200 text-base">
-            <thead className="bg-gray-100 text-lg font-semibold text-gray-800">
-              <tr>
-                <th className="text-center w-16">
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5"
-                    checked={allSelected}
-                    onChange={handleSelectAll}
-                  />
-                </th>
-                <th className="py-3 text-left">Sản phẩm</th>
-                <th className="py-3 text-center">Giá</th>
-                <th className="py-3 text-center">Số lượng</th>
-                <th className="py-3 text-center">Tổng</th>
-                <th className="py-3 text-center">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {cartItems.map((item) => (
-                <tr key={item.id}>
-                  <td className="text-center">
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5"
-                      checked={selectedItems.includes(item.id)}
-                      onChange={() => handleSelectItem(item.id)}
-                    />
-                  </td>
-                  <td className="flex items-center gap-4 py-4">
-                    <img
-                      src={item.image}
-                      alt={item.terrariumName || item.name}
-                      className="w-16 h-16 object-cover rounded"
-                    />
-                    <div>
-                      <div className="font-medium">
-                        {item.terrariumName || item.name}
-                      </div>
-                      {item.variantId && availableVariants[item.cartItemId] && (
-                        <select
-                          value={item.variantId}
-                          onChange={(e) =>
-                            handleChangeVariant(item, Number(e.target.value))
-                          }
-                          className="border rounded p-1 mt-1"
-                        >
-                          {availableVariants[item.cartItemId].map((v) => (
-                            <option
-                              key={v.terrariumVariantId}
-                              value={v.terrariumVariantId}
+        <div className="bg-white shadow-md rounded-lg p-4 md:p-6">
+          {cartItems.length === 0 ? (
+            <p className="text-gray-600 text-center text-sm md:text-base">
+              Chưa có sản phẩm nào trong giỏ hàng.
+            </p>
+          ) : (
+            <>
+              {/* Desktop: Table View */}
+              <div className="hidden md:block">
+                <table className="min-w-full divide-y divide-gray-200 text-sm md:text-base">
+                  <thead className="bg-gray-100 text-gray-800 font-semibold">
+                    <tr>
+                      <th className="py-3 px-4 text-center w-16">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4"
+                          checked={allSelected}
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                      <th className="py-3 px-4 text-left">Sản phẩm</th>
+                      <th className="py-3 px-4 text-center">Giá</th>
+                      <th className="py-3 px-4 text-center">Số lượng</th>
+                      <th className="py-3 px-4 text-center">Tổng</th>
+                      <th className="py-3 px-4 text-center">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {cartItems.map((item) => (
+                      <tr key={item.id}>
+                        <td className="py-4 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4"
+                            checked={selectedItems.includes(item.id)}
+                            onChange={() => handleSelectItem(item.id)}
+                          />
+                        </td>
+                        <td className="py-4 px-4 flex items-center gap-3 md:gap-4">
+                          <img
+                            src={item.image}
+                            alt={item.terrariumName || item.name}
+                            className="w-12 h-12 md:w-16 md:h-16 object-cover rounded"
+                          />
+                          <div>
+                            <div className="font-medium text-sm md:text-base">
+                              {item.terrariumName || item.name}
+                            </div>
+                            {item.variantId && availableVariants[item.cartItemId] && (
+                              <select
+                                value={item.variantId}
+                                onChange={(e) => handleChangeVariant(item, Number(e.target.value))}
+                                className="border rounded p-1 mt-1 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500"
+                              >
+                                {availableVariants[item.cartItemId].map((v) => (
+                                  <option key={v.terrariumVariantId} value={v.terrariumVariantId}>
+                                    {v.variantName}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center text-sm md:text-base">
+                          {item.price.toLocaleString('vi-VN')} VNĐ
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <div className="flex justify-center items-center border border-gray-300 rounded w-fit mx-auto">
+                            <button
+                              onClick={() => handleQuantityChange(item.id, 'decrease')}
+                              className="w-8 h-8 bg-red-100 hover:bg-red-300 flex justify-center items-center text-red-700 rounded-l"
                             >
-                              {v.variantName}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                              <MinusOutlined />
+                            </button>
+                            <div className="w-10 h-8 flex items-center justify-center bg-gray-100 text-sm md:text-base">
+                              {item.quantity}
+                            </div>
+                            <button
+                              onClick={() => handleQuantityChange(item.id, 'increase')}
+                              className="w-8 h-8 bg-green-100 hover:bg-green-300 flex justify-center items-center text-green-700 rounded-r"
+                            >
+                              <PlusOutlined />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center font-semibold text-green-600 text-sm md:text-base">
+                          {(item.price * item.quantity).toLocaleString('vi-VN')} VNĐ
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <button
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <DeleteOutlined />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: Grid View */}
+              <div className="md:hidden grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center gap-3 mb-3">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4"
+                        checked={selectedItems.includes(item.id)}
+                        onChange={() => handleSelectItem(item.id)}
+                      />
+                      <img
+                        src={item.image}
+                        alt={item.terrariumName || item.name}
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                      <div>
+                        <div className="font-medium text-sm">{item.terrariumName || item.name}</div>
+                        {item.variantId && availableVariants[item.cartItemId] && (
+                          <select
+                            value={item.variantId}
+                            onChange={(e) => handleChangeVariant(item, Number(e.target.value))}
+                            className="border rounded p-1 mt-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+                          >
+                            {availableVariants[item.cartItemId].map((v) => (
+                              <option key={v.terrariumVariantId} value={v.terrariumVariantId}>
+                                {v.variantName}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
                     </div>
-                  </td>
-                  <td className="text-center">
-                    {item.price.toLocaleString()} VND
-                  </td>
-                  <td className="text-center">
-                    <div className="flex justify-center items-center border border-gray-300 rounded w-fit mx-auto">
-                      <button
-                        onClick={() =>
-                          handleQuantityChange(item.id, 'decrease')
-                        }
-                        className="w-8 h-8 bg-red-100 hover:bg-red-300 flex justify-center items-center text-red-700 rounded-l"
-                      >
-                        <MinusOutlined />
-                      </button>
-                      <div className="w-10 h-8 flex items-center justify-center bg-gray-100 text-sm">
-                        {item.quantity}
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="text-sm">
+                        <span className="font-semibold">Giá: </span>
+                        {item.price.toLocaleString('vi-VN')} VNĐ
+                      </div>
+                      <div className="text-sm font-semibold text-green-600">
+                        <span className="font-semibold">Tổng: </span>
+                        {(item.price * item.quantity).toLocaleString('vi-VN')} VNĐ
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center border border-gray-300 rounded w-fit">
+                        <button
+                          onClick={() => handleQuantityChange(item.id, 'decrease')}
+                          className="w-8 h-8 bg-red-100 hover:bg-red-300 flex justify-center items-center text-red-700 rounded-l"
+                        >
+                          <MinusOutlined />
+                        </button>
+                        <div className="w-10 h-8 flex items-center justify-center bg-gray-100 text-sm">
+                          {item.quantity}
+                        </div>
+                        <button
+                          onClick={() => handleQuantityChange(item.id, 'increase')}
+                          className="w-8 h-8 bg-green-100 hover:bg-green-300 flex justify-center items-center text-green-700 rounded-r"
+                        >
+                          <PlusOutlined />
+                        </button>
                       </div>
                       <button
-                        onClick={() =>
-                          handleQuantityChange(item.id, 'increase')
-                        }
-                        className="w-8 h-8 bg-green-100 hover:bg-green-300 flex justify-center items-center text-green-700 rounded-r"
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="text-red-500 hover:text-red-700"
                       >
-                        <PlusOutlined />
+                        <DeleteOutlined />
                       </button>
                     </div>
-                  </td>
-                  <td className="text-center font-semibold text-green-600">
-                    {(item.price * item.quantity).toLocaleString()} VND
-                  </td>
-                  <td className="text-center">
-                    <button
-                      onClick={() => handleRemoveItem(item.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <DeleteOutlined />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Footer action */}
-          <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-gray-200">
-            <div className="flex gap-4">
-              <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded font-semibold text-lg"
-                onClick={handleUnselectAll}
-              >
-                Bỏ chọn
-              </button>
-              <button
-                className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded font-semibold text-lg"
-                onClick={handleDeleteAll}
-              >
-                Xóa toàn bộ
-              </button>
-              <div className="text-green-700 font-bold text-xl flex items-center">
-                Tổng cộng:{' '}
-                <span className="ml-2">{totalPrice.toLocaleString()} VND</span>
+                  </div>
+                ))}
               </div>
-            </div>
-            <button
-              onClick={handleBuyNow}
-              className="bg-yellow-600 hover:bg-blue-700 text-white px-6 py-3 rounded font-semibold text-lg disabled:bg-gray-400"
-              disabled={selectedItems.length === 0}
-            >
-              Mua ngay
-            </button>
-          </div>
-        </>
-      )}
-    </div>
 
-    {/* Modal xác nhận xóa */}
-    <Modal
-      title="Xác nhận xóa sản phẩm?"
-      open={deleteModalOpen}
-      onCancel={() => setDeleteModalOpen(false)}
-      onOk={confirmDeleteItem}
-      okText="Xóa"
-      okButtonProps={{ danger: true }}
-      cancelText="Hủy"
-    >
-      {itemToDelete?.name}
-    </Modal>
-  </div>
-);
-}
+              {/* Footer action */}
+              <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+                  <button
+                    className="bg-gray-500 hover:bg-gray-600 text-white px-3 md:px-4 py-2 rounded font-semibold text-sm md:text-base"
+                    onClick={handleUnselectAll}
+                  >
+                    Bỏ chọn
+                  </button>
+                  <button
+                    className="bg-red-700 hover:bg-red-800 text-white px-3 md:px-4 py-2 rounded font-semibold text-sm md:text-base"
+                    onClick={handleDeleteAll}
+                  >
+                    Xóa toàn bộ
+                  </button>
+                  <div className="text-green-700 font-bold text-base md:text-xl flex items-center">
+                    Tổng cộng: <span className="ml-2">{totalPrice.toLocaleString('vi-VN')} VNĐ</span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleBuyNow}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 md:px-6 py-2 md:py-3 rounded font-semibold text-sm md:text-base disabled:bg-gray-400"
+                  disabled={selectedItems.length === 0}
+                >
+                  Mua ngay
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <Modal
+          title="Xác nhận xóa sản phẩm?"
+          open={deleteModalOpen}
+          onCancel={() => setDeleteModalOpen(false)}
+          onOk={confirmDeleteItem}
+          okText="Xóa"
+          okButtonProps={{ danger: true }}
+          cancelText="Hủy"
+        >
+          {itemToDelete?.name}
+        </Modal>
+      </div>
+    </div>
+  );
+};
+
 export default Cart;

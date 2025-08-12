@@ -36,7 +36,7 @@ export const getAllTerrariums = async (
 export const getTerrariumById = async (
   id: number
 ): Promise<Terrarium | null> => {
-  const res = await axios.get(`${BASE_URL}/Terrarium/get-${id}`);
+  const res = await axios.get(`${BASE_URL}/Terrarium/get/${id}`);
   return res.data?.data || null;
 };
 

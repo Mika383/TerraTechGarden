@@ -1,3 +1,4 @@
+// src/types/order.ts
 export interface OrderItem {
   orderItemId: number;
   accessoryId?: number | null;
@@ -12,8 +13,10 @@ export interface OrderItem {
 export interface Order {
   orderId: number;
   userId: number;
+  addressId?: number | null;
   totalAmount: number;
   deposit: number;
+  discountAmount?: number | null;
   orderDate: string;
   status: string | number;
   paymentStatus?: string;
@@ -28,7 +31,21 @@ export interface Voucher {
   code: string;
   description: string;
   discountAmount: number;
-  validFrom: string;   // ISO date string, ví dụ: "2025-08-07T00:00:00"
-  validTo: string;     // ISO date string
-  status: 'active' | 'inactive' | 'expired'; // Có thể bổ sung trạng thái nếu cần
+  validFrom: string;
+  validTo: string;
+  status: 'active' | 'inactive' | 'expired';
+}
+
+export interface CreateOrderItem {
+  accessoryId: number;
+  terrariumVariantId: number;
+  accessoryQuantity: number;
+  terrariumVariantQuantity: number;
+}
+
+export interface CreateOrderRequest {
+  voucherId: number;
+  deposit: number;
+  addressId: number;
+  items: CreateOrderItem[];
 }

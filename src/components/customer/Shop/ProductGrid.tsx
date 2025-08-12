@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import TerrariumCard from '../Terrarium/TerrariumCard';
-import {
-  getAllTerrariums,
-  getTerrariumImagesByTerrariumId,
-  getAllEnvironments,
-  getAllTankMethods,
-} from '@/api/terrarium';
+import { getAllTerrariums, getAllEnvironments, getAllTankMethods } from '@/api/terrarium';
 import { Terrarium, Environment, TankMethod } from '@/types/terrarium';
 
 interface ProductGridProps {
@@ -14,7 +9,7 @@ interface ProductGridProps {
   sortCriteria: string;
   sortOrder: 'ASC' | 'DESC';
   page: number;
-  setPage: React.Dispatch<React.SetStateAction<number>>; // ✅ Thêm prop điều khiển page
+  setPage: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const ProductGrid: React.FC<ProductGridProps> = ({
@@ -38,20 +33,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({
           getAllTankMethods(),
         ]);
 
-        const enriched = await Promise.all(
-          (terrariumRes || []).map(async (item) => {
-            if (Array.isArray(item.terrariumImages) && item.terrariumImages.length > 0) {
-              return item;
-            }
-            const images = await getTerrariumImagesByTerrariumId(item.terrariumId);
-            return {
-              ...item,
-              terrariumImages: images || [],
-            };
-          })
-        );
-
-        setTerrariums(enriched);
+        setTerrariums(terrariumRes || []);
         setEnvironments(envRes || []);
         setTankMethods(tankRes || []);
       } catch (error) {
@@ -62,13 +44,11 @@ const ProductGrid: React.FC<ProductGridProps> = ({
     fetchData();
   }, [page]);
 
-  const getEnvironmentName = (environmentId: number): string => {
-    return environments.find((e) => e.environmentId === environmentId)?.environmentName || 'Không rõ';
-  };
+  const getEnvironmentName = (environmentId: number): string =>
+    environments.find((e) => e.environmentId === environmentId)?.environmentName || 'Không rõ';
 
-  const getTankMethodType = (tankMethodId: number): string => {
-    return tankMethods.find((t) => t.tankMethodId === tankMethodId)?.tankMethodType || 'Không rõ';
-  };
+  const getTankMethodType = (tankMethodId: number): string =>
+    tankMethods.find((t) => t.tankMethodId === tankMethodId)?.tankMethodType || 'Không rõ';
 
   const filteredProducts = terrariums
     .filter((product) =>
@@ -78,46 +58,49 @@ const ProductGrid: React.FC<ProductGridProps> = ({
       selectedType ? product.status?.toLowerCase() === selectedType.toLowerCase() : true
     );
 
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    let comparison = 0;
-    if (sortCriteria === 'rating') comparison = 0;
-    else if (sortCriteria === 'purchases') comparison = 0;
-    else if (sortCriteria === 'price') comparison = (a.minPrice ?? 0) - (b.minPrice ?? 0);
-    return sortOrder === 'ASC' ? comparison : -comparison;
-  });
+  const sortedProducts = [...filteredProducts]
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortCriteria === 'rating') comparison = 0;
+      else if (sortCriteria === 'purchases') comparison = 0;
+      else if (sortCriteria === 'price') comparison = (a.minPrice ?? 0) - (b.minPrice ?? 0);
+      return sortOrder === 'ASC' ? comparison : -comparison;
+    })
+    .slice(0, 9); // Giới hạn tối đa 9 sản phẩm
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {sortedProducts.map((product) => (
           <TerrariumCard
-              key={product.terrariumId}
-              id={product.terrariumId.toString()}
-              name={product.terrariumName}
-              description={product.description}
-              type={getTankMethodType(product.tankMethodId)}
-              price={product.minPrice ?? 0}
-              rating={0}
-              purchases={0}
-              image={product.terrariumImages?.[0]?.imageUrl || '/src/assets/image/1.jpg'}
-              environmentName={getEnvironmentName(product.environmentId)}
-              page={page} 
-            />
+            key={product.terrariumId}
+            id={product.terrariumId.toString()}
+            name={product.terrariumName}
+            description={product.description}
+            type={getTankMethodType(product.tankMethodId)}
+            price={product.minPrice ?? 0}
+            rating={0}
+            purchases={0}
+            image={product.terrariumImages?.[0]?.imageUrl || '/src/assets/image/1.jpg'}
+            environmentName={getEnvironmentName(product.environmentId)}
+            page={page}
+          />
         ))}
       </div>
 
-      <div className="flex justify-center mt-6 space-x-4">
+      <div className="flex justify-center mt-6 space-x-3 md:space-x-4">
         <button
           onClick={() => setPage((prev) => Math.max(1, prev - 1))}
           disabled={page === 1}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+          className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
         >
           Trang trước
         </button>
-        <span className="px-4 py-2">Trang {page}</span>
+        <span className="px-3 md:px-4 py-2 text-sm md:text-base font-roboto">Trang {page}</span>
         <button
           onClick={() => setPage((prev) => prev + 1)}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+          disabled={sortedProducts.length < 9}
+          className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
         >
           Trang tiếp
         </button>

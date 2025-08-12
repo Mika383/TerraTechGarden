@@ -11,11 +11,9 @@ const ResetPassword: React.FC = () => {
   const location = useLocation();
   const { token: paramToken } = useParams<{ token?: string }>();
 
-  // Lấy token từ query nếu có
   const query = new URLSearchParams(location.search);
   const queryToken = query.get('token');
 
-  // Ưu tiên paramToken, nếu không có thì lấy queryToken
   const token = paramToken || queryToken || '';
 
   const [form] = Form.useForm();
