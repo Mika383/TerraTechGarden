@@ -11,7 +11,8 @@ import {
 } from "@/api/terrarium";
 
 // ---- Types ----
-interface PaymentParams {
+// VNPay parameters
+interface VNPayParams {
   vnp_Amount?: string;
   vnp_BankCode?: string;
   vnp_BankTranNo?: string;
@@ -26,7 +27,23 @@ interface PaymentParams {
   vnp_SecureHash?: string;
 }
 
-// Dữ liệu hiển thị sau khi “enrich” từng item
+// MoMo parameters
+interface MoMoParams {
+  orderId?: string;
+  status?: string;
+  amount?: string;
+  transId?: string;
+  payType?: string;
+  bank?: string;
+  message?: string;
+  orderInfo?: string;
+  resultCode?: string;
+  responseTime?: string;
+}
+
+type PaymentParams = VNPayParams & MoMoParams;
+
+// Dữ liệu hiển thị sau khi "enrich" từng item
 type EnrichedItem = {
   orderItemId: number;
   name: string;
@@ -48,33 +65,104 @@ const formatPayDate = (dateStr?: string) => {
   return `${d}/${m}/${y} ${hh}:${mm}:${ss}`;
 };
 
+const formatMoMoTime = (timestamp?: string) => {
+  if (!timestamp) return "N/A";
+  try {
+    const date = new Date(Number(timestamp));
+    return date.toLocaleString("vi-VN");
+  } catch {
+    return timestamp;
+  }
+};
+
 const money = (n?: number) =>
   (n ?? 0).toLocaleString("vi-VN") + " VND";
 
+// Safe decode URI component
+const safeDecodeURIComponent = (str?: string) => {
+  if (!str) return "N/A";
+  try {
+    return decodeURIComponent(str);
+  } catch {
+    return str;
+  }
+};
+
+// Determine payment gateway and success status
+const getPaymentInfo = (params: PaymentParams) => {
+  // Check if MoMo parameters exist
+  if (params.resultCode !== undefined || params.transId !== undefined) {
+    return {
+      gateway: 'MoMo',
+      isSuccess: params.resultCode === "0" || params.status === "success",
+      orderId: params.orderId,
+      transactionId: params.transId,
+      amount: params.amount ? Number(params.amount) : 0,
+    };
+  }
+  
+  // Default to VNPay
+  return {
+    gateway: 'VNPay',
+    isSuccess: params.vnp_ResponseCode === "00",
+    orderId: params.vnp_TxnRef,
+    transactionId: params.vnp_TransactionNo,
+    amount: params.vnp_Amount ? Number(params.vnp_Amount) / 100 : 0,
+  };
+};
+
 // ---- UI blocks ----
 const PaymentInfo: React.FC<{ params: PaymentParams }> = ({ params }) => {
-  const isSuccess = params.vnp_ResponseCode === "00";
+  const { gateway, isSuccess, amount, transactionId } = getPaymentInfo(params);
+  
   return (
     <div className={`bg-white p-6 rounded-lg shadow-lg border ${isSuccess ? "border-green-200" : "border-red-200"}`}>
       <h2 className="text-xl font-semibold mb-4 text-gray-800">Thông tin thanh toán</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <p><strong>Số tiền:</strong> {money(Number(params.vnp_Amount || 0) / 100)}</p>
-          <p><strong>Ngân hàng:</strong> {params.vnp_BankCode || "N/A"}</p>
-          <p><strong>Mã giao dịch:</strong> {params.vnp_TransactionNo || "N/A"}</p>
-          <p><strong>Loại thẻ:</strong> {params.vnp_CardType || "N/A"}</p>
+          <p><strong>Cổng thanh toán:</strong> {gateway}</p>
+          <p><strong>Số tiền:</strong> {money(amount)}</p>
+          <p><strong>Mã giao dịch:</strong> {transactionId || "N/A"}</p>
+          
+          {gateway === 'VNPay' && (
+            <>
+              <p><strong>Ngân hàng:</strong> {params.vnp_BankCode || "N/A"}</p>
+              <p><strong>Loại thẻ:</strong> {params.vnp_CardType || "N/A"}</p>
+            </>
+          )}
+          
+          {gateway === 'MoMo' && (
+            <>
+              <p><strong>Phương thức:</strong> {params.payType || "N/A"}</p>
+              <p><strong>Ngân hàng:</strong> {params.bank || "MoMo"}</p>
+            </>
+          )}
         </div>
         <div>
-          <p><strong>Thông tin đơn hàng:</strong> {params.vnp_OrderInfo || "N/A"}</p>
-          <p><strong>Ngày thanh toán:</strong> {formatPayDate(params.vnp_PayDate)}</p>
-          <p><strong>Mã phản hồi:</strong> {params.vnp_ResponseCode || "N/A"}</p>
+          <p><strong>Thông tin đơn hàng:</strong> {safeDecodeURIComponent(params.vnp_OrderInfo || params.orderInfo)}</p>
+          
+          {gateway === 'VNPay' && (
+            <>
+              <p><strong>Ngày thanh toán:</strong> {formatPayDate(params.vnp_PayDate)}</p>
+              <p><strong>Mã phản hồi:</strong> {params.vnp_ResponseCode || "N/A"}</p>
+            </>
+          )}
+          
+          {gateway === 'MoMo' && (
+            <>
+              <p><strong>Thời gian:</strong> {formatMoMoTime(params.responseTime)}</p>
+              <p><strong>Mã kết quả:</strong> {params.resultCode || "N/A"}</p>
+              <p><strong>Thông báo:</strong> {safeDecodeURIComponent(params.message)}</p>
+            </>
+          )}
+          
           <p>
             <strong>Trạng thái:</strong>
             <span className={`ml-2 font-semibold ${isSuccess ? "text-green-600" : "text-red-500"}`}>
               {isSuccess ? "Thành công" : "Thất bại"}
             </span>
           </p>
-          <p><strong>Mã đơn hàng (TxnRef):</strong> {params.vnp_TxnRef || "N/A"}</p>
+          <p><strong>Mã đơn hàng:</strong> {getPaymentInfo(params).orderId || "N/A"}</p>
         </div>
       </div>
     </div>
@@ -158,15 +246,30 @@ const PaymentSuccess: React.FC = () => {
 
     // mock dev if needed
     if (import.meta.env.DEV && sp.size === 0) {
+      // Mock VNPay data
+      // Object.assign(p, {
+      //   vnp_Amount: "65012200",
+      //   vnp_BankCode: "NCB",
+      //   vnp_TransactionNo: "15121707",
+      //   vnp_CardType: "ATM",
+      //   vnp_OrderInfo: "Thanh toan don hang #67",
+      //   vnp_PayDate: "20250807224944",
+      //   vnp_ResponseCode: "00",
+      //   vnp_TxnRef: "67",
+      // });
+      
+      // Mock MoMo data for testing
       Object.assign(p, {
-        vnp_Amount: "65012200",
-        vnp_BankCode: "NCB",
-        vnp_TransactionNo: "15121707",
-        vnp_CardType: "ATM",
-        vnp_OrderInfo: "Thanh toan don hang #67",
-        vnp_PayDate: "20250807224944",
-        vnp_ResponseCode: "00",
-        vnp_TxnRef: "67",
+        orderId: "185",
+        status: "success",
+        amount: "864000",
+        transId: "4562263553",
+        payType: "aio_qr",
+        bank: "",
+        message: "Thành công.",
+        orderInfo: "Đơn hàng #185 (Full -10%)",
+        resultCode: "0",
+        responseTime: "1755054682095"
       });
     }
     setParams(p);
@@ -175,11 +278,14 @@ const PaymentSuccess: React.FC = () => {
   // load order + enrich items
   useEffect(() => {
     const fetchOrder = async () => {
-      if (!(params.vnp_TxnRef && params.vnp_ResponseCode === "00")) return;
+      const { isSuccess, orderId } = getPaymentInfo(params);
+      
+      if (!(orderId && isSuccess)) return;
+      
       setLoading(true);
       setOrderError(null);
       try {
-        const od = await getOrderById(Number(params.vnp_TxnRef));
+        const od = await getOrderById(Number(orderId));
         if (!od?.orderId) {
           setOrderError("Không tìm thấy đơn hàng.");
           return;
@@ -233,9 +339,9 @@ const PaymentSuccess: React.FC = () => {
     };
 
     fetchOrder();
-  }, [params.vnp_TxnRef, params.vnp_ResponseCode]);
+  }, [params]);
 
-  const isSuccess = params.vnp_ResponseCode === "00";
+  const { isSuccess } = getPaymentInfo(params);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
