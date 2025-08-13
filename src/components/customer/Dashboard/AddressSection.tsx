@@ -53,12 +53,16 @@ const AddressSection: React.FC = () => {
     }
   };
 
-  // Đặt làm mặc định (chỉ 1)
+  // Đặt làm mặc định (chỉ 1) - Cập nhật tất cả địa chỉ
   const handleSetDefault = async (selected: Address) => {
-    const promises = addresses.map(addr =>
-      setDefaultAddress(addr.id, { ...addr, isDefault: addr.id === selected.id })
-    );
     try {
+      // Tạo array promises để cập nhật tất cả địa chỉ
+      // Địa chỉ được chọn sẽ có isDefault = true, các địa chỉ khác = false
+      const promises = addresses.map(addr => {
+        const updatedAddr = { ...addr, isDefault: addr.id === selected.id };
+        return setDefaultAddress(addr.id, updatedAddr);
+      });
+
       await Promise.all(promises);
       message.success('Đã cập nhật địa chỉ mặc định');
       loadAddresses();
@@ -67,9 +71,11 @@ const AddressSection: React.FC = () => {
     }
   };
 
-  // Bỏ mặc định
+  // Bỏ mặc định - Chỉ set địa chỉ hiện tại thành false
   const handleUnsetDefault = async (addr: Address) => {
     try {
+      // Chỉ cập nhật địa chỉ hiện tại thành isDefault = false
+      // Không cần cập nhật các địa chỉ khác
       await unsetDefaultAddress(addr.id, { ...addr, isDefault: false });
       message.success('Đã bỏ địa chỉ mặc định');
       loadAddresses();

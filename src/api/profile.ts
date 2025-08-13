@@ -54,7 +54,7 @@ export const addAddress = async (
   return res.data as ApiResponse<null>;
 };
 
-/** Cập nhật địa chỉ (KHÔNG dùng lat/long)
+/** Cập nhật địa chỉ (Bao gồm lat/long)
  *  Lưu ý endpoint BE hiện tại (theo code cũ): uodate-adrress
  *  Nếu BE sửa chính tả -> đổi về /Address/update-address/{id}
  */
@@ -71,38 +71,73 @@ export const updateAddress = async (
     provinceCode: payload.provinceCode,
     districtCode: payload.districtCode,
     wardCode: payload.wardCode,
+    latitude: payload.latitude || "",  // Gửi string rỗng thay vì null để an toàn
+    longitude: payload.longitude || "",
     isDefault: payload.isDefault,
   };
 
   const res = await axios.put(
-    `${BASE_URL}/Address/uodate-adrress/${id}`,
+    `${BASE_URL}/Address/update-adrress/${id}`,
     body,
     authHeader()
   );
   return res.data as ApiResponse<null>;
 };
 
-/** Đặt địa chỉ làm mặc định (ép isDefault = true) */
+/** Đặt địa chỉ làm mặc định 
+ *  Hàm này được dùng để cập nhật bất kỳ địa chỉ nào với trạng thái isDefault
+ *  Logic: Khi set một địa chỉ thành default, các địa chỉ khác sẽ được set thành false
+ */
 export const setDefaultAddress = async (
   id: number,
-  currentData: Omit<Address, 'id'>
+  addressData: Address
 ): Promise<ApiResponse<null> | void> => {
+  const body = {
+    id,
+    tagName: addressData.tagName,
+    receiverName: addressData.receiverName,
+    receiverPhone: addressData.receiverPhone,
+    receiverAddress: addressData.receiverAddress,
+    provinceCode: addressData.provinceCode,
+    districtCode: addressData.districtCode,
+    wardCode: addressData.wardCode,
+    latitude: addressData.latitude || "",  // Gửi string rỗng thay vì null
+    longitude: addressData.longitude || "",
+    isDefault: addressData.isDefault,
+  };
+
   const res = await axios.put(
-    `${BASE_URL}/Address/uodate-adrress/${id}`,
-    { ...currentData, id, isDefault: true },
+    `${BASE_URL}/Address/update-adrress/${id}`,
+    body,
     authHeader()
   );
   return res.data as ApiResponse<null>;
 };
 
-/** Bỏ mặc định (ép isDefault = false) – tuỳ nhu cầu có thể dùng */
+/** Bỏ mặc định - Chỉ cập nhật địa chỉ cụ thể thành isDefault = false
+ *  Logic: Cho phép không có địa chỉ mặc định nào (tất cả isDefault = false)
+ */
 export const unsetDefaultAddress = async (
   id: number,
-  currentData: Omit<Address, 'id'>
+  addressData: Address
 ): Promise<ApiResponse<null> | void> => {
+  const body = {
+    id,
+    tagName: addressData.tagName,
+    receiverName: addressData.receiverName,
+    receiverPhone: addressData.receiverPhone,
+    receiverAddress: addressData.receiverAddress,
+    provinceCode: addressData.provinceCode,
+    districtCode: addressData.districtCode,
+    wardCode: addressData.wardCode,
+    latitude: addressData.latitude || "",  // Gửi string rỗng thay vì null
+    longitude: addressData.longitude || "",
+    isDefault: false, // Luôn set thành false khi unset
+  };
+
   const res = await axios.put(
-    `${BASE_URL}/Address/uodate-adrress/${id}`,
-    { ...currentData, id, isDefault: false },
+    `${BASE_URL}/Address/update-adrress/${id}`,
+    body,
     authHeader()
   );
   return res.data as ApiResponse<null>;
