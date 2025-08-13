@@ -5,6 +5,19 @@ import { getAllTerrariums } from '@/api/terrarium';
 import type { Terrarium } from '@/types/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+// Ant Design Icons (thay toàn bộ Heroicons)
+import {
+  StarFilled,
+  FireOutlined,
+  LikeOutlined,
+  BulbOutlined,
+  SearchOutlined,
+  HeartFilled,
+  ExperimentOutlined,
+  EnvironmentOutlined,
+} from '@ant-design/icons';
+
 import miniForest from '@/assets/image/1.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -37,24 +50,16 @@ const ProductShowcase: React.FC = () => {
     return () => { mountedRef.current = false; };
   }, [tab]);
 
-  // Optimized animations
   useEffect(() => {
     if (loading || !items.length) return;
 
     gsapContext.current = gsap.context(() => {
-      // Animate cards with reduced complexity
       cardsRef.current.forEach((card, index) => {
         if (!card) return;
         gsap.fromTo(
           card,
           { y: 20, opacity: 0 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.5,
-            delay: index * 0.1,
-            ease: 'power2.out'
-          }
+          { y: 0, opacity: 1, duration: 0.5, delay: index * 0.1, ease: 'power2.out' }
         );
       });
     }, sectionRef);
@@ -89,49 +94,49 @@ const ProductShowcase: React.FC = () => {
   }, [items, tab]);
 
   const tabData = [
-    { key: 'featured', label: '🌟 Terrarium Nổi Bật', icon: '🌟', color: 'from-emerald-500 to-green-600' },
-    { key: 'bestSelling', label: '🔥 Bán Chạy Nhất', icon: '🔥', color: 'from-orange-500 to-red-600' },
-    { key: 'topRated', label: '⭐ Được Yêu Thích', icon: '⭐', color: 'from-yellow-500 to-orange-600' }
-  ];
+    { key: 'featured', label: 'Terrarium Nổi Bật', icon: <StarFilled />, color: 'from-emerald-500 to-green-600' },
+    { key: 'bestSelling', label: 'Bán Chạy Nhất', icon: <FireOutlined />, color: 'from-orange-500 to-red-600' },
+    { key: 'topRated', label: 'Được Yêu Thích', icon: <LikeOutlined />, color: 'from-yellow-500 to-orange-600' },
+  ] as const;
 
   return (
     <div ref={sectionRef} className="font-inter">
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Terrarium-themed sidebar */}
+        {/* Sidebar */}
         <aside className="w-full lg:w-72 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl shadow-lg p-6 border border-green-100">
           <div className="mb-6 text-center">
-            <div className="text-4xl mb-2">🏺</div>
+            <ExperimentOutlined className="text-3xl mb-2 text-emerald-700" />
             <h3 className="text-lg font-bold text-emerald-800">Danh Mục Terrarium</h3>
           </div>
-          
+
           <div className="space-y-3">
             {tabData.map((item) => (
               <button
                 key={item.key}
                 className={`w-full text-left px-4 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 ${
-                  tab === item.key 
-                    ? `bg-gradient-to-r ${item.color} text-white shadow-lg` 
+                  tab === item.key
+                    ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
                     : 'bg-white/70 hover:bg-white text-emerald-700 shadow-sm hover:shadow-md'
                 }`}
                 onClick={() => setTab(item.key as TabKey)}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-xl">{item.icon}</span>
-                  <span className="truncate text-sm">{item.label.split(' ').slice(1).join(' ')}</span>
+                  <span className="truncate text-sm">{item.label}</span>
                 </div>
               </button>
             ))}
           </div>
 
-          {/* Terrarium care tips */}
-          <div className="mt-8 p-4 bg-white/60 rounded-lg border border-green-200">
-            <div className="text-sm text-emerald-700">
-              <div className="font-semibold mb-2">💡 Mẹo chăm sóc</div>
-              <div className="text-xs space-y-1">
-                <div>• Đặt ở nơi ánh sáng gián tiếp</div>
-                <div>• Tưới nước 1-2 tuần/lần</div>
-                <div>• Kiểm tra độ ẩm thường xuyên</div>
-              </div>
+          {/* Tips */}
+          <div className="mt-8 p-4 bg-white/60 rounded-lg border border-green-200 text-sm text-emerald-700">
+            <div className="font-semibold mb-2 flex items-center gap-2">
+              <BulbOutlined /> Mẹo chăm sóc
+            </div>
+            <div className="text-xs space-y-1">
+              <div>• Đặt ở nơi ánh sáng gián tiếp</div>
+              <div>• Tưới nước 1-2 tuần/lần</div>
+              <div>• Kiểm tra độ ẩm thường xuyên</div>
             </div>
           </div>
         </aside>
@@ -139,14 +144,12 @@ const ProductShowcase: React.FC = () => {
         {/* Product grid */}
         <section className="flex-1">
           <div className="mb-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-emerald-800 mb-2">
-              {tab === 'featured' && '🌟 Terrarium Nổi Bật'}
-              {tab === 'bestSelling' && '🔥 Terrarium Bán Chạy'}
-              {tab === 'topRated' && '⭐ Terrarium Được Yêu Thích'}
+            <h2 className="text-2xl md:text-3xl font-bold text-emerald-800 mb-2 flex items-center gap-2">
+              {tab === 'featured' && (<><StarFilled className="text-emerald-600" /> Terrarium Nổi Bật</>)}
+              {tab === 'bestSelling' && (<><FireOutlined className="text-orange-500" /> Terrarium Bán Chạy</>)}
+              {tab === 'topRated' && (<><LikeOutlined className="text-yellow-500" /> Terrarium Được Yêu Thích</>)}
             </h2>
-            <p className="text-emerald-600 text-sm">
-              Khám phá những khu vườn mini tuyệt đẹp trong lọ thủy tinh
-            </p>
+            <p className="text-emerald-600 text-sm">Khám phá những khu vườn mini tuyệt đẹp trong lọ thủy tinh</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -157,8 +160,8 @@ const ProductShowcase: React.FC = () => {
               const purchases = (t as any)?.soldQuantity ?? (t as any)?.purchases ?? 0;
 
               return (
-                <div 
-                  key={loading ? idx : t.terrariumId} 
+                <div
+                  key={loading ? idx : t.terrariumId}
                   ref={(el) => { cardsRef.current[idx] = el; }}
                   className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 border border-green-50 opacity-0"
                 >
@@ -173,7 +176,7 @@ const ProductShowcase: React.FC = () => {
                     </div>
                   ) : (
                     <>
-                      {/* Image with terrarium styling */}
+                      {/* Image */}
                       <div className="relative h-48 bg-gradient-to-br from-green-50 to-emerald-50 rounded-t-2xl overflow-hidden">
                         <img
                           src={image}
@@ -181,8 +184,9 @@ const ProductShowcase: React.FC = () => {
                           className="w-full h-full object-cover transition-transform duration-200 hover:scale-110"
                           onError={(e) => { (e.currentTarget as HTMLImageElement).src = miniForest; }}
                         />
-                        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full p-2">
-                          <span className="text-lg">🌿</span>
+                        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1">
+                          <EnvironmentOutlined style={{ fontSize: 16 }} className="text-emerald-700" />
+                          <span className="text-xs font-medium text-emerald-700">Terrarium</span>
                         </div>
                       </div>
 
@@ -190,29 +194,29 @@ const ProductShowcase: React.FC = () => {
                         <h3 className="font-bold text-lg text-gray-800 mb-2 line-clamp-2">
                           {t.terrariumName}
                         </h3>
-                        
+
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-emerald-600 font-bold text-lg">
                             {t.minPrice.toLocaleString('vi-VN')} ₫
                           </div>
-                          <div className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full text-xs font-medium">
-                            Terrarium
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between mb-4">
-                          <Rate allowHalf disabled value={Number(rating)} className="text-sm" />
-                          <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-full">
+                          <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-full flex items-center gap-1">
+                            <HeartFilled className="text-emerald-500" />
                             {purchases} đã bán
                           </span>
                         </div>
 
+                        <div className="flex items-center justify-between mb-4">
+                          <Rate allowHalf disabled value={Number(rating)} className="text-sm" />
+                          <span className="text-xs text-gray-500">({Number(rating).toFixed(1)}/5)</span>
+                        </div>
+
                         <Button
                           type="primary"
-                          className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 border-none font-medium"
+                          className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 border-none font-semibold"
+                          icon={<SearchOutlined />}
                           onClick={() => navigate(`/terrarium/${t.terrariumId}`)}
                         >
-                          🔍 Xem Chi Tiết
+                          Xem Chi Tiết
                         </Button>
                       </div>
                     </>
@@ -222,14 +226,15 @@ const ProductShowcase: React.FC = () => {
             })}
           </div>
 
-          {/* View all button */}
+          {/* View all */}
           <div className="text-center mt-8">
             <Button
               size="large"
               className="bg-white border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-600 font-semibold px-8"
               onClick={() => navigate('/shop')}
+              icon={<EnvironmentOutlined style={{ color: '#047857' }} />}
             >
-              🌿 Xem Tất Cả Terrarium
+              Xem Tất Cả Terrarium
             </Button>
           </div>
         </section>
