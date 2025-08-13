@@ -86,7 +86,7 @@ export const useWalletForPayment = async (payload: {
   return res.data;
 };
 
-// ===== PAYMENT API với body mới =====
+// ===== VNPAY PAYMENT API =====
 export const createVNPayPayment = async (payload: {
   orderId: number;
   orderType: string;
@@ -101,3 +101,21 @@ export const createVNPayPayment = async (payload: {
   }
   return payUrl;
 };
+
+// ===== MOMO PAYMENT API =====
+export const createMoMoPayment = async (payload: {
+  orderId: number;
+  orderInfo: string;
+  payAll: boolean;
+}): Promise<{ payUrl: string; qrImageBase64: string }> => {
+  const res = await axios.post(`${BASE_URL}/Payment/momo/create`, payload, authHeader());
+  
+  const payUrl = res?.data?.payUrl;
+  const qrImageBase64 = res?.data?.qrImageBase64;
+  
+  if (!payUrl) {
+    throw new Error('MOMO_PAYMENT_URL_NOT_FOUND');
+  }
+  
+  return { payUrl, qrImageBase64 };
+};  
