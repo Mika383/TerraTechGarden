@@ -88,7 +88,7 @@ const Home: React.FC = () => {
           </div>
         </div>
 
-        <div ref={setRef(2)} className="mb-16 opacity-0">
+        {/* <div ref={setRef(2)} className="mb-16 opacity-0">
           <div className="bg-gradient-to-l from-white/95 to-teal-50/95 rounded-2xl shadow-lg p-6 border border-teal-100">
             <MemberBenefits />
           </div>
@@ -98,7 +98,7 @@ const Home: React.FC = () => {
           <div className="bg-gradient-to-r from-white/95 to-emerald-50/95 rounded-2xl shadow-lg p-6 border border-emerald-100">
             <CustomerReviews />
           </div>
-        </div>
+        </div> */}
 
         <div ref={setRef(4)} className="opacity-0">
           <div className="bg-gradient-to-br from-green-50/95 to-white/95 rounded-2xl shadow-xl p-8 border border-green-200">

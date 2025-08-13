@@ -1,4 +1,4 @@
-
+// src/types/terrarium.ts
 
 export interface TerrariumImage {
   terrariumImageId: number;
@@ -24,7 +24,6 @@ export interface Accessory {
   price: number;
 }
 
-// ✅ Thêm interface cho Environment
 export interface Environment {
   environmentId: number;
   environmentName: string;
@@ -32,7 +31,6 @@ export interface Environment {
   terrarium?: any[];
 }
 
-// ✅ Thêm interface cho Shape và TankMethod nếu cần
 export interface Shape {
   shapeId: number;
   shapeName: string;
@@ -40,11 +38,18 @@ export interface Shape {
 }
 
 export interface TankMethod {
+  // Một số API dùng tankMethodName, một số dùng tankMethodType → để optional cả hai
   tankMethodId: number;
-  tankMethodName: string;
+  tankMethodName?: string;
+  tankMethodType?: string;
   tankMethodDescription: string;
 }
 
+/**
+ * Terrarium – mở rộng thêm các field từ endpoint mới:
+ * - thumbnailUrl
+ * - averageRating, feedbackCount, purchaseCount
+ */
 export interface Terrarium {
   terrariumId: number;
   terrariumName: string;
@@ -56,25 +61,21 @@ export interface Terrarium {
   environmentId: number;
   shapeId: number;
   tankMethodId: number;
+
   createdAt?: string;
   updatedAt?: string;
   bodyHTML?: string;
+
   terrariumImages?: TerrariumImage[];
-  image?: string; 
+  image?: string;
   accessories?: Accessory[];
-  environment?: Environment; // ✅ Thêm environment object
-  shape?: Shape; // ✅ Thêm shape object nếu cần
-  tankMethod?: TankMethod; // ✅ Thêm tankMethod object nếu cần
-}
+  environment?: Environment;
+  shape?: Shape;
+  tankMethod?: TankMethod;
 
-export interface Environment {
-  environmentId: number;
-  environmentName: string;
-  environmentDescription: string;
-}
-
-export interface TankMethod {
-  tankMethodId: number;
-  tankMethodType: string;
-  tankMethodDescription: string;
+  // Field từ các API /featured, /best-sellers, /top-rated, /newest
+  thumbnailUrl?: string | null;
+  averageRating?: number | null;
+  feedbackCount?: number | null;
+  purchaseCount?: number | null;
 }

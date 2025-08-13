@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Rate } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { getAllTerrariums } from '@/api/terrarium';
+// 🔁 Đổi sang các API mới theo tab
+import {
+  getFeaturedTerrariums,
+  getBestSellers,
+  getTopRatedTerrariums,
+  getNewestTerrariums,
+} from '@/api/terrarium';
 import type { Terrarium } from '@/types/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
-// Ant Design Icons (thay toàn bộ Heroicons)
+// Ant Design Icons
 import {
   StarFilled,
   FireOutlined,
@@ -23,11 +29,11 @@ import miniForest from '@/assets/image/1.jpg';
 gsap.registerPlugin(ScrollTrigger);
 
 type TabKey = 'featured' | 'bestSelling' | 'topRated';
-const FETCH_SIZE = 24;
+// const FETCH_SIZE = 24; // không còn dùng getAll, giữ lại nếu cần fallback khác
 
 const ProductShowcase: React.FC = () => {
   const [tab, setTab] = useState<TabKey>('featured');
-  const [items, setItems] = useState<Terrarium[]>([]);
+  const [items, setItems] = useState<Partial<Terrarium>[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const mountedRef = useRef(true);
@@ -40,14 +46,38 @@ const ProductShowcase: React.FC = () => {
     (async () => {
       try {
         setLoading(true);
-        const list = await getAllTerrariums(1, FETCH_SIZE, true, 'TerrariumImages');
+        let list: Partial<Terrarium>[] = [];
+        if (tab === 'featured') {
+          list = await getFeaturedTerrariums(3);
+        } else if (tab === 'bestSelling') {
+          list = await getBestSellers(7, 3);
+        } else {
+          // Top-rated có thể đang lỗi → fallback sang newest rồi sort theo rating
+          try {
+            list = await getTopRatedTerrariums(3);
+          } catch {
+            const newest = await getNewestTerrariums(24);
+            list = [...(newest || [])]
+              .sort((a: any, b: any) => {
+                const ar = Number(a?.averageRating ?? 0);
+                const br = Number(b?.averageRating ?? 0);
+                if (br !== ar) return br - ar;
+                const ac = Number(a?.feedbackCount ?? 0);
+                const bc = Number(b?.feedbackCount ?? 0);
+                return bc - ac;
+              })
+              .slice(0, 3);
+          }
+        }
         if (!mountedRef.current) return;
         setItems((list || []).filter((i: any) => i?.terrariumId));
       } finally {
         if (mountedRef.current) setLoading(false);
       }
     })();
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, [tab]);
 
   useEffect(() => {
@@ -67,31 +97,8 @@ const ProductShowcase: React.FC = () => {
     return () => gsapContext.current?.revert();
   }, [loading, items, tab]);
 
-  const top3 = useMemo(() => {
-    const arr = [...items];
-    if (tab === 'featured') {
-      arr.sort((a, b) => {
-        const af = (a as any).isFeatured ?? (a as any).isFeature ?? false;
-        const bf = (b as any).isFeatured ?? (b as any).isFeature ?? false;
-        if (af !== bf) return bf ? 1 : -1;
-        const ad = (a as any).createdAt ? +new Date((a as any).createdAt) : 0;
-        const bd = (b as any).createdAt ? +new Date((b as any).createdAt) : 0;
-        return bd - ad;
-      });
-    } else if (tab === 'bestSelling') {
-      arr.sort((a, b) => ((b as any).soldQuantity ?? 0) - ((a as any).soldQuantity ?? 0));
-    } else {
-      arr.sort((a, b) => {
-        const ar = (a as any).averageRating ?? (a as any).rating ?? 0;
-        const br = (b as any).averageRating ?? (b as any).rating ?? 0;
-        if (br !== ar) return br - ar;
-        const ac = (a as any).ratingCount ?? (a as any).reviewCount ?? 0;
-        const bc = (b as any).ratingCount ?? (b as any).reviewCount ?? 0;
-        return bc - ac;
-      });
-    }
-    return arr.slice(0, 3);
-  }, [items, tab]);
+  // BE đã trả đúng top; chỉ cần lấy ra 3 item
+  const top3 = useMemo(() => items.slice(0, 3), [items]);
 
   const tabData = [
     { key: 'featured', label: 'Terrarium Nổi Bật', icon: <StarFilled />, color: 'from-emerald-500 to-green-600' },
@@ -154,14 +161,19 @@ const ProductShowcase: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(loading ? Array.from({ length: 3 }) : top3).map((raw, idx) => {
-              const t = raw as Terrarium;
-              const image = t?.terrariumImages?.[0]?.imageUrl || miniForest;
-              const rating = (t as any)?.averageRating ?? (t as any)?.rating ?? 4.5;
-              const purchases = (t as any)?.soldQuantity ?? (t as any)?.purchases ?? 0;
+              const t = raw as Partial<Terrarium>;
+              const image =
+                (t as any)?.thumbnailUrl ||
+                (t as any)?.terrariumImages?.[0]?.imageUrl ||
+                miniForest;
+              const rating = Number((t as any)?.averageRating ?? (t as any)?.rating ?? 0);
+              const purchases = Number(
+                (t as any)?.purchaseCount ?? (t as any)?.soldQuantity ?? (t as any)?.purchases ?? 0
+              );
 
               return (
                 <div
-                  key={loading ? idx : t.terrariumId}
+                  key={loading ? idx : (t?.terrariumId ?? idx)}
                   ref={(el) => { cardsRef.current[idx] = el; }}
                   className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 border border-green-50 opacity-0"
                 >
@@ -180,7 +192,7 @@ const ProductShowcase: React.FC = () => {
                       <div className="relative h-48 bg-gradient-to-br from-green-50 to-emerald-50 rounded-t-2xl overflow-hidden">
                         <img
                           src={image}
-                          alt={t.terrariumName}
+                          alt={t?.terrariumName || 'Terrarium'}
                           className="w-full h-full object-cover transition-transform duration-200 hover:scale-110"
                           onError={(e) => { (e.currentTarget as HTMLImageElement).src = miniForest; }}
                         />
@@ -192,12 +204,12 @@ const ProductShowcase: React.FC = () => {
 
                       <div className="p-5">
                         <h3 className="font-bold text-lg text-gray-800 mb-2 line-clamp-2">
-                          {t.terrariumName}
+                          {t?.terrariumName}
                         </h3>
 
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-emerald-600 font-bold text-lg">
-                            {t.minPrice.toLocaleString('vi-VN')} ₫
+                            {Number(t?.minPrice ?? 0).toLocaleString('vi-VN')} ₫
                           </div>
                           <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-full flex items-center gap-1">
                             <HeartFilled className="text-emerald-500" />
@@ -206,15 +218,16 @@ const ProductShowcase: React.FC = () => {
                         </div>
 
                         <div className="flex items-center justify-between mb-4">
-                          <Rate allowHalf disabled value={Number(rating)} className="text-sm" />
-                          <span className="text-xs text-gray-500">({Number(rating).toFixed(1)}/5)</span>
+                          <Rate allowHalf disabled value={rating} className="text-sm" />
+                          <span className="text-xs text-gray-500">({rating.toFixed(1)}/5)</span>
                         </div>
 
                         <Button
                           type="primary"
                           className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 border-none font-semibold"
                           icon={<SearchOutlined />}
-                          onClick={() => navigate(`/terrarium/${t.terrariumId}`)}
+                          onClick={() => t?.terrariumId && navigate(`/terrarium/${t.terrariumId}`)}
+                          disabled={!t?.terrariumId}
                         >
                           Xem Chi Tiết
                         </Button>
