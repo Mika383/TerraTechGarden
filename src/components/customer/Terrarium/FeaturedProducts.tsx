@@ -1,7 +1,8 @@
 // src/components/customer/Home/NewestProducts.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { Row, Col } from 'antd';
-import { getAllTerrariums } from '@/api/terrarium';
+// 🔁 Đổi sang API newest
+import { getNewestTerrariums } from '@/api/terrarium';
 import { Terrarium } from '@/types/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -13,23 +14,17 @@ gsap.registerPlugin(ScrollTrigger);
 const PAGE_SIZE = 6; // số item hiển thị (3 cột x 2 hàng). Tuỳ ý: 6 hoặc 9
 
 const NewestProducts: React.FC = () => {
-  const [terrariums, setTerrariums] = useState<Terrarium[]>([]);
+  const [terrariums, setTerrariums] = useState<Partial<Terrarium>[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const gsapCtx = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
     (async () => {
-      // Chỉ include TerrariumImages để tránh lỗi 500 trên BE
-      const list = await getAllTerrariums(1, PAGE_SIZE, true, 'TerrariumImages');
-      const sorted = (list || [])
-        .filter((t: any) => t?.terrariumId)
-        .sort((a: any, b: any) => {
-          const ad = a?.createdAt ? +new Date(a.createdAt) : 0;
-          const bd = b?.createdAt ? +new Date(b.createdAt) : 0;
-          return bd - ad; // mới nhất trước
-        });
-      setTerrariums(sorted);
+      // Lấy trực tiếp newest từ BE
+      const list = await getNewestTerrariums(PAGE_SIZE);
+      const cleaned = (list || []).filter((t: any) => t?.terrariumId);
+      setTerrariums(cleaned);
     })();
   }, []);
 
@@ -78,30 +73,39 @@ const NewestProducts: React.FC = () => {
       </h2>
 
       <Row gutter={[24, 24]} justify="center">
-        {terrariums.map((item, index) => (
-          <Col xs={24} sm={12} md={8} key={item.terrariumId}>
-            <div
-              ref={(el) => {
-                cardRefs.current[index] = el;
-              }}
-              className="will-change-transform-opacity"
-            >
-              <TerrariumCard
-                id={item.terrariumId.toString()}
-                name={item.terrariumName}
-                description={item.description}
-                type={`#${item.terrariumId}`}
-                price={item.minPrice}
-                rating={4}
-                purchases={0}
-                image={item.terrariumImages?.[0]?.imageUrl || miniForest}
-                // không truyền environmentName để tránh yêu cầu include thêm
-              />
-            </div>
-          </Col>
-        ))}
+        {terrariums.map((item, index) => {
+          const image =
+            (item as any)?.thumbnailUrl ||
+            (item as any)?.terrariumImages?.[0]?.imageUrl ||
+            miniForest;
+
+          const rating = Number((item as any)?.averageRating ?? 0);
+          const purchases = Number((item as any)?.purchaseCount ?? 0);
+
+          return (
+            <Col xs={24} sm={12} md={8} key={item.terrariumId}>
+              <div
+                ref={(el) => {
+                  cardRefs.current[index] = el;
+                }}
+                className="will-change-transform-opacity"
+              >
+                <TerrariumCard
+                  id={String(item.terrariumId)}
+                  name={String(item.terrariumName)}
+                  description={(item as any)?.description}
+                  type={`#${item.terrariumId}`}
+                  price={Number(item.minPrice)}
+                  rating={rating}
+                  purchases={purchases}
+                  image={image}
+                  // không truyền environmentName để tránh yêu cầu include thêm
+                />
+              </div>
+            </Col>
+          );
+        })}
       </Row>
-      
     </div>
   );
 };
