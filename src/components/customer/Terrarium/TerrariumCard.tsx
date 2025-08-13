@@ -27,6 +27,9 @@ interface TerrariumCardProps {
   image: string;
   environmentName?: string;
   isNew?: boolean;
+
+  /** 👇 Thêm prop mới để hiển thị nhãn như “Mở hoàn toàn” */
+  tankMethodLabel?: string;
 }
 
 const TerrariumCard: React.FC<TerrariumCardProps> = ({
@@ -39,7 +42,8 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
   purchases,
   image,
   environmentName,
-  isNew = false
+  isNew = false,
+  tankMethodLabel,            // 👈 nhận prop mới
 }) => {
   const navigate = useNavigate();
 
@@ -106,11 +110,16 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
           {description || 'Một khu vườn mini tuyệt đẹp trong lọ thủy tinh, hoàn hảo để trang trí không gian sống.'}
         </p>
 
-        {/* Type tag */}
-        <div className="mb-3">
+        {/* Type + Tank method tags */}
+        <div className="mb-3 flex flex-wrap gap-2">
           <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-medium">
             {type}
           </span>
+          {tankMethodLabel && (
+            <span className="bg-green-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-medium border border-emerald-100">
+              {tankMethodLabel}
+            </span>
+          )}
         </div>
 
         {/* Price & purchases */}

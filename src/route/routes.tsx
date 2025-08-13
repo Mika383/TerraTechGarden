@@ -20,6 +20,7 @@ import PaymentSuccess from '@/pages/Customer/PaymentSuccess';
 import EditTerrariumVariant from '@/components/manager/TerrariumVariantEdit';
 import VoucherManagement from '@/pages/Admin/VoucherManagement';
 import MembershipManagement from '@/pages/Admin/MembershipManagement';
+import OrderDetail from '@/pages/Customer/OrderDetail';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -117,6 +118,7 @@ const AppRoutes = () => {
           >
             <Route index element={<Suspense fallback={<Loading />}><CustomerDashboard /></Suspense>} />
             <Route path="orders" element={<Suspense fallback={<Loading />}><Orders /></Suspense>} />
+            <Route path="order-detail/:orderId" element={<Suspense fallback={<Loading />}><OrderDetail /></Suspense>} />
             <Route path="notifications" element={<Suspense fallback={<Loading />}><Notifications /></Suspense>} />
             <Route path="favorites" element={<Suspense fallback={<Loading />}><Favorites /></Suspense>} />
             <Route path="wishlist" element={<Suspense fallback={<Loading />}><Wishlist /></Suspense>} />

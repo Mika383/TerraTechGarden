@@ -1,9 +1,7 @@
-// src/components/customer/Home/NewestProducts.tsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Row, Col } from 'antd';
-// 🔁 Đổi sang API newest
-import { getNewestTerrariums } from '@/api/terrarium';
-import { Terrarium } from '@/types/terrarium';
+import { getNewestTerrariums, getEnvironmentById, getTerrariumById } from '@/api/terrarium';
+import { Terrarium, Environment, TankMethod } from '@/types/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import TerrariumCard from './TerrariumCard';
@@ -11,20 +9,75 @@ import miniForest from '@/assets/image/1.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const PAGE_SIZE = 6; // số item hiển thị (3 cột x 2 hàng). Tuỳ ý: 6 hoặc 9
+const PAGE_SIZE = 6;
+
+// Cache đơn giản để tránh gọi lặp lại
+const envCache = new Map<number, string>(); // environmentId -> environmentName
+const tankMethodCache = new Map<number, string>(); // tankMethodId -> tankMethodLabel
+
+// Lấy nhãn tank method “đẹp” từ object
+const tankLabel = (tm?: Partial<TankMethod> | null) =>
+  (tm?.tankMethodName?.trim() ||
+    tm?.tankMethodType?.trim() ||
+    '').trim();
 
 const NewestProducts: React.FC = () => {
-  const [terrariums, setTerrariums] = useState<Partial<Terrarium>[]>([]);
+  const [terrariums, setTerrariums] = useState<Array<Partial<Terrarium> & {
+    environmentName?: string;
+    tankMethodLabel?: string;
+  }>>([]);
+
   const rootRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const gsapCtx = useRef<gsap.Context | null>(null);
 
   useEffect(() => {
     (async () => {
-      // Lấy trực tiếp newest từ BE
+      // 1) Lấy newest
       const list = await getNewestTerrariums(PAGE_SIZE);
-      const cleaned = (list || []).filter((t: any) => t?.terrariumId);
-      setTerrariums(cleaned);
+      const cleaned = (list || []).filter((t) => t?.terrariumId);
+
+      // 2) Enrich: lấy environmentName & tankMethodLabel giống trang Shop
+      const enriched = await Promise.all(
+        cleaned.map(async (raw) => {
+          const t = { ...raw };
+
+          // Environment name
+          let envName: string | undefined;
+          if (typeof t.environmentId === 'number') {
+            if (envCache.has(t.environmentId)) {
+              envName = envCache.get(t.environmentId);
+            } else {
+              try {
+                const env = await getEnvironmentById(t.environmentId);
+                envName = (env as Environment)?.environmentName;
+                if (envName) envCache.set(t.environmentId, envName);
+              } catch {}
+            }
+          }
+
+          // Tank method label
+          let tmLabel: string | undefined;
+          if (typeof t.tankMethodId === 'number') {
+            if (tankMethodCache.has(t.tankMethodId)) {
+              tmLabel = tankMethodCache.get(t.tankMethodId);
+            } else {
+              try {
+                // Lấy chi tiết terrarium (ít item nên N+1 ok) để phòng trường hợp thiếu field
+                // hoặc bạn có sẵn API get TankMethod by id thì thay vào đây
+                const full = await getTerrariumById(Number(t.terrariumId));
+                const tmObj = full?.tankMethod ?? { tankMethodId: t.tankMethodId, tankMethodName: undefined, tankMethodType: undefined };
+                tmLabel = tankLabel(tmObj);
+                if (tmLabel) tankMethodCache.set(Number(tmObj.tankMethodId), tmLabel);
+              } catch {}
+            }
+          }
+
+          return { ...t, environmentName: envName, tankMethodLabel: tmLabel };
+        })
+      );
+
+      setTerrariums(enriched);
     })();
   }, []);
 
@@ -85,9 +138,7 @@ const NewestProducts: React.FC = () => {
           return (
             <Col xs={24} sm={12} md={8} key={item.terrariumId}>
               <div
-                ref={(el) => {
-                  cardRefs.current[index] = el;
-                }}
+                ref={(el) => { cardRefs.current[index] = el; }}
                 className="will-change-transform-opacity"
               >
                 <TerrariumCard
@@ -99,7 +150,9 @@ const NewestProducts: React.FC = () => {
                   rating={rating}
                   purchases={purchases}
                   image={image}
-                  // không truyền environmentName để tránh yêu cầu include thêm
+                  /** 👇 Truyền thêm “học” từ Shop */
+                  environmentName={item.environmentName}          // ví dụ: "Rừng nhiệt đới"
+                  tankMethodLabel={item.tankMethodLabel}          // ví dụ: "Mở hoàn toàn"
                 />
               </div>
             </Col>

@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Rate } from 'antd';
 import { useNavigate } from 'react-router-dom';
-// 🔁 Đổi sang các API mới theo tab
 import {
   getFeaturedTerrariums,
   getBestSellers,
   getTopRatedTerrariums,
   getNewestTerrariums,
+  getEnvironmentById,
+  getTerrariumById,
 } from '@/api/terrarium';
-import type { Terrarium } from '@/types/terrarium';
+import type { Terrarium, Environment, TankMethod } from '@/types/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
-// Ant Design Icons
 import {
   StarFilled,
   FireOutlined,
@@ -29,11 +29,15 @@ import miniForest from '@/assets/image/1.jpg';
 gsap.registerPlugin(ScrollTrigger);
 
 type TabKey = 'featured' | 'bestSelling' | 'topRated';
-// const FETCH_SIZE = 24; // không còn dùng getAll, giữ lại nếu cần fallback khác
+
+const envCache = new Map<number, string>();
+const tankMethodCache = new Map<number, string>();
+const tankLabel = (tm?: Partial<TankMethod> | null) =>
+  (tm?.tankMethodName?.trim() || tm?.tankMethodType?.trim() || '').trim();
 
 const ProductShowcase: React.FC = () => {
   const [tab, setTab] = useState<TabKey>('featured');
-  const [items, setItems] = useState<Partial<Terrarium>[]>([]);
+  const [items, setItems] = useState<Array<Partial<Terrarium> & { environmentName?: string; tankMethodLabel?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const mountedRef = useRef(true);
@@ -52,7 +56,6 @@ const ProductShowcase: React.FC = () => {
         } else if (tab === 'bestSelling') {
           list = await getBestSellers(7, 3);
         } else {
-          // Top-rated có thể đang lỗi → fallback sang newest rồi sort theo rating
           try {
             list = await getTopRatedTerrariums(3);
           } catch {
@@ -69,15 +72,50 @@ const ProductShowcase: React.FC = () => {
               .slice(0, 3);
           }
         }
+
+        // Enrich để có environmentName & tankMethodLabel giống Shop
+        const enriched = await Promise.all(
+          (list || []).filter((i) => i?.terrariumId).map(async (raw) => {
+            const t = { ...raw };
+
+            let envName: string | undefined;
+            if (typeof t.environmentId === 'number') {
+              if (envCache.has(t.environmentId)) {
+                envName = envCache.get(t.environmentId);
+              } else {
+                try {
+                  const env = await getEnvironmentById(t.environmentId);
+                  envName = (env as Environment)?.environmentName;
+                  if (envName) envCache.set(t.environmentId, envName);
+                } catch {}
+              }
+            }
+
+            let tmLabel: string | undefined;
+            if (typeof t.tankMethodId === 'number') {
+              if (tankMethodCache.has(t.tankMethodId)) {
+                tmLabel = tankMethodCache.get(t.tankMethodId);
+              } else {
+                try {
+                  const full = await getTerrariumById(Number(t.terrariumId));
+                  const tmObj = full?.tankMethod ?? { tankMethodId: t.tankMethodId, tankMethodName: undefined, tankMethodType: undefined };
+                  tmLabel = tankLabel(tmObj);
+                  if (tmLabel) tankMethodCache.set(Number(tmObj.tankMethodId), tmLabel);
+                } catch {}
+              }
+            }
+
+            return { ...t, environmentName: envName, tankMethodLabel: tmLabel };
+          })
+        );
+
         if (!mountedRef.current) return;
-        setItems((list || []).filter((i: any) => i?.terrariumId));
+        setItems(enriched);
       } finally {
         if (mountedRef.current) setLoading(false);
       }
     })();
-    return () => {
-      mountedRef.current = false;
-    };
+    return () => { mountedRef.current = false; };
   }, [tab]);
 
   useEffect(() => {
@@ -86,18 +124,13 @@ const ProductShowcase: React.FC = () => {
     gsapContext.current = gsap.context(() => {
       cardsRef.current.forEach((card, index) => {
         if (!card) return;
-        gsap.fromTo(
-          card,
-          { y: 20, opacity: 0 },
-          { y: 0, opacity: 1, duration: 0.5, delay: index * 0.1, ease: 'power2.out' }
-        );
+        gsap.fromTo(card, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: index * 0.1, ease: 'power2.out' });
       });
     }, sectionRef);
 
     return () => gsapContext.current?.revert();
   }, [loading, items, tab]);
 
-  // BE đã trả đúng top; chỉ cần lấy ra 3 item
   const top3 = useMemo(() => items.slice(0, 3), [items]);
 
   const tabData = [
@@ -161,15 +194,13 @@ const ProductShowcase: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(loading ? Array.from({ length: 3 }) : top3).map((raw, idx) => {
-              const t = raw as Partial<Terrarium>;
+              const t = raw as Partial<Terrarium> & { environmentName?: string; tankMethodLabel?: string };
               const image =
                 (t as any)?.thumbnailUrl ||
                 (t as any)?.terrariumImages?.[0]?.imageUrl ||
                 miniForest;
               const rating = Number((t as any)?.averageRating ?? (t as any)?.rating ?? 0);
-              const purchases = Number(
-                (t as any)?.purchaseCount ?? (t as any)?.soldQuantity ?? (t as any)?.purchases ?? 0
-              );
+              const purchases = Number((t as any)?.purchaseCount ?? (t as any)?.soldQuantity ?? (t as any)?.purchases ?? 0);
 
               return (
                 <div
@@ -196,16 +227,26 @@ const ProductShowcase: React.FC = () => {
                           className="w-full h-full object-cover transition-transform duration-200 hover:scale-110"
                           onError={(e) => { (e.currentTarget as HTMLImageElement).src = miniForest; }}
                         />
-                        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1">
-                          <EnvironmentOutlined style={{ fontSize: 16 }} className="text-emerald-700" />
-                          <span className="text-xs font-medium text-emerald-700">Terrarium</span>
-                        </div>
+                        {/* 👇 Badge môi trường học từ Shop */}
+                        {!!t?.environmentName && (
+                          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1">
+                            <EnvironmentOutlined style={{ fontSize: 16 }} className="text-emerald-700" />
+                            <span className="text-xs font-medium text-emerald-700">{t.environmentName}</span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="p-5">
                         <h3 className="font-bold text-lg text-gray-800 mb-2 line-clamp-2">
                           {t?.terrariumName}
                         </h3>
+
+                        {/* 👇 Tag tank method (VD: “Mở hoàn toàn”) */}
+                        {!!t?.tankMethodLabel && (
+                          <div className="inline-block text-xs px-2 py-1 rounded-full bg-green-50 text-emerald-700 border border-emerald-100 mb-2">
+                            {t.tankMethodLabel}
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-emerald-600 font-bold text-lg">
@@ -239,7 +280,6 @@ const ProductShowcase: React.FC = () => {
             })}
           </div>
 
-          {/* View all */}
           <div className="text-center mt-8">
             <Button
               size="large"
