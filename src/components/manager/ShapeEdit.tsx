@@ -66,7 +66,7 @@ const ShapeEdit: React.FC = () => {
       try {
         setInitialLoading(true);
         const token = localStorage.getItem('authToken'); // Retrieve token from localStorage
-        const response = await fetch(`https://terarium.shop/api/Shape/get-${id}`, {
+        const response = await fetch(`https://terarium.shop/api/Shape/get/${id}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
