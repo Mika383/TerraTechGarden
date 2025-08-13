@@ -94,6 +94,12 @@ const Orders: React.FC = () => {
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedOrders = filteredOrders.slice(startIndex, startIndex + pageSize);
 
+  // ✨ Hàm xử lý click vào order để chuyển đến trang chi tiết
+  const handleOrderClick = (orderId: number) => {
+    console.log(`Navigating to order detail: ${orderId}`);
+    navigate(`/order-detail/${orderId}`);
+  };
+
   return (
     <div className="container mx-auto py-8 px-6">
       <div className="flex justify-between items-center mb-6">
@@ -149,7 +155,7 @@ const Orders: React.FC = () => {
                       : ""
                   }
                   status={getStatusVN(order.status)}
-                  onClick={() => navigate(`/order/${order.orderId}`)}
+                  onClick={() => handleOrderClick(order.orderId)}
                 />
               );
             })
@@ -172,7 +178,6 @@ const Orders: React.FC = () => {
           }}
           showSizeChanger
         />
-
         </div>
       )}
     </div>
