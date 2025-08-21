@@ -13,7 +13,9 @@ import {
   PlusOutlined,
   ArrowLeftOutlined,
   CheckOutlined,
-  EllipsisOutlined
+  EllipsisOutlined,
+  PictureOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 
 interface User {
@@ -60,6 +62,41 @@ interface ApiResponse<T> {
   data: T;
 }
 
+const ImageMessage: React.FC<{ src: string; alt?: string; maxHeight?: string }> = ({ src, alt = "Shared image", maxHeight = '300px' }) => {
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <div className="relative">
+      {imageLoading && !imageError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+        </div>
+      )}
+      {imageError ? (
+        <div className="bg-gray-100 rounded-lg p-4 text-center">
+          <span className="text-gray-500 text-sm">Không thể tải hình ảnh</span>
+        </div>
+      ) : (
+        <img 
+          src={src} 
+          alt={alt}
+          className={`max-w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity ${
+            imageLoading ? 'opacity-0' : 'opacity-100'
+          }`}
+          onLoad={() => setImageLoading(false)}
+          onError={() => {
+            setImageLoading(false);
+            setImageError(true);
+          }}
+          onClick={() => window.open(src, '_blank')}
+          style={{ maxHeight, border: 'none', outline: 'none' }} // Removed green outline and border
+        />
+      )}
+    </div>
+  );
+};
+
 const ChatWithStaff: React.FC = () => {
   const navigate = useNavigate();
   const [staffUsers, setStaffUsers] = useState<User[]>([]);
@@ -74,16 +111,18 @@ const ChatWithStaff: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set([1, 3]));
   const [hasLoadedChats, setHasLoadedChats] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getAuthToken = () => {
     return localStorage.getItem('authToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidW5pcXVlX25hbWUiOiJhZG1pbiIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwiZW1haWwiOiJzdHJpbmdAZ21haWwuY29tIiwiZnVsbE5hbWUiOiJOWFF1YW5nbmciLCJwaG9uZU51bWJlciI6InN0cmluZyIsImdlbmRlciI6Im1hbGUiLCJzdGF0dXMiOiJBY3RpdmUiLCJleHAiOjE3NTQ1NzkxNjEsImlzcyI6IlRlcnJhcml1bUdhcmRlblRlY2hBUEkiLCJhdWQiOiJUZXJyYXJpdW1HYXJkZW5UZWNoQ2xpZW50In0.acoY5Elcd1FnqR8bIzQPso52QkxkIN2uPfQocV8PvfY';
   };
 
-  // Hàm decode JWT để lấy thông tin user
   const decodeToken = (token: string) => {
     try {
       const base64Url = token.split('.')[1];
@@ -98,7 +137,6 @@ const ChatWithStaff: React.FC = () => {
     }
   };
 
-  // Lấy thông tin user từ token khi component mount
   useEffect(() => {
     const token = getAuthToken();
     if (token) {
@@ -112,18 +150,15 @@ const ChatWithStaff: React.FC = () => {
     }
   }, []);
 
-  // Hàm xác định tên cuộc trò chuyện dựa trên fullName từ token
   const getChatDisplayName = (chat: Chat) => {
     if (chat.user1Name === currentUserFullName) {
       return chat.user2Name;
     } else if (chat.user2Name === currentUserFullName) {
       return chat.user1Name;
     }
-    // Fallback nếu không khớp với fullName từ token
     return chat.user1Id === currentUserId ? chat.user2Name : chat.user1Name;
   };
 
-  // Hàm xác định thông tin user khác trong chat
   const getOtherUser = (chat: Chat) => {
     if (chat.user1Name === currentUserFullName) {
       return {
@@ -138,7 +173,6 @@ const ChatWithStaff: React.FC = () => {
         role: chat.user1Role
       };
     }
-    // Fallback nếu không khớp với fullName từ token
     return chat.user1Id === currentUserId ? 
       { 
         id: chat.user2Id,
@@ -152,7 +186,6 @@ const ChatWithStaff: React.FC = () => {
       };
   };
 
-  // Hàm scroll xuống cuối tin nhắn - chỉ trong khung chat
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
@@ -162,7 +195,6 @@ const ChatWithStaff: React.FC = () => {
     }
   };
 
-  // Scroll xuống khi có tin nhắn mới
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -179,7 +211,78 @@ const ChatWithStaff: React.FC = () => {
     adjustTextareaHeight();
   }, [newMessage]);
 
-  // Fetch my chats - chỉ load một lần
+  const isImageUrl = (content: string) => {
+    return /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(content) ||
+           (content.includes('res.cloudinary.com') && content.includes('/image/upload/')) ||
+           (content.startsWith('http') && (content.includes('/image/') || content.includes('image')));
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0) return;
+    await handleImageUploadDirect(event.target.files[0]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+    if (files.length > 0) await handleImageUploadDirect(files[0]);
+  };
+
+  const handleImageUploadDirect = async (file: File) => {
+    if (!selectedChat || loading) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File quá lớn! Vui lòng chọn file nhỏ hơn 5MB.');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chỉ chọn file hình ảnh!');
+      return;
+    }
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('File', file);
+
+    try {
+      const response = await fetch('https://terarium.shop/api/Image/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const imageUrl = result.url;
+        if (!imageUrl) throw new Error('No URL in response');
+        setPendingImageUrl(imageUrl);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Upload hình ảnh thất bại!');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Có lỗi xảy ra khi upload hình ảnh!');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchMyChats = async () => {
       try {
@@ -213,7 +316,6 @@ const ChatWithStaff: React.FC = () => {
     return () => clearInterval(chatListInterval);
   }, []);
 
-  // Fetch danh sách staff - chỉ gọi khi đã load chats và không có chat nào
   useEffect(() => {
     const fetchAvailableUsers = async () => {
       if (!hasLoadedChats || myChats.length > 0) {
@@ -245,12 +347,12 @@ const ChatWithStaff: React.FC = () => {
 
   const handleOpenChat = async (chat: Chat) => {
     setSelectedChat(chat);
+    setPendingImageUrl(null);
     await fetchMessages(chat.chatId);
     await markChatAsRead(chat.chatId);
     startMessagePolling(chat.chatId);
   };
 
-  // Tạo hoặc mở chat với staff
   const handleChatWithStaff = async (staff: User) => {
     setLoading(true);
     try {
@@ -283,7 +385,6 @@ const ChatWithStaff: React.FC = () => {
     }
   };
 
-  // Hàm refresh danh sách chats
   const refreshMyChats = async () => {
     try {
       const response = await fetch('https://terarium.shop/api/Chat/my-chats', {
@@ -307,7 +408,6 @@ const ChatWithStaff: React.FC = () => {
     }
   };
 
-  // Mở chat đã có
   const openExistingChat = async (chatId: number) => {
     try {
       const chat = myChats.find(c => c.chatId === chatId);
@@ -345,7 +445,11 @@ const ChatWithStaff: React.FC = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || loading) return;
+    let content = newMessage.trim();
+    if (pendingImageUrl) {
+      content = content ? `${content}\n${pendingImageUrl}` : pendingImageUrl;
+    }
+    if (!content || !selectedChat || loading) return;
 
     const tempMessage: Message = {
       messageId: Date.now(),
@@ -353,7 +457,7 @@ const ChatWithStaff: React.FC = () => {
       senderId: currentUserId,
       senderName: currentUserFullName || 'Bạn',
       senderRole: 'Customer',
-      content: newMessage.trim(),
+      content,
       sentAt: new Date().toISOString(),
       isRead: false,
       isDeleted: false
@@ -361,6 +465,7 @@ const ChatWithStaff: React.FC = () => {
 
     setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
+    setPendingImageUrl(null);
     setLoading(true);
 
     try {
@@ -372,7 +477,7 @@ const ChatWithStaff: React.FC = () => {
         },
         body: JSON.stringify({
           chatId: selectedChat.chatId,
-          content: tempMessage.content
+          content
         }),
       });
 
@@ -397,10 +502,13 @@ const ChatWithStaff: React.FC = () => {
         });
         
         setMyChats(sortedChats);
+      } else {
+        throw new Error('Failed to send message');
       }
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => prev.filter(msg => msg.messageId !== tempMessage.messageId));
+      alert('Gửi tin nhắn thất bại!');
     } finally {
       setLoading(false);
     }
@@ -451,9 +559,9 @@ const ChatWithStaff: React.FC = () => {
     }
     setSelectedChat(null);
     setMessages([]);
+    setPendingImageUrl(null);
   };
 
-  // Cập nhật hàm formatTime để sử dụng múi giờ Việt Nam
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('vi-VN', {
@@ -463,73 +571,48 @@ const ChatWithStaff: React.FC = () => {
     });
   };
 
-  // Cập nhật hàm formatChatTime để sử dụng múi giờ Việt Nam
   const formatChatTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
     
-    // Chuyển đổi sang múi giờ Việt Nam
-    const vnDate = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
-    const vnNow = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+    const vnDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
     
-    const diffTime = vnNow.getTime() - vnDate.getTime();
-    const diffMinutes = Math.floor(diffTime / (1000 * 60));
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
+    const diffMinutes = Math.floor((vnNow.getTime() - vnDate.getTime()) / (1000 * 60));
+    
     if (diffMinutes < 1) return 'Vừa xong';
     if (diffMinutes < 60) return `${diffMinutes}p`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays < 7) return `${diffDays} ngày`;
-    
-    return vnDate.toLocaleDateString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      timeZone: 'Asia/Ho_Chi_Minh'
-    });
+    if (diffMinutes < 24 * 60) return `${Math.floor(diffMinutes / 60)}h`;
+    if (diffMinutes < 7 * 24 * 60) return `${Math.floor(diffMinutes / (24 * 60))} ngày`;
+    return vnDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   };
 
   const getUnreadCount = (chat: Chat) => {
     return chat.lastMessage && !chat.lastMessage.isRead && chat.lastMessage.senderId !== currentUserId ? 1 : 0;
   };
 
-  const isOnline = (userId: number) => {
-    return onlineUsers.has(userId);
-  };
+  const isOnline = (userId: number) => onlineUsers.has(userId);
 
-  // Hàm kiểm tra tin nhắn có phải của user hiện tại không
   const isMyMessage = (message: Message) => {
     return currentUserFullName && message.senderName === currentUserFullName;
   };
 
   const filteredChats = myChats.filter(chat => {
-    const displayName = getChatDisplayName(chat);
-    return displayName.toLowerCase().includes(searchTerm.toLowerCase());
+    const otherUserName = getChatDisplayName(chat);
+    return otherUserName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const filteredStaff = staffUsers.filter(staff =>
-    staff.fullName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  if (!hasLoadedChats) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải...</p>
-        </div>
-      </div>
-    );
-  }
+  const filteredStaff = staffUsers.filter(staff => {
+    return staff.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           staff.username.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   if (selectedChat) {
     const otherUser = getOtherUser(selectedChat);
 
     return (
       <div className="flex h-screen bg-white">
-        {/* Sidebar */}
         <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-          {/* Sidebar Header */}
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xl font-bold text-gray-900">Chats</h2>
@@ -549,12 +632,11 @@ const ChatWithStaff: React.FC = () => {
                 placeholder="Tìm kiếm trong Messenger"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-full border-none outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-full border-none outline-none focus:bg-white focus:ring-2 focus:ring-green-500 text-sm"
               />
             </div>
           </div>
           
-          {/* Chat List */}
           <div className="flex-1 overflow-y-auto">
             {filteredChats.map((chat) => {
               const otherUserInList = getOtherUser(chat);
@@ -566,7 +648,7 @@ const ChatWithStaff: React.FC = () => {
                   key={chat.chatId}
                   onClick={() => handleOpenChat(chat)}
                   className={`flex items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedChat?.chatId === chat.chatId ? 'bg-blue-50' : ''
+                    selectedChat?.chatId === chat.chatId ? 'bg-green-50' : ''
                   }`}
                 >
                   <div className="relative">
@@ -574,7 +656,7 @@ const ChatWithStaff: React.FC = () => {
                       {displayName.charAt(0).toUpperCase()}
                     </div>
                     {isOnline(otherUserInList.id) && (
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                     )}
                   </div>
                   
@@ -595,20 +677,20 @@ const ChatWithStaff: React.FC = () => {
                             {chat.lastMessage.senderId === currentUserId && (
                               <div className="flex-shrink-0">
                                 <CheckOutlined className={`w-3 h-3 ${
-                                  chat.lastMessage.isRead ? 'text-blue-500' : 'text-gray-400'
+                                  chat.lastMessage.isRead ? 'text-green-500' : 'text-gray-400'
                                 }`} />
                               </div>
                             )}
                             <span className={`text-sm truncate ${
                               unreadCount > 0 ? 'text-gray-900 font-semibold' : 'text-gray-600'
                             }`}>
-                              {chat.lastMessage.content}
+                              {isImageUrl(chat.lastMessage.content) ? '[Hình ảnh]' : chat.lastMessage.content}
                             </span>
                           </>
                         )}
                       </div>
                       {unreadCount > 0 && (
-                        <div className="w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0 ml-2">
+                        <div className="w-5 h-5 bg-green-600 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0 ml-2">
                           {unreadCount}
                         </div>
                       )}
@@ -617,49 +699,10 @@ const ChatWithStaff: React.FC = () => {
                 </div>
               );
             })}
-
-            {/* Available Staff for New Chats */}
-            {filteredStaff.length > 0 && (
-              <>
-                <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-t">
-                  Staff có sẵn
-                </div>
-                {filteredStaff.map((staff) => (
-                  <div
-                    key={`staff-${staff.userId}`}
-                    onClick={() => handleChatWithStaff(staff)}
-                    className="flex items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="relative">
-                      <div className="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                        {staff.fullName.charAt(0).toUpperCase()}
-                      </div>
-                      {staff.status === 'Active' && (
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 ml-3 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate text-sm">
-                        {staff.fullName}
-                      </h3>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-600">{staff.roleName}</span>
-                        {!staff.hasExistingChat && (
-                          <span className="text-xs text-blue-600 font-medium">Chat mới</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
           </div>
         </div>
 
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col">
-          {/* Chat Header */}
+        <div className="flex-1 flex flex-col relative">
           <div className="bg-white border-b border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -669,29 +712,51 @@ const ChatWithStaff: React.FC = () => {
                 >
                   <ArrowLeftOutlined className="w-5 h-5" />
                 </button>
-                
                 <div className="relative">
                   <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold">
                     {otherUser.name.charAt(0).toUpperCase()}
                   </div>
                   {isOnline(otherUser.id) && (
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                   )}
                 </div>
-                
                 <div>
-                  <h3 className="font-semibold text-gray-900">{otherUser.name}</h3>
+                  <h2 className="font-semibold text-gray-900">{otherUser.name}</h2>
                   <p className="text-xs text-gray-500">{otherUser.role}</p>
                 </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
+                  <PhoneOutlined className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
+                  <VideoCameraOutlined className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
+                  <InfoCircleOutlined className="w-5 h-5" />
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Messages */}
           <div 
-              ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto p-4 bg-gray-50"
-            >
+            ref={messagesContainerRef}
+            className={`flex-1 overflow-y-auto p-4 bg-gray-50 relative ${
+              dragOver ? 'bg-green-50 border-2 border-dashed border-green-300' : ''
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {dragOver && (
+              <div className="absolute inset-0 flex items-center justify-center bg-green-50 bg-opacity-90 z-10">
+                <div className="text-center">
+                  <PictureOutlined className="text-4xl text-green-600 mb-2" />
+                  <p className="text-green-600 font-semibold">Thả hình ảnh để gửi</p>
+                </div>
+              </div>
+            )}
+            
             <div className="max-w-4xl mx-auto">
               {messages.map((message, index) => {
                 const messageIsMyMessage = isMyMessage(message);
@@ -699,6 +764,14 @@ const ChatWithStaff: React.FC = () => {
                 const isLastInGroup = !nextMessage || 
                   nextMessage.senderName !== message.senderName ||
                   (new Date(nextMessage.sentAt).getTime() - new Date(message.sentAt).getTime()) > 300000;
+
+                const isImage = isImageUrl(message.content);
+                let bubbleClass = `rounded-2xl ${isLastInGroup ? (messageIsMyMessage ? 'rounded-br-md' : 'rounded-bl-md') : ''}`;
+                if (!isImage) {
+                  bubbleClass += ` px-4 py-2 ${messageIsMyMessage ? 'bg-green-600 text-white' : 'bg-white text-gray-900 border border-gray-200'}`;
+                } else {
+                  bubbleClass += ' p-0';
+                }
 
                 return (
                   <div
@@ -717,18 +790,12 @@ const ChatWithStaff: React.FC = () => {
                         </div>
                       )}
                       
-                      <div
-                        className={`px-4 py-2 rounded-2xl ${
-                          messageIsMyMessage
-                            ? 'bg-green-600 text-white'
-                            : 'bg-white text-gray-900 border border-gray-200'
-                        } ${
-                          isLastInGroup 
-                            ? messageIsMyMessage ? 'rounded-br-md' : 'rounded-bl-md'
-                            : ''
-                        }`}
-                      >
-                        <p className="text-sm leading-relaxed">{message.content}</p>
+                      <div className={bubbleClass}>
+                        {isImage ? (
+                          <ImageMessage src={message.content} alt="Shared image" />
+                        ) : (
+                          <p className="text-sm leading-relaxed">{message.content}</p>
+                        )}
                       </div>
                       
                       {isLastInGroup && (
@@ -766,14 +833,53 @@ const ChatWithStaff: React.FC = () => {
             </div>
           </div>
 
-          {/* Message Input */}
           <div className="bg-white border-t border-gray-200 p-4">
             <div className="max-w-4xl mx-auto">
+              {pendingImageUrl && (
+                <div className="mb-3 p-3 bg-gray-100 rounded-xl relative max-w-xs">
+                  <ImageMessage src={pendingImageUrl} alt="Image preview" maxHeight="150px" />
+                  <button 
+                    onClick={() => setPendingImageUrl(null)}
+                    className="absolute top-1 right-1 p-1 bg-white rounded-full text-gray-600 hover:text-red-500 shadow-sm"
+                  >
+                    <CloseOutlined className="w-4 h-4" />
+                  </button>
+                  <p className="text-xs text-gray-600 mt-1">Hình ảnh xem trước - Nhấn gửi để chia sẻ</p>
+                </div>
+              )}
               <div className="flex items-end space-x-3">
-                <button className="p-2 text-green-600 hover:bg-green-50 rounded-full flex-shrink-0">
-                  <PlusOutlined className="w-5 h-5" />
-                </button>
-                
+                <div className="flex items-center space-x-2">
+                  <button 
+                    className={`p-2 rounded-full flex-shrink-0 transition-colors ${
+                      loading ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:bg-green-50'
+                    }`}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={loading}
+                    title="Gửi hình ảnh"
+                  >
+                    {loading ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
+                    ) : (
+                      <PictureOutlined className="w-5 h-5" />
+                    )}
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    className="hidden"
+                    disabled={loading}
+                  />
+                  <button 
+                    className={`p-2 rounded-full flex-shrink-0 transition-colors ${
+                      loading ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:bg-green-50'
+                    }`}
+                    disabled={loading}
+                  >
+                    <PlusOutlined className="w-5 h-5" />
+                  </button>
+                </div>
                 <div className="flex-1 relative">
                   <textarea
                     ref={textareaRef}
@@ -790,7 +896,7 @@ const ChatWithStaff: React.FC = () => {
                   </button>
                 </div>
                 
-                {newMessage.trim() ? (
+                {(newMessage.trim() || pendingImageUrl) ? (
                   <button
                     onClick={handleSendMessage}
                     disabled={loading}
@@ -811,12 +917,10 @@ const ChatWithStaff: React.FC = () => {
     );
   }
 
-  // Main chat list view (when no chat is selected)
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white shadow-sm">
-          {/* Header */}
           <div className="border-b border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -837,7 +941,6 @@ const ChatWithStaff: React.FC = () => {
             </div>
           </div>
 
-          {/* Search Bar */}
           <div className="p-6 border-b border-gray-200">
             <div className="relative max-w-md">
               <SearchOutlined className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -851,7 +954,6 @@ const ChatWithStaff: React.FC = () => {
             </div>
           </div>
 
-          {/* Existing Chats */}
           {myChats.length > 0 && (
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuộc trò chuyện của bạn</h3>
@@ -901,7 +1003,7 @@ const ChatWithStaff: React.FC = () => {
                                 <span className={`text-gray-600 truncate ${
                                   unreadCount > 0 ? 'font-semibold text-gray-900' : ''
                                 }`}>
-                                  {chat.lastMessage.content}
+                                  {isImageUrl(chat.lastMessage.content) ? '[Hình ảnh]' : chat.lastMessage.content}
                                 </span>
                               </>
                             )}
@@ -920,7 +1022,6 @@ const ChatWithStaff: React.FC = () => {
             </div>
           )}
 
-          {/* Available Staff */}
           {(myChats.length === 0 || searchTerm) && (
             <div className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">

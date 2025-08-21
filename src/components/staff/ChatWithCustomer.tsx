@@ -561,6 +561,14 @@ const ChatWithCustomer: React.FC = () => {
                   nextMessage.senderName !== message.senderName ||
                   (new Date(nextMessage.sentAt).getTime() - new Date(message.sentAt).getTime()) > 300000;
 
+                const isImage = isImageUrl(message.content);
+                let bubbleClass = `rounded-2xl ${isLastInGroup ? (messageIsMyMessage ? 'rounded-br-md' : 'rounded-bl-md') : ''}`;
+                if (!isImage) {
+                  bubbleClass += ` px-4 py-2 ${messageIsMyMessage ? 'bg-blue-600 text-white' : 'bg-white text-gray-900 border border-gray-200'}`;
+                } else {
+                  bubbleClass += ' p-0';
+                }
+
                 return (
                   <div
                     key={message.messageId}
@@ -577,14 +585,8 @@ const ChatWithCustomer: React.FC = () => {
                           <span className="text-xs text-gray-600 font-medium">{message.senderName}</span>
                         </div>
                       )}
-                      <div
-                        className={`px-4 py-2 rounded-2xl ${
-                          messageIsMyMessage
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white text-gray-900 border border-gray-200'
-                        } ${isLastInGroup ? (messageIsMyMessage ? 'rounded-br-md' : 'rounded-bl-md') : ''}`}
-                      >
-                        {isImageUrl(message.content) ? (
+                      <div className={bubbleClass}>
+                        {isImage ? (
                           <ImageMessage src={message.content} alt="Shared image" />
                         ) : (
                           <p className="text-sm leading-relaxed">{message.content}</p>
@@ -689,7 +691,7 @@ const ChatWithCustomer: React.FC = () => {
                     disabled={loading}
                     className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
-3                    <SendOutlined className="w-5 h-5" />
+                    <SendOutlined className="w-5 h-5" />
                   </button>
                 ) : (
                   <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-full flex-shrink-0">
@@ -731,7 +733,7 @@ const ChatWithCustomer: React.FC = () => {
           <div className="p-6">
             {myChats.length === 0 ? (
               <div className="text-center py-16">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justifying-center mx-auto mb-4">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <MessageOutlined className="text-3xl text-gray-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có tin nhắn</h3>
@@ -782,7 +784,7 @@ const ChatWithCustomer: React.FC = () => {
                                 <span className={`text-gray-600 truncate ${
                                   unreadCount > 0 ? 'font-semibold text-gray-900' : ''
                                 }`}>
-3                                  {isImageUrl(chat.lastMessage.content) ? '[Hình ảnh]' : chat.lastMessage.content}
+                                  {isImageUrl(chat.lastMessage.content) ? '[Hình ảnh]' : chat.lastMessage.content}
                                 </span>
                               </>
                             )}
@@ -802,7 +804,7 @@ const ChatWithCustomer: React.FC = () => {
           </div>
         </div>
       </div>
-5    </div>
+    </div>
   );
 };
 
