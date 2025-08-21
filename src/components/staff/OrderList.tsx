@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Archive } from 'lucide-react';
+import { Plus, Search, Archive, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface OrderItem {
-  // Add order item properties as needed
+  orderItemId: number;
+  accessoryId: number | null;
+  terrariumVariantId: number | null;
+  accessoryQuantity: number;
+  terrariumVariantQuantity: number;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
 }
 
 interface Order {
@@ -15,11 +22,21 @@ interface Order {
   deposit: number;
   discountAmount: number | null;
   orderDate: string;
-  status: string | null; // Allow null status
+  status: string | null;
   paymentStatus: string;
   transactionId: string | null;
   paymentMethod: string;
   orderItems: OrderItem[];
+}
+
+interface PaginationData {
+  items: Order[];
+  currentPage: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
 }
 
 // Status mapping for string status codes
@@ -106,68 +123,112 @@ const formatDate = (dateString: string) => {
 
 const OrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]); // For statistics
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [hasPreviousPage, setHasPreviousPage] = useState(false);
   
   // Filter states
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
 
-  // Fetch orders from API
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setLoading(true);
-        
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
-        
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch('https://terarium.shop/api/Order', {
-          method: 'GET',
-          headers: headers,
-        });
-        
-        if (response.status === 401) {
-          throw new Error('Chưa xác thực, vui lòng đăng nhập.');
-        }
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        // Extract data array from the response
-        const orderData = result.data || result;
-        setOrders(orderData);
-      } catch (error) {
-        console.error('Error fetching orders:', error);
-        const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-        setError(errorMessage);
-        
-        if (errorMessage.includes('xác thực') || errorMessage.includes('đăng nhập')) {
-          toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-        } else {
-          toast.error('Không thể tải danh sách đơn hàng');
-        }
-      } finally {
-        setLoading(false);
+  // Fetch orders from API with pagination
+  const fetchOrders = async (page: number = 1, size: number = 10) => {
+    try {
+      setLoading(true);
+      
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
-    };
+      
+      const response = await fetch(`https://terarium.shop/api/Order/paginated?Page=${page}&PageSize=${size}`, {
+        method: 'GET',
+        headers: headers,
+      });
+      
+      if (response.status === 401) {
+        throw new Error('Chưa xác thực, vui lòng đăng nhập.');
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      const paginationData: PaginationData = result.data;
+      
+      setOrders(paginationData.items);
+      setCurrentPage(paginationData.currentPage);
+      setPageSize(paginationData.pageSize);
+      setTotalItems(paginationData.totalItems);
+      setTotalPages(paginationData.totalPages);
+      setHasNextPage(paginationData.hasNextPage);
+      setHasPreviousPage(paginationData.hasPreviousPage);
+      
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      setError(errorMessage);
+      
+      if (errorMessage.includes('xác thực') || errorMessage.includes('đăng nhập')) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        toast.error('Không thể tải danh sách đơn hàng');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchOrders();
-  }, []);
+  // Fetch all orders for statistics
+  const fetchAllOrders = async () => {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch('https://terarium.shop/api/Order', {
+        method: 'GET',
+        headers: headers,
+      });
+      
+      if (!response.ok) return;
+      
+      const result = await response.json();
+      const orderData = result.data || result;
+      setAllOrders(orderData);
+    } catch (error) {
+      console.error('Error fetching all orders for statistics:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders(currentPage, pageSize);
+    fetchAllOrders(); // For statistics
+  }, [currentPage, pageSize]);
 
   // Filter orders
   const filteredOrders = orders.filter((order) => {
-    // Safe string conversion for search
     const orderStatus = order.status || '';
     const paymentStatus = order.paymentStatus || '';
     
@@ -225,6 +286,35 @@ const OrderList: React.FC = () => {
     }
   };
 
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let end = Math.min(totalPages, start + maxVisiblePages - 1);
+    
+    if (end - start + 1 < maxVisiblePages) {
+      start = Math.max(1, end - maxVisiblePages + 1);
+    }
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -242,7 +332,7 @@ const OrderList: React.FC = () => {
         <div className="text-center">
           <p className="text-red-600 mb-4">Lỗi: {error}</p>
           <button 
-            onClick={() => window.location.reload()}
+            onClick={() => fetchOrders(currentPage, pageSize)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
           >
             Thử lại
@@ -277,7 +367,7 @@ const OrderList: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -318,6 +408,17 @@ const OrderList: React.FC = () => {
             <option value="cancelled">Cancelled</option>
           </select>
 
+          <select 
+            className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+          >
+            <option value="5">5 / trang</option>
+            <option value="10">10 / trang</option>
+            <option value="20">20 / trang</option>
+            <option value="50">50 / trang</option>
+          </select>
+
           <button 
             onClick={() => {
               setSearchTerm('');
@@ -335,30 +436,30 @@ const OrderList: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Tổng đơn hàng</div>
-          <div className="text-2xl font-bold text-gray-900">{orders.length}</div>
+          <div className="text-2xl font-bold text-gray-900">{totalItems}</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Đã thanh toán</div>
           <div className="text-2xl font-bold text-green-600">
-            {orders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'paid').length}
+            {allOrders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'paid').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Chưa thanh toán</div>
           <div className="text-2xl font-bold text-red-600">
-            {orders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'unpaid').length}
+            {allOrders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'unpaid').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Hoàn thành</div>
           <div className="text-2xl font-bold text-green-600">
-            {orders.filter(o => o.status && o.status.toLowerCase() === 'completed').length}
+            {allOrders.filter(o => o.status && o.status.toLowerCase() === 'completed').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Đã hủy</div>
           <div className="text-2xl font-bold text-red-600">
-            {orders.filter(o => o.status && (o.status.toLowerCase() === 'cancel' || o.status.toLowerCase() === 'cancle')).length}
+            {allOrders.filter(o => o.status && (o.status.toLowerCase() === 'cancel' || o.status.toLowerCase() === 'cancle')).length}
           </div>
         </div>
       </div>
@@ -447,14 +548,89 @@ const OrderList: React.FC = () => {
         )}
       </div>
 
-      {/* Pagination (Optional) */}
-      {filteredOrders.length > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-600">
-            Hiển thị {filteredOrders.length} trên tổng số {orders.length} đơn hàng
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t sm:px-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!hasPreviousPage}
+              className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                hasPreviousPage 
+                  ? 'text-gray-700 bg-white hover:bg-gray-50' 
+                  : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              }`}
+            >
+              Trước
+            </button>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!hasNextPage}
+              className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                hasNextPage 
+                  ? 'text-gray-700 bg-white hover:bg-gray-50' 
+                  : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              }`}
+            >
+              Tiếp
+            </button>
           </div>
-          <div className="flex space-x-2">
-            {/* Add pagination buttons here if needed */}
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700">
+                Hiển thị{' '}
+                <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span>
+                {' '}đến{' '}
+                <span className="font-medium">
+                  {Math.min(currentPage * pageSize, totalItems)}
+                </span>
+                {' '}trên tổng số{' '}
+                <span className="font-medium">{totalItems}</span> đơn hàng
+              </p>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={!hasPreviousPage}
+                  className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 text-sm font-medium ${
+                    hasPreviousPage 
+                      ? 'text-gray-500 bg-white hover:bg-gray-50' 
+                      : 'text-gray-300 bg-gray-100 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="sr-only">Trang trước</span>
+                  <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                </button>
+                
+                {getPageNumbers().map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                      page === currentPage
+                        ? 'z-10 bg-green-50 border-green-500 text-green-600'
+                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={!hasNextPage}
+                  className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 text-sm font-medium ${
+                    hasNextPage 
+                      ? 'text-gray-500 bg-white hover:bg-gray-50' 
+                      : 'text-gray-300 bg-gray-100 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="sr-only">Trang sau</span>
+                  <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </nav>
+            </div>
           </div>
         </div>
       )}
