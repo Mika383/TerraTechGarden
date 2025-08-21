@@ -21,6 +21,12 @@ import EditTerrariumVariant from '@/components/manager/TerrariumVariantEdit';
 import VoucherManagement from '@/pages/Admin/VoucherManagement';
 import MembershipManagement from '@/pages/Admin/MembershipManagement';
 import OrderDetail from '@/pages/Customer/OrderDetail';
+import ComboCategoryList from '@/components/manager/ComboCategoryList';
+import ComboCategoryCreate from '@/components/manager/ComboCategoryCreate';
+import ComboCategoryEdit from '@/components/manager/ComboCategoryEdit';
+import ComboList from '@/components/manager/ComboList';
+import ComboCreate from '@/components/manager/ComboCreate';
+import ComboEdit from '@/components/manager/ComboEdit';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -159,6 +165,12 @@ const AppRoutes = () => {
           <Route path="tank-method/list" element={<Suspense fallback={<Loading />}><TankMethodList /></Suspense>} />
           <Route path="tank-method/create" element={<Suspense fallback={<Loading />}><TankMethodCreate /></Suspense>} />
           <Route path="tank-method/edit/:id" element={<Suspense fallback={<Loading />}><TankMethodEdit /></Suspense>} />
+          <Route path="combo-category/list" element={<Suspense fallback={<Loading />}><ComboCategoryList /></Suspense>} />
+          <Route path="combo-category/create" element={<Suspense fallback={<Loading />}><ComboCategoryCreate /></Suspense>} />
+          <Route path="combo-category/edit/:id" element={<Suspense fallback={<Loading />}><ComboCategoryEdit /></Suspense>} />
+          <Route path="combo/list" element={<Suspense fallback={<Loading />}><ComboList /></Suspense>} />
+          <Route path="combo/create" element={<Suspense fallback={<Loading />}><ComboCreate /></Suspense>} />
+          <Route path="combo/edit/:id" element={<Suspense fallback={<Loading />}><ComboEdit /></Suspense>} />
         </Route>
       </Route>
       <Route path="admin" element={<PrivateRoute allowedRoles={['Admin']} />}>
