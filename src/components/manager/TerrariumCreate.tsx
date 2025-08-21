@@ -675,7 +675,7 @@ const TerrariumCreate: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nội dung HTML (Tùy chọn)</label>
                     <Editor
-                      apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
+                      apiKey="2pcpzgtdmmp5f43t7bqpc9rmxkok9ben1axiy628f53zad6s"
                       value={formData.bodyHTML}
                       init={{
                         height: 500,
