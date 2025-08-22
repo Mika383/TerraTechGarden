@@ -1,60 +1,87 @@
-// Request gửi lên khi thêm sản phẩm vào giỏ
-export interface AddToCartRequest {
-  accessoryId: number;
-  terrariumVariantId: number;
-  accessoryQuantity: number;
-  variantQuantity: number;
-}
-
-// Request gửi lên khi cập nhật số lượng trong giỏ
-export interface UpdateCartItemRequest {
-  accessoryQuantity: number;
-  variantQuantity: number;
-}
-
-// Thông tin 1 sản phẩm bên trong 1 cartItem
 export interface CartItemProduct {
   productName: string;
-  quantity: number;    // số lượng riêng của sản phẩm này
-  price: number;       // giá 1 đơn vị
-  totalPrice: number;  // quantity * price
+  quantity: number;
+  price: number;
+  totalPrice: number;
+  imageUrl: string | null;
+  productType: string | null;
 }
 
-// Định nghĩa cartItem từ API
-export interface RawCartItem {
+export interface RawCartEntry {
   cartItemId: number;
   cartId: number;
+  terrariumId: number | null;
   accessoryId: number | null;
   terrariumVariantId: number | null;
+  comboId: number | null;
+  comboName: string | null;
+  comboPrice: number | null;
+  comboOriginalPrice: number | null;
+  comboDiscountPercent: number | null;
+  comboItems: any[] | null;
   item: CartItemProduct[];
-  totalCartQuantity: number; // tổng số lượng của cartItem
-  totalCartPrice: number;    // tổng giá của cartItem
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Phần "data" trong API mới
-export interface CartResponse {
-  cartId: number;
-  userId: number;
-  cartItems: RawCartItem[]; // ✅ thêm dòng này
   totalCartQuantity: number;
   totalCartPrice: number;
+  itemType: string;
+  isInStock: boolean;
+  maxQuantity: number;
   createdAt: string;
   updatedAt: string;
 }
 
-
-// API wrapper theo format mới (status, message, data)
-export interface CartAPIWrapper {
-  status: number;
-  message: string;
-  data: CartResponse;
+export interface CartBundle {
+  mainItem: RawCartEntry;
+  bundleAccessories: RawCartEntry[];
+  totalBundlePrice: number;
+  totalBundleQuantity: number;
 }
 
-// Kiểu dữ liệu hiển thị trên FE
-export interface CartItem {
-  id: string;           // cartItemId dưới dạng string
+export interface CartResponseNew {
+  cartId: number;
+  userId: number;
+  user: string;
+  bundleItems: CartBundle[];
+  singleItems: RawCartEntry[];
+  totalCartPrice: number;
+  totalCartQuantity: number;
+  totalCartItem: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateCartItemRequest {
+  accessoryQuantity?: number;
+  variantQuantity?: number;
+}
+
+export interface AddAccessoryToCartPayload {
+  accessoryId: number;
+  accessoryQuantity: number;
+}
+
+export interface AddVariantToCartPayload {
+  terrariumId: number;
+  terrariumVariantId: number;
+  variantQuantity: number;
+}
+
+export interface AddBundleAccessoriesPayload {
+  terrariumId: number;
+  totalPrice?: number;
+  bundleAccessories: {
+    accessoryId: number;
+    quantity: number;
+  }[];
+}
+
+export interface AddComboPayload {
+  comboId: number;
+  quantity: number;
+}
+
+export interface NormalizedCartItem {
+  id: string;
+  cartItemId: number;
   name: string;
   price: number;
   quantity: number;
@@ -62,5 +89,7 @@ export interface CartItem {
   selected: boolean;
   accessoryId?: number | null;
   variantId?: number | null;
-  cartItemId: number;
+  terrariumId?: number | null;
+  groupKey?: string;
+  isBundleMain?: boolean;
 }

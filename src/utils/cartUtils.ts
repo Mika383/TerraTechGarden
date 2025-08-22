@@ -1,4 +1,4 @@
-import { RawCartItem } from '@/types/cart';
+import { RawCartEntry } from '@/types/cart';
 
 export type CartItemType = 'accessory' | 'variant';
 
@@ -6,8 +6,8 @@ export type CartItemType = 'accessory' | 'variant';
  * Gộp các cart item theo loại (accessoryId hoặc variantId)
  * để hiển thị tổng quantity và tổng price như 1 dòng duy nhất
  */
-export const groupCartItems = (items: RawCartItem[]) => {
-  const grouped: Record<string, RawCartItem> = {};
+export const groupCartItems = (items: RawCartEntry[]) => {
+  const grouped: Record<string, RawCartEntry> = {};
 
   items.forEach((item) => {
     const key =
@@ -36,7 +36,7 @@ export const groupCartItems = (items: RawCartItem[]) => {
  * Lọc toàn bộ cart items cùng loại (accessory hoặc variant)
  */
 export const getAllMatchingItems = (
-  items: RawCartItem[],
+  items: RawCartEntry[],
   id: number,
   type: CartItemType
 ) => {
@@ -50,7 +50,7 @@ export const getAllMatchingItems = (
 /**
  * Tìm cart item có quantity nhỏ nhất (dùng để giảm)
  */
-export const findItemToDecrease = (items: RawCartItem[]) => {
+export const findItemToDecrease = (items: RawCartEntry[]) => {
   return items.reduce((min, item) =>
     item.totalCartQuantity < min.totalCartQuantity ? item : min
   );
@@ -59,7 +59,7 @@ export const findItemToDecrease = (items: RawCartItem[]) => {
 /**
  * Tìm cart item có quantity lớn nhất (dùng để tăng)
  */
-export const findItemToIncrease = (items: RawCartItem[]) => {
+export const findItemToIncrease = (items: RawCartEntry[]) => {
   return items.reduce((max, item) =>
     item.totalCartQuantity > max.totalCartQuantity ? item : max
   );
