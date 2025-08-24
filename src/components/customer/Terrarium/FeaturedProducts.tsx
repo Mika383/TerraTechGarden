@@ -5,7 +5,6 @@ import { Terrarium, Environment, TankMethod } from '@/types/terrarium';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import TerrariumCard from './TerrariumCard';
-import miniForest from '@/assets/image/1.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -130,7 +129,7 @@ const NewestProducts: React.FC = () => {
           const image =
             (item as any)?.thumbnailUrl ||
             (item as any)?.terrariumImages?.[0]?.imageUrl ||
-            miniForest;
+            '/TerraTechLogo.png';
 
           const rating = Number((item as any)?.averageRating ?? 0);
           const purchases = Number((item as any)?.purchaseCount ?? 0);

@@ -134,8 +134,9 @@ const AppRoutes = () => {
             <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
             <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
             <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
-            <Route path="create-layout" element={<TerrariumChatbox />} />
-            <Route path="my-layouts" element={<MyLayoutsPage />} />
+            <Route path="create-layout" element={<Suspense fallback={<Loading />}><TerrariumChatbox /></Suspense>} />
+            <Route path="my-layouts" element={<Suspense fallback={<Loading />}><MyLayoutsPage /></Suspense>} />
+            <Route path="orders/:id" element={<Suspense fallback={<Loading />}><OrderDetail /></Suspense>} />
           </Route>
         </Route>
       </Route>
