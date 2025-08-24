@@ -1,15 +1,12 @@
+// src/pages/Customer/Order.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Eye, Star, Wallet } from 'lucide-react';
+import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { getOrdersByUser, createMoMoPayment } from '@/api/order';
-import { getOrderById } from '@/api/order';
-import { getAccessoryById } from '@/api/accessory';
-import { getTerrariumById, getTerrariumVariantById } from '@/api/terrarium';
-import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
-
+import { createMoMoPayment, getOrdersByUser } from '@/api/order';
 import type { Order, OrderItem } from '@/types/order';
+
 import {
   orderStatusToVi,
   paymentStatusToVi,
@@ -19,22 +16,24 @@ import {
   isUnpaid,
 } from '@/utils/orderStatus';
 
-const money = (n?: number) => (n ?? 0).toLocaleString('vi-VN') + ' VND';
-const FALLBACK_IMG = '/TerraTechLogo.png';
-const PAGE_SIZE = 5;
+import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
 
-/** Chọn sao 1–5 */
+const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
+const PER_PAGE = 5;
+
+/** Star rating (★) – nhấp để chọn, hover để xem trước */
 const StarRating: React.FC<{
   value: number;
-  onChange: (v: number) => void;
+  onChange: (n: number) => void;
   size?: 'sm' | 'md' | 'lg';
 }> = ({ value, onChange, size = 'md' }) => {
   const [hover, setHover] = useState(0);
-  const cls = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-lg' : 'text-2xl';
+  const starSize =
+    size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-lg' : 'text-2xl';
   return (
     <div className="flex items-center gap-1">
-      {Array.from({ length: 5 }).map((_, i) => {
-        const n = i + 1;
+      {Array.from({ length: 5 }).map((_, idx) => {
+        const n = idx + 1;
         const active = (hover || value) >= n;
         return (
           <button
@@ -46,9 +45,15 @@ const StarRating: React.FC<{
             onFocus={() => setHover(n)}
             onBlur={() => setHover(0)}
             onClick={() => onChange(n)}
-            className="leading-none"
+            className="leading-none focus:outline-none"
           >
-            <span className={`${cls} ${active ? 'text-amber-400' : 'text-gray-300'}`}>★</span>
+            <span
+              className={`${starSize} ${
+                active ? 'text-amber-400' : 'text-gray-300'
+              }`}
+            >
+              ★
+            </span>
           </button>
         );
       })}
@@ -57,35 +62,52 @@ const StarRating: React.FC<{
   );
 };
 
-type ReviewOption = { orderItemId: number; name: string };
+type ReviewState = {
+  open: boolean;
+  order?: Order | null;
+  orderItemId?: number | null;
+  rating: number;
+  comment: string;
+  file?: File | null;
+};
 
 const Order: React.FC = () => {
   const navigate = useNavigate();
-  const userId = Number(localStorage.getItem('userId') || '0');
-
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
 
   // pagination
   const [page, setPage] = useState(1);
 
-  // modal đánh giá (tạo trước → upload sau 1 nhịp)
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewOrderId, setReviewOrderId] = useState<number | null>(null);
-  const [reviewOptions, setReviewOptions] = useState<ReviewOption[]>([]);
-  const [selectedOrderItemId, setSelectedOrderItemId] = useState<number | null>(null);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  // modal đánh giá
+  const [review, setReview] = useState<ReviewState>({
+    open: false,
+    order: null,
+    orderItemId: null,
+    rating: 5,
+    comment: '',
+    file: null,
+  });
+
+  const userId = useMemo(() => Number(localStorage.getItem('userId') || 0), []);
 
   const load = async () => {
+    if (!userId) {
+      toast.info('Bạn cần đăng nhập để xem đơn hàng.');
+      return;
+    }
     try {
       setLoading(true);
       const data = await getOrdersByUser(userId);
-      setOrders(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      toast.error('Không tải được danh sách đơn hàng.');
+      const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => {
+        const ta = new Date(a.orderDate ?? '').getTime();
+        const tb = new Date(b.orderDate ?? '').getTime();
+        return tb - ta;
+      });
+      setOrders(sorted);
+      setPage(1);
+    } catch {
+      toast.error('Không tải được danh sách đơn.');
     } finally {
       setLoading(false);
     }
@@ -94,269 +116,348 @@ const Order: React.FC = () => {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, []);
 
-  const sliced = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return orders.slice(start, start + PAGE_SIZE);
-  }, [orders, page]);
-
-  const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
-
-  const payNow = async (order: Order) => {
+  // ——— ACTIONS ———
+  const payWithMoMo = async (o: Order) => {
     try {
       const { payUrl } = await createMoMoPayment({
-        orderId: order.orderId,
-        orderInfo: `Đơn hàng #${order.orderId}`,
+        orderId: o.orderId,
+        orderInfo: `Đơn hàng #${o.orderId}`,
         payAll: true,
       });
       window.location.href = payUrl;
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error(err);
       toast.error('Không tạo được giao dịch MoMo.');
     }
   };
 
-  // mở modal đánh giá – fetch nhanh item-name cho dropdown
-  const openReview = async (order: Order) => {
-    try {
-      setLoading(true);
-      const od = await getOrderById(order.orderId);
-      if (!od) throw new Error('ORDER_NOT_FOUND');
-
-      const opts: ReviewOption[] = await Promise.all(
-        (od.orderItems || []).map(async (it: OrderItem) => {
-          let name = 'Sản phẩm';
-          if (it.terrariumVariantId) {
-            const v = await getTerrariumVariantById(Number(it.terrariumVariantId));
-            name = v?.variantName || name;
-            if (!v?.urlImage && v?.terrariumId) {
-              const t = await getTerrariumById(v.terrariumId);
-              if (t?.terrariumName) name = t.terrariumName;
-            }
-          } else if (it.accessoryId) {
-            const acc = await getAccessoryById(Number(it.accessoryId));
-            name = acc?.name || name;
-          }
-          return { orderItemId: it.orderItemId, name };
-        })
-      );
-
-      setReviewOrderId(order.orderId);
-      setReviewOptions(opts);
-      setSelectedOrderItemId(opts[0]?.orderItemId ?? null);
-      setRating(5);
-      setComment('');
-      setFile(null);
-      setReviewOpen(true);
-    } catch (e) {
-      console.error(e);
-      toast.error('Không lấy được sản phẩm để đánh giá.');
-    } finally {
-      setLoading(false);
-    }
+  const openReview = (o: Order) => {
+    const firstItem = o.orderItems?.[0]?.orderItemId ?? null;
+    setReview({
+      open: true,
+      order: o,
+      orderItemId: firstItem,
+      rating: 5,
+      comment: '',
+      file: null,
+    });
   };
 
   const submitReview = async () => {
     try {
-      if (!selectedOrderItemId) {
-        toast.warn('Vui lòng chọn sản phẩm để đánh giá.');
+      if (!review.order || !review.orderItemId) return;
+      if (review.rating < 1 || review.rating > 5) {
+        toast.info('Điểm đánh giá từ 1 đến 5.');
         return;
       }
-
-      // 1) tạo feedback
       const fb = await createFeedback({
-        orderItemId: selectedOrderItemId,
-        rating,
-        comment: comment || '',
+        orderItemId: review.orderItemId,
+        rating: review.rating,
+        comment: review.comment || '',
       });
 
       const fid: number =
         fb?.feedbackId ?? fb?.data?.feedbackId ?? fb?.id ?? fb?.data?.id;
 
-      // 2) đợi 1 nhịp cho BE tạo xong (tránh 500)
-      if (fid && file) {
-        await new Promise((r) => setTimeout(r, 400));
-        await uploadFeedbackImage(fid, file);
+      if (fid && review.file) {
+        await uploadFeedbackImage(fid, review.file);
       }
 
-      toast.success('Đã gửi đánh giá!');
-      setReviewOpen(false);
+      toast.success('Đã gửi đánh giá. Cảm ơn bạn!');
+      setReview((s) => ({ ...s, open: false }));
     } catch (e) {
       console.error(e);
       toast.error('Gửi đánh giá thất bại.');
     }
   };
 
+  const canRate = (o: Order) => isCompleted(o.status);
+  const canPay = (o: Order) => isUnpaid(o.paymentStatus);
+
+  // ——— PAGINATION DATA ———
+  const total = orders.length;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedOrders = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return orders.slice(start, start + PER_PAGE);
+  }, [orders, currentPage]);
+
+  const from = total === 0 ? 0 : (currentPage - 1) * PER_PAGE + 1;
+  const to = Math.min(currentPage * PER_PAGE, total);
+
+  const goPage = (p: number) => {
+    const np = Math.min(Math.max(1, p), totalPages);
+    setPage(np);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const placeholderCount = Math.max(0, PER_PAGE - pagedOrders.length);
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-green-700 mb-4">Đơn hàng của bạn</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-green-700 mb-4">
+          Đơn hàng của tôi
+        </h1>
 
-        <div className="bg-white rounded-lg shadow border p-4 flex flex-col">
-          {/* vùng danh sách cố định chiều cao để thanh trang không nhảy */}
-          <div className="min-h-[440px]">
-            {loading ? (
-              <div className="text-center text-gray-600 py-10">Đang tải…</div>
-            ) : sliced.length === 0 ? (
-              <div className="text-center text-gray-500 py-10">Chưa có đơn hàng.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left">
-                      <th className="p-2 border">Mã đơn</th>
-                      <th className="p-2 border">Ngày đặt</th>
-                      <th className="p-2 border">Tổng tiền</th>
-                      <th className="p-2 border">Trạng thái</th>
-                      <th className="p-2 border">Thanh toán</th>
-                      <th className="p-2 border w-64">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sliced.map((od) => (
-                      <tr key={od.orderId}>
-                        <td className="p-2 border font-medium">#{od.orderId}</td>
-                        <td className="p-2 border">
-                          {od.orderDate
-                            ? new Date(od.orderDate).toLocaleString('vi-VN')
-                            : 'N/A'}
-                        </td>
-                        <td className="p-2 border">{money(od.totalAmount)}</td>
-                        <td className="p-2 border">
-                          <span
-                            className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(
-                              od.status
-                            )}`}
-                            title={String(od.status)}
-                          >
-                            {orderStatusToVi(od.status)}
-                          </span>
-                        </td>
-                        <td className="p-2 border">
-                          <span
-                            className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(
-                              od.paymentStatus
-                            )}`}
-                            title={String(od.paymentStatus)}
-                          >
-                            {paymentStatusToVi(od.paymentStatus)}
-                          </span>
-                        </td>
-                        <td className="p-2 border">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border rounded hover:bg-gray-50"
-                              onClick={() => navigate(`/order/${od.orderId}`)}
-                            >
-                              <Eye size={16} />
-                              Xem chi tiết
-                            </button>
+        {loading ? (
+          <div className="text-center text-gray-600">Đang tải...</div>
+        ) : total === 0 ? (
+          <div className="bg-white p-8 rounded-lg shadow text-center">
+            Chưa có đơn hàng nào.
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 min-h-0">
+              {pagedOrders.map((o) => (
+                <div
+                  key={o.orderId}
+                  className="bg-white rounded-lg shadow border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="font-semibold text-gray-800">
+                      Đơn hàng #{o.orderId}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Ngày đặt:{' '}
+                      {o.orderDate
+                        ? new Date(o.orderDate).toLocaleString('vi-VN')
+                        : 'N/A'}
+                    </div>
+                    <div className="text-sm">
+                      Tổng tiền:{' '}
+                      <span className="font-semibold">{money(o.totalAmount)}</span>
+                    </div>
 
-                            {isCompleted(od.status) && (
-                              <button
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded"
-                                onClick={() => openReview(od)}
-                              >
-                                <Star size={16} />
-                                Đánh giá
-                              </button>
-                            )}
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span
+                        className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(
+                          o.status
+                        )}`}
+                        title={String(o.status)}
+                      >
+                        {orderStatusToVi(o.status)}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(
+                          o.paymentStatus
+                        )}`}
+                        title={String(o.paymentStatus)}
+                      >
+                        {paymentStatusToVi(o.paymentStatus)}
+                      </span>
+                    </div>
+                  </div>
 
-                            {isUnpaid(od.paymentStatus) && (
-                              <button
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded"
-                                onClick={() => payNow(od)}
-                              >
-                                <Wallet size={16} />
-                                Thanh toán
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() =>
+                        navigate(`/customer-dashboard/orders/${o.orderId}`)
+                      }
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                    >
+                      <Eye size={16} />
+                      Xem chi tiết
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        toast.info('Chức năng hủy sẽ cập nhật sau từ BE.')
+                      }
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded"
+                    >
+                      <XCircle size={16} />
+                      Hủy đơn
+                    </button>
+
+                    {canRate(o) && (
+                      <button
+                        onClick={() => openReview(o)}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded"
+                      >
+                        <Star size={16} />
+                        Đánh giá
+                      </button>
+                    )}
+
+                    {canPay(o) && (
+                      <button
+                        onClick={() => payWithMoMo(o)}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded"
+                      >
+                        <Wallet size={16} />
+                        Thanh toán
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* giữ layout cao như 5 thẻ để thanh phân trang không “nhảy” */}
+              {Array.from({ length: placeholderCount }).map((_, i) => (
+                <div
+                  key={`ph-${i}`}
+                  className="bg-white rounded-lg shadow border p-4 opacity-0 pointer-events-none select-none"
+                  aria-hidden="true"
+                >
+                  placeholder
+                </div>
+              ))}
+            </div>
+
+            {/* phân trang */}
+            <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm text-gray-600">
+                Hiển thị <b>{from}</b>–<b>{to}</b> trong <b>{total}</b> đơn hàng
               </div>
-            )}
-          </div>
 
-          {/* phân trang luôn dính cuối card */}
-          <div className="mt-4 flex justify-center items-center gap-2">
-            <button
-              className="px-3 py-1.5 border rounded disabled:opacity-50"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              ← Trước
-            </button>
-            <span className="text-sm">
-              Trang {page}/{totalPages}
-            </span>
-            <button
-              className="px-3 py-1.5 border rounded disabled:opacity-50"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
-              Sau →
-            </button>
-          </div>
-        </div>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => goPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50"
+                  aria-label="Trang trước"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+
+                {Array.from({ length: Math.max(1, totalPages) }).map((_, idx) => {
+                  const p = idx + 1;
+                  const withinWindow =
+                    p === 1 ||
+                    p === totalPages ||
+                    (p >= currentPage - 2 && p <= currentPage + 2);
+
+                  if (!withinWindow) {
+                    if (p === 2 && currentPage > 4)
+                      return (
+                        <span key={p} className="px-2">
+                          …
+                        </span>
+                      );
+                    if (p === totalPages - 1 && currentPage < totalPages - 3)
+                      return (
+                        <span key={p} className="px-2">
+                          …
+                        </span>
+                      );
+                    return null;
+                  }
+
+                  const active = p === currentPage;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => goPage(p)}
+                      className={`px-3 py-1.5 rounded border ${
+                        active
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={() => goPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50"
+                  aria-label="Trang sau"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* MODAL đánh giá – chọn item, rating, comment, ảnh */}
-      {reviewOpen && (
+      {/* Modal đánh giá (dùng StarRating) */}
+      {review.open && review.order && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
-            <div className="px-5 py-3 border-b font-semibold">Đánh giá sản phẩm</div>
+            <div className="px-5 py-3 border-b font-semibold">
+              Đánh giá sản phẩm
+            </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Sản phẩm</label>
-                  <select
-                    className="w-full border rounded px-3 py-2"
-                    value={selectedOrderItemId ?? ''}
-                    onChange={(e) => setSelectedOrderItemId(Number(e.target.value))}
-                  >
-                    {reviewOptions.map((op) => (
-                      <option key={op.orderItemId} value={op.orderItemId}>
-                        {op.name}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Điểm (1–5)
+                  </label>
+                  <StarRating
+                    value={review.rating}
+                    onChange={(n) => setReview((s) => ({ ...s, rating: n }))}
+                  />
                 </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Điểm (1–5)</label>
-                  <StarRating value={rating} onChange={setRating} />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Ảnh (tùy chọn)</label>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Ảnh (tùy chọn)
+                  </label>
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) =>
+                      setReview((s) => ({
+                        ...s,
+                        file: e.target.files?.[0] ?? null,
+                      }))
+                    }
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Nhận xét</label>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Chọn sản phẩm trong đơn
+                </label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={review.orderItemId ?? undefined}
+                  onChange={(e) =>
+                    setReview((s) => ({
+                      ...s,
+                      orderItemId: Number(e.target.value),
+                    }))
+                  }
+                >
+                  {review.order.orderItems.map((it: OrderItem) => (
+                    <option key={it.orderItemId} value={it.orderItemId}>
+                      #{it.orderItemId} •{' '}
+                      {it.accessoryId
+                        ? `Phụ kiện ${it.accessoryId}`
+                        : `Variant ${it.terrariumVariantId}`}
+                      {' · '}SL {it.quantity}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Nhận xét
+                </label>
                 <textarea
                   className="w-full border rounded px-3 py-2"
                   rows={4}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
+                  value={review.comment}
+                  onChange={(e) =>
+                    setReview((s) => ({ ...s, comment: e.target.value }))
+                  }
                 />
               </div>
             </div>
 
             <div className="px-5 py-3 border-t flex justify-end gap-2">
               <button
-                onClick={() => setReviewOpen(false)}
+                onClick={() => setReview((s) => ({ ...s, open: false }))}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
               >
                 Đóng
