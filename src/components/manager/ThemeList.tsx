@@ -163,7 +163,7 @@ const ThemeList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">ID</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Tên</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Mô tả</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Số terrarium</th>
+                {/* <th className="text-left py-3 px-4 font-medium text-gray-700">Số terrarium</th> */}
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
               </tr>
             </thead>
@@ -173,9 +173,9 @@ const ThemeList: React.FC = () => {
                   <td className="py-3 px-4 text-gray-600">#{theme.environmentId}</td>
                   <td className="py-3 px-4 font-medium text-gray-900">{theme.environmentName}</td>
                   <td className="py-3 px-4 text-gray-600 truncate max-w-xs">{theme.environmentDescription}</td>
-                  <td className="py-3 px-4 text-gray-600">
+                  {/* <td className="py-3 px-4 text-gray-600">
                     {theme.terrariumEnvironments ? theme.terrariumEnvironments.length : 0}
-                  </td>
+                  </td> */}
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center space-x-2">
                       {/* <Link
