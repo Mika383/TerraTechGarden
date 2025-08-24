@@ -4,3 +4,4 @@ export * from './terrarium';
 export * from './profile';
 export * from './accounts';
 export * from './cart';
+export * from './layout';

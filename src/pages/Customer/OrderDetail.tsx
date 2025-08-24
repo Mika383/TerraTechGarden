@@ -1,380 +1,436 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Spin, Card, Steps, Divider, Tag, Button } from "antd";
-import { 
-  ArrowLeftOutlined, 
-  ShoppingOutlined, 
-  CarOutlined, 
-  CheckCircleOutlined,
-  ClockCircleOutlined 
-} from "@ant-design/icons";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { Wallet, XCircle, RotateCcw, Star } from 'lucide-react';
 
-const { Step } = Steps;
+import { getOrderById, createMoMoPayment } from '@/api/order';
+import { getAccessoryById } from '@/api/accessory';
+import { getTerrariumById, getTerrariumVariantById } from '@/api/terrarium';
 
-interface OrderItem {
+import type { Order, OrderItem } from '@/types/order';
+import {
+  orderStatusToVi,
+  paymentStatusToVi,
+  orderStatusChip,
+  paymentStatusChip,
+  isCompleted,
+  isUnpaid,
+  isPending,
+  isProcessing,
+} from '@/utils/orderStatus';
+
+import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
+
+const FALLBACK_IMG = '/TerraTechLogo.png';
+const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
+
+/** Chọn sao 1–5 */
+const StarRating: React.FC<{
+  value: number;
+  onChange: (n: number) => void;
+  size?: 'sm' | 'md' | 'lg';
+}> = ({ value, onChange, size = 'md' }) => {
+  const [hover, setHover] = useState(0);
+  const starSize = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-lg' : 'text-2xl';
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const n = i + 1;
+        const active = (hover || value) >= n;
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-label={`${n} sao`}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            onFocus={() => setHover(n)}
+            onBlur={() => setHover(0)}
+            onClick={() => onChange(n)}
+            className="leading-none focus:outline-none"
+          >
+            <span className={`${starSize} ${active ? 'text-amber-400' : 'text-gray-300'}`}>★</span>
+          </button>
+        );
+      })}
+      <span className="ml-2 text-sm text-gray-600">{value}/5</span>
+    </div>
+  );
+};
+
+type EnrichedItem = {
   orderItemId: number;
-  orderId: number;
-  accessoryId: number | null;
-  terrariumVariantId: number | null;
-  accessoryQuantity: number | null;
-  terrariumVariantQuantity: number | null;
+  name: string;
+  image: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-}
-
-interface OrderItemWithInfo extends OrderItem {
-  name: string;
-  image: string;
-}
-
-interface Order {
-  orderId: number;
-  userId: number;
-  voucherId: number;
-  deposit: number;
-  totalAmount: number;
-  status: string;
-  orderDate: string;
-  shippingAddress: string;
-  customerNote: string;
-  recipientName: string;
-  recipientPhone: string;
-}
-
-const statusMap: Record<string, { label: string; color: string }> = {
-  pending: { label: "Chờ thanh toán", color: "orange" },
-  shipping: { label: "Đang vận chuyển", color: "blue" },
-  completed: { label: "Hoàn thành", color: "green" },
-  cancelled: { label: "Đã hủy", color: "red" },
-};
-
-// Hàm lấy thông tin sản phẩm (tương tự checkout)
-const fetchItemInfo = async (item: OrderItem) => {
-  if (item.accessoryId) {
-    const res = await fetch(`https://terarium.shop/api/Accessory/get/${item.accessoryId}`);
-    const json = await res.json();
-    return {
-      name: json.data.name,
-      image: json.data.accessoryImages?.[0]?.imageUrl || "/default.jpg",
-    };
-  } else if (item.terrariumVariantId) {
-    const res = await fetch(
-      `https://terarium.shop/api/TerrariumVariant/get-terrariumVariant/${item.terrariumVariantId}`
-    );
-    const json = await res.json();
-    return {
-      name: json.data.variantName,
-      image: json.data.urlImage || "/default.jpg",
-    };
-  }
-  return { name: "Sản phẩm", image: "/default.jpg" };
+  accessoryId?: number | null;
+  terrariumVariantId?: number | null;
+  terrariumId?: number | null;
 };
 
 const OrderDetail: React.FC = () => {
-  const { orderId } = useParams<{ orderId: string }>();
+  const { id } = useParams<{ id: string }>();
+  const orderId = Number(id);
   const navigate = useNavigate();
-  
+
   const [order, setOrder] = useState<Order | null>(null);
-  const [orderItems, setOrderItems] = useState<OrderItemWithInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<EnrichedItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!orderId) {
-      setError("ID đơn hàng không hợp lệ");
-      setLoading(false);
-      return;
-    }
+  // modal đánh giá
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<{
+    orderItemId?: number;
+    rating: number;
+    comment: string;
+    file?: File | null;
+  }>({ rating: 5, comment: '' });
 
-    fetchOrderDetails();
-  }, [orderId]);
-
-  const fetchOrderDetails = async () => {
+  const load = async () => {
+    if (!orderId) return;
     try {
       setLoading(true);
-      
-      // Lấy thông tin order items
-      const orderItemsResponse = await fetch(
-        `https://terarium.shop/api/OrderItem/get-by-order/${orderId}`
-      );
-      
-      if (!orderItemsResponse.ok) {
-        throw new Error("Không thể lấy thông tin đơn hàng");
+      const data = await getOrderById(orderId);
+      if (!data) {
+        toast.error('Không tìm thấy đơn hàng.');
+        return;
       }
-      
-      const orderItemsData: OrderItem[] = await orderItemsResponse.json();
-      
-      // Lấy thông tin chi tiết cho từng item
-      const itemsWithInfo = await Promise.all(
-        orderItemsData.map(async (item) => {
-          const info = await fetchItemInfo(item);
+      setOrder(data);
+
+      const enriched: EnrichedItem[] = await Promise.all(
+        (data.orderItems || []).map(async (it: OrderItem) => {
+          let name = 'Sản phẩm';
+          let image = FALLBACK_IMG;
+          let terrariumId: number | null = null;
+
+          if (it.terrariumVariantId) {
+            const variant = await getTerrariumVariantById(Number(it.terrariumVariantId));
+            name = variant?.variantName || name;
+            image = (variant?.urlImage as string) || image;
+            terrariumId = variant?.terrariumId ?? null;
+
+            if (!variant?.urlImage && terrariumId) {
+              const t = await getTerrariumById(terrariumId);
+              image = t?.terrariumImages?.[0]?.imageUrl || image;
+            }
+          } else if (it.accessoryId) {
+            const acc = await getAccessoryById(Number(it.accessoryId));
+            name = acc?.name || name;
+            image = acc?.accessoryImages?.[0]?.imageUrl || image;
+          }
+
           return {
-            ...item,
-            name: info.name,
-            image: info.image,
+            orderItemId: it.orderItemId,
+            name,
+            image: image || FALLBACK_IMG,
+            quantity: it.quantity ?? 0,
+            unitPrice: it.unitPrice ?? 0,
+            totalPrice: it.totalPrice ?? (it.quantity ?? 0) * (it.unitPrice ?? 0),
+            accessoryId: it.accessoryId ?? null,
+            terrariumVariantId: it.terrariumVariantId ?? null,
+            terrariumId,
           };
         })
       );
-      
-      setOrderItems(itemsWithInfo);
-      
-      // Mock order data - trong thực tế bạn sẽ cần API để lấy thông tin order
-      // Tạm thời tạo mock data dựa trên orderItems
-      if (itemsWithInfo.length > 0) {
-        const mockOrder: Order = {
-          orderId: parseInt(orderId || "0"),
-          userId: 1,
-          voucherId: 0,
-          deposit: 0,
-          totalAmount: itemsWithInfo.reduce((sum, item) => sum + item.totalPrice, 0),
-          status: "shipping", // Mock status
-          orderDate: new Date().toISOString(),
-          shippingAddress: "123 Đường ABC, Quận 1, TP.HCM",
-          customerNote: "Giao hàng vào buổi chiều",
-          recipientName: "Nguyễn Văn A",
-          recipientPhone: "0123456789",
-        };
-        setOrder(mockOrder);
-      }
-      
-    } catch (err) {
-      console.error("Error fetching order details:", err);
-      setError("Không thể tải thông tin đơn hàng");
+
+      setItems(enriched);
+    } catch (e) {
+      console.error(e);
+      toast.error('Lỗi khi tải chi tiết đơn hàng.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getOrderStep = (status: string) => {
-    switch (status) {
-      case "pending":
-        return 0;
-      case "shipping":
-        return 1;
-      case "completed":
-        return 2;
-      case "cancelled":
-        return -1;
-      default:
-        return 0;
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
+  // được hủy khi: Pending | Processing và paymentStatus = Unpaid (UI-only)
+  const canCancel = !!(
+    order &&
+    (isPending(order.status) || isProcessing(order.status)) &&
+    isUnpaid(order.paymentStatus)
+  );
+
+  const payNow = async () => {
+    if (!order) return;
+    try {
+      const { payUrl } = await createMoMoPayment({
+        orderId: order.orderId,
+        orderInfo: `Đơn hàng #${order.orderId}`,
+        payAll: true,
+      });
+      window.location.href = payUrl;
+    } catch (e) {
+      console.error(e);
+      toast.error('Không tạo được giao dịch MoMo.');
     }
   };
 
-  const getStepStatus = (status: string) => {
-    if (status === "cancelled") return "error";
-    return "process";
+  const reorder = () => {
+    if (!items.length) return;
+    const payload = items.map((it) => ({
+      id: `oid_${it.orderItemId}`,
+      name: it.name,
+      price: it.unitPrice,
+      image: it.image || FALLBACK_IMG,
+      quantity: it.quantity,
+      selected: true,
+      accessoryId: it.accessoryId ?? undefined,
+      variantId: it.terrariumVariantId ?? undefined,
+    }));
+    localStorage.setItem('checkoutItems', JSON.stringify(payload));
+    toast.success('Đã đưa sản phẩm vào thanh toán.');
+    navigate('/checkout');
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Spin size="large" />
-      </div>
-    );
-  }
+  const openReview = (it: EnrichedItem) => {
+    setReviewTarget({
+      orderItemId: it.orderItemId,
+      rating: 5,
+      comment: '',
+      file: null,
+    });
+    setReviewOpen(true);
+  };
 
-  if (error || !order) {
+  const submitReview = async () => {
+    try {
+      if (!reviewTarget.orderItemId) return;
+
+      // 1) Tạo feedback trước
+      const fb = await createFeedback({
+        orderItemId: reviewTarget.orderItemId,
+        rating: reviewTarget.rating,
+        comment: reviewTarget.comment || '',
+      });
+      const fid: number =
+        fb?.feedbackId ?? fb?.data?.feedbackId ?? fb?.id ?? fb?.data?.id;
+
+      // 2) Chờ 1 nhịp rồi mới upload ảnh (tránh 500 do BE chưa kịp tạo id)
+      if (fid && reviewTarget.file) {
+        await new Promise((r) => setTimeout(r, 400));
+        await uploadFeedbackImage(fid, reviewTarget.file);
+      }
+
+      toast.success('Đã gửi đánh giá!');
+      setReviewOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('Gửi đánh giá thất bại.');
+    }
+  };
+
+  const header = useMemo(() => {
+    if (!order) return null;
     return (
-      <div className="container mx-auto py-8 px-6 text-center">
-        <div className="text-red-500 text-xl mb-4">
-          {error || "Không tìm thấy đơn hàng"}
+      <div className="bg-white rounded-lg shadow p-4 border">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-gray-800">Đơn hàng #{order.orderId}</div>
+            <div className="text-sm text-gray-500">
+              Ngày đặt: {order.orderDate ? new Date(order.orderDate).toLocaleString('vi-VN') : 'N/A'}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span
+              className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(order.status)}`}
+              title={String(order.status)}
+            >
+              {orderStatusToVi(order.status)}
+            </span>
+            <span
+              className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(order.paymentStatus)}`}
+              title={String(order.paymentStatus)}
+            >
+              {paymentStatusToVi(order.paymentStatus)}
+            </span>
+          </div>
         </div>
-        <Button 
-          icon={<ArrowLeftOutlined />} 
-          onClick={() => navigate("/orders")}
-        >
-          Quay lại danh sách đơn hàng
-        </Button>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-sm">
+          <div>
+            <div>Tổng tiền: <b>{money(order.totalAmount)}</b></div>
+            <div>Đặt cọc: <b>{money(order.deposit)}</b></div>
+          </div>
+          <div>
+            <div>Mã giao dịch: {order.transactionId || 'N/A'}</div>
+            <div>Phương thức: {order.paymentMethod || 'MoMo'}</div>
+          </div>
+          <div className="flex gap-2 sm:justify-end">
+            <button
+              onClick={() => toast.info('Hủy đơn: BE chưa cung cấp API. Sẽ bổ sung sau.')}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded border ${
+                canCancel
+                  ? 'bg-red-50 text-red-700 border-red-200'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+              }`}
+              disabled={!canCancel}
+              title="Chỉ hủy khi Pending/Processing và chưa thanh toán"
+            >
+              <XCircle size={16} />
+              Hủy đơn
+            </button>
+
+            {isUnpaid(order.paymentStatus) && (
+              <button
+                onClick={payNow}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              >
+                <Wallet size={16} />
+                Thanh toán
+              </button>
+            )}
+
+            <button
+              onClick={reorder}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded"
+            >
+              <RotateCcw size={16} />
+              Đặt lại
+            </button>
+          </div>
+        </div>
       </div>
     );
-  }
-
-  const statusInfo = statusMap[order.status] || { label: order.status, color: "default" };
+  }, [order]); // eslint-disable-line
 
   return (
-    <div className="container mx-auto py-8 px-6 max-w-6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button 
-            icon={<ArrowLeftOutlined />} 
-            onClick={() => navigate("/orders")}
-          >
-            Quay lại
-          </Button>
-          <h1 className="text-3xl font-bold text-gray-800">
-            Đơn hàng #{order.orderId}
-          </h1>
-        </div>
-        <Tag color={statusInfo.color} className="text-lg px-4 py-1">
-          {statusInfo.label}
-        </Tag>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+        <h1 className="text-2xl md:text-3xl font-bold text-green-700">Chi tiết đơn hàng</h1>
+
+        {loading ? (
+          <div className="text-center text-gray-600">Đang tải...</div>
+        ) : !order ? (
+          <div className="bg-white p-8 rounded-lg shadow text-center">Không tìm thấy đơn hàng.</div>
+        ) : (
+          <>
+            {header}
+
+            <div className="bg-white rounded-lg shadow border p-4">
+              <div className="font-semibold mb-3">Sản phẩm</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left">
+                      <th className="p-2 border w-10">#</th>
+                      <th className="p-2 border">Sản phẩm</th>
+                      <th className="p-2 border w-16">SL</th>
+                      <th className="p-2 border w-36">Đơn giá</th>
+                      <th className="p-2 border w-36">Thành tiền</th>
+                      <th className="p-2 border w-40">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, idx) => (
+                      <tr key={it.orderItemId} className="align-top">
+                        <td className="p-2 border">{idx + 1}</td>
+                        <td className="p-2 border">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={it.image || FALLBACK_IMG}
+                              alt={it.name}
+                              className="w-12 h-12 object-cover rounded border bg-white"
+                              onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                            />
+                            <button
+                              className="text-left hover:underline text-green-700"
+                              onClick={() =>
+                                it.accessoryId
+                                  ? navigate(`/accessory/${it.accessoryId}`)
+                                  : it.terrariumId
+                                  ? navigate(`/terrarium/${it.terrariumId}`)
+                                  : undefined
+                              }
+                            >
+                              {it.name}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-2 border">{it.quantity}</td>
+                        <td className="p-2 border">{money(it.unitPrice)}</td>
+                        <td className="p-2 border">{money(it.totalPrice)}</td>
+                        <td className="p-2 border">
+                          {order && isCompleted(order.status) && (
+                            <button
+                              onClick={() => openReview(it)}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded"
+                            >
+                              <Star size={14} />
+                              Đánh giá
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Cột trái - Thông tin vận chuyển & Chi tiết đơn hàng */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Tiến trình vận chuyển */}
-          <Card title="Tiến trình vận chuyển" className="shadow-sm">
-            {order.status !== "cancelled" ? (
-              <Steps 
-                current={getOrderStep(order.status)} 
-                status={getStepStatus(order.status)}
-                direction="vertical"
-              >
-                <Step
-                  title="Chờ thanh toán"
-                  description="Đơn hàng đang chờ thanh toán"
-                  icon={<ClockCircleOutlined />}
-                />
-                <Step
-                  title="Đang vận chuyển"
-                  description="Đơn hàng đang được vận chuyển"
-                  icon={<CarOutlined />}
-                />
-                <Step
-                  title="Hoàn thành"
-                  description="Đơn hàng đã được giao thành công"
-                  icon={<CheckCircleOutlined />}
-                />
-              </Steps>
-            ) : (
-              <div className="text-center py-8">
-                <div className="text-red-500 text-xl mb-2">Đơn hàng đã bị hủy</div>
-                <p className="text-gray-500">Đơn hàng của bạn đã bị hủy</p>
-              </div>
-            )}
-          </Card>
-
-          {/* Thông tin giao hàng */}
-          <Card title="Thông tin giao hàng" className="shadow-sm">
-            <div className="space-y-3">
-              <div>
-                <span className="font-medium text-gray-700">Người nhận: </span>
-                <span>{order.recipientName}</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-700">Số điện thoại: </span>
-                <span>{order.recipientPhone}</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-700">Địa chỉ: </span>
-                <span>{order.shippingAddress}</span>
-              </div>
-              {order.customerNote && (
+      {/* Modal đánh giá – dùng StarRating & chờ 1 nhịp trước khi upload ảnh */}
+      {reviewOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
+            <div className="px-5 py-3 border-b font-semibold">Đánh giá sản phẩm</div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <span className="font-medium text-gray-700">Ghi chú: </span>
-                  <span className="italic">{order.customerNote}</span>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Sản phẩm trong đơn hàng */}
-          <Card title="Sản phẩm đã đặt" className="shadow-sm">
-            <div className="space-y-4">
-              {orderItems.map((item) => (
-                <div key={item.orderItemId} className="flex items-center p-4 border rounded-lg">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-20 h-20 object-cover rounded-lg"
+                  <label className="block text-sm text-gray-600 mb-1">Điểm (1–5)</label>
+                  <StarRating
+                    value={reviewTarget.rating}
+                    onChange={(n) => setReviewTarget((s) => ({ ...s, rating: n }))}
                   />
-                  <div className="ml-4 flex-1">
-                    <h3 className="font-semibold text-lg">{item.name}</h3>
-                    <p className="text-gray-600">
-                      Đơn giá: {item.unitPrice.toLocaleString("vi-VN")} VND
-                    </p>
-                    <p className="text-gray-600">
-                      Số lượng: {item.quantity}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-lg text-green-600">
-                      {item.totalPrice.toLocaleString("vi-VN")} VND
-                    </p>
-                  </div>
                 </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Cột phải - Tóm tắt đơn hàng */}
-        <div className="lg:col-span-1">
-          <Card title="Tóm tắt đơn hàng" className="shadow-sm sticky top-6">
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Mã đơn hàng:</span>
-                <span className="font-medium">#{order.orderId}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Ngày đặt:</span>
-                <span className="font-medium">
-                  {new Date(order.orderDate).toLocaleDateString("vi-VN")}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Trạng thái:</span>
-                <Tag color={statusInfo.color}>{statusInfo.label}</Tag>
-              </div>
-              
-              <Divider />
-              
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Tạm tính:</span>
-                  <span>
-                    {orderItems.reduce((sum, item) => sum + item.totalPrice, 0).toLocaleString("vi-VN")} VND
-                  </span>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Ảnh (tùy chọn)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setReviewTarget((s) => ({ ...s, file: e.target.files?.[0] ?? null }))
+                    }
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>Phí vận chuyển:</span>
-                  <span>30.000 VND</span>
-                </div>
-                {order.deposit > 0 && (
-                  <div className="flex justify-between text-orange-600">
-                    <span>Đặt cọc:</span>
-                    <span>{order.deposit.toLocaleString("vi-VN")} VND</span>
-                  </div>
-                )}
-              </div>
-              
-              <Divider />
-              
-              <div className="flex justify-between text-xl font-bold text-green-600">
-                <span>Tổng cộng:</span>
-                <span>{order.totalAmount.toLocaleString("vi-VN")} VND</span>
               </div>
 
-              {/* Actions */}
-              <div className="pt-4 space-y-2">
-                {order.status === "pending" && (
-                  <Button type="primary" block size="large">
-                    Thanh toán ngay
-                  </Button>
-                )}
-                {order.status === "shipping" && (
-                  <Button block size="large">
-                    Theo dõi đơn hàng
-                  </Button>
-                )}
-                {order.status === "completed" && (
-                  <Button type="primary" block size="large">
-                    Mua lại
-                  </Button>
-                )}
-                {(order.status === "pending" || order.status === "shipping") && (
-                  <Button danger block>
-                    Hủy đơn hàng
-                  </Button>
-                )}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Nhận xét</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  rows={4}
+                  value={reviewTarget.comment}
+                  onChange={(e) => setReviewTarget((s) => ({ ...s, comment: e.target.value }))}
+                />
               </div>
             </div>
-          </Card>
+
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setReviewOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={submitReview}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              >
+                Gửi đánh giá
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

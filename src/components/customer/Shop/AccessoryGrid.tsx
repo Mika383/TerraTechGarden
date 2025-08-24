@@ -77,7 +77,7 @@ const AccessoryGrid: React.FC<AccessoryGridProps> = ({
             description={item.description}
             categoryName={getCategoryName(item.categoryId)}
             price={item.price}
-            image={item.accessoryImages?.[0]?.imageUrl || '/src/assets/image/1.jpg'}
+            image={item.accessoryImages?.[0]?.imageUrl || '/TerraTechLogo.png'}
             page={page}
           />
         ))}

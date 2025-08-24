@@ -108,12 +108,12 @@ const Favorite: React.FC = () => {
                 >
                   <Link to={href} className="block flex-1">
                     <img
-                      src={f.thumbnailUrl || '/placeholder.jpg'}
+                      src={f.thumbnailUrl || '/TerraTechLogo.png'}
                       alt={f.name}
                       className="w-full h-28 object-cover"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
-                          'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg';
+                          '/TerraTechLogo.png';
                       }}
                     />
                     <div className="px-3 py-2">

@@ -1,187 +1,479 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { getOrdersByUser } from "@/api/order";
-import OrderItem from "../../components/customer/Dashboard/OrderItem";
-import { SearchOutlined } from "@ant-design/icons";
-import { Spin, Pagination } from "antd";
+// src/pages/Customer/Order.tsx
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const statusMap: Record<string, string> = {
-  pending: "Chờ thanh toán",
-  shipping: "Đang vận chuyển",
-  completed: "Hoàn thành",
-  cancelled: "Đã hủy",
-};
+import { createMoMoPayment, getOrdersByUser } from '@/api/order';
+import type { Order, OrderItem } from '@/types/order';
 
-const filterOptions = ["Tất cả", "Chờ thanh toán", "Đang vận chuyển", "Hoàn thành", "Đã hủy"];
+import {
+  orderStatusToVi,
+  paymentStatusToVi,
+  orderStatusChip,
+  paymentStatusChip,
+  isCompleted,
+  isUnpaid,
+} from '@/utils/orderStatus';
 
-// Hàm lấy thêm info cho item đầu tiên (phân biệt accessory hoặc variant)
-const fetchItemInfo = async (item: any) => {
-  if (item.accessoryId) {
-    const res = await fetch(`https://terarium.shop/api/Accessory/get/${item.accessoryId}`);
-    const json = await res.json();
-    return {
-      name: json.data.name,
-      image: json.data.accessoryImages?.[0]?.imageUrl || "/default.jpg",
-    };
-  } else if (item.terrariumVariantId) {
-    const res = await fetch(
-      `https://terarium.shop/api/TerrariumVariant/get-terrariumVariant/${item.terrariumVariantId}`
-    );
-    const json = await res.json();
-    return {
-      name: json.data.variantName,
-      image: json.data.urlImage || "/default.jpg",
-    };
-  }
-  return { name: "Sản phẩm", image: "/default.jpg" };
-};
+import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
 
-const Orders: React.FC = () => {
-  const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState("Tất cả");
-  const [orders, setOrders] = useState<any[]>([]);
-  const [itemInfos, setItemInfos] = useState<{ [key: string]: { name: string; image: string } }>({});
-  const [loading, setLoading] = useState(false);
+const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
+const PER_PAGE = 5;
 
-  // 🆕 State phân trang
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
-
-  const userId = Number(localStorage.getItem("userId") || 0);
-
-  useEffect(() => {
-    setLoading(true);
-    getOrdersByUser(userId)
-      .then(async (ordersData) => {
-        setOrders(ordersData);
-
-        // Lấy info của item đầu tiên mỗi order (tối ưu cache)
-        const cache: { [key: string]: { name: string; image: string } } = {};
-        const promises = ordersData.map(async (order: any) => {
-          const item = order.orderItems?.[0];
-          if (!item) return null;
-          const cacheKey = `${item.accessoryId ? "a" + item.accessoryId : ""}${item.terrariumVariantId ? "v" + item.terrariumVariantId : ""}`;
-          if (cache[cacheKey]) return { key: order.orderId, ...cache[cacheKey] };
-          const info = await fetchItemInfo(item);
-          cache[cacheKey] = info;
-          return { key: order.orderId, ...info };
-        });
-        const infos = await Promise.all(promises);
-
-        const infoObj: any = {};
-        infos.forEach((info) => {
-          if (info) infoObj[info.key] = { name: info.name, image: info.image };
-        });
-        setItemInfos(infoObj);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [userId]);
-
-  const getStatusVN = (status: string) => statusMap[status] || status;
-
-  const filteredOrders = orders.filter((order) => {
-    const info = itemInfos[order.orderId] || {};
-    const name = info.name || "Sản phẩm";
-    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
-    const statusVN = getStatusVN(order.status);
-    const matchesFilter = filter === "Tất cả" || statusVN === filter;
-    return matchesSearch && matchesFilter;
-  });
-
-  // 🆕 Cắt dữ liệu theo trang
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedOrders = filteredOrders.slice(startIndex, startIndex + pageSize);
-
-  // ✨ Hàm xử lý click vào order để chuyển đến trang chi tiết
-  const handleOrderClick = (orderId: number) => {
-    console.log(`Navigating to order detail: ${orderId}`);
-    navigate(`/order-detail/${orderId}`);
-  };
-
+/** Star rating (★) – nhấp để chọn, hover để xem trước */
+const StarRating: React.FC<{
+  value: number;
+  onChange: (n: number) => void;
+  size?: 'sm' | 'md' | 'lg';
+}> = ({ value, onChange, size = 'md' }) => {
+  const [hover, setHover] = useState(0);
+  const starSize =
+    size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-lg' : 'text-2xl';
   return (
-    <div className="container mx-auto py-8 px-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Đơn Mua</h1>
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Tìm đơn hàng..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="p-2 pl-10 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-          />
-          <SearchOutlined className="absolute left-3 top-2 text-gray-400" />
-        </div>
-      </div>
-
-      <div className="mb-6">
-        <div className="flex space-x-4 overflow-x-auto pb-2 border-b border-gray-200">
-          {filterOptions.map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-t-md font-medium transition-colors ${
-                filter === status
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, idx) => {
+        const n = idx + 1;
+        const active = (hover || value) >= n;
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-label={`${n} sao`}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            onFocus={() => setHover(n)}
+            onBlur={() => setHover(0)}
+            onClick={() => onChange(n)}
+            className="leading-none focus:outline-none"
+          >
+            <span
+              className={`${starSize} ${
+                active ? 'text-amber-400' : 'text-gray-300'
               }`}
             >
-              {status}
-            </button>
-          ))}
-        </div>
+              ★
+            </span>
+          </button>
+        );
+      })}
+      <span className="ml-2 text-sm text-gray-600">{value}/5</span>
+    </div>
+  );
+};
+
+type ReviewState = {
+  open: boolean;
+  order?: Order | null;
+  orderItemId?: number | null;
+  rating: number;
+  comment: string;
+  file?: File | null;
+};
+
+const Order: React.FC = () => {
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // pagination
+  const [page, setPage] = useState(1);
+
+  // modal đánh giá
+  const [review, setReview] = useState<ReviewState>({
+    open: false,
+    order: null,
+    orderItemId: null,
+    rating: 5,
+    comment: '',
+    file: null,
+  });
+
+  const userId = useMemo(() => Number(localStorage.getItem('userId') || 0), []);
+
+  const load = async () => {
+    if (!userId) {
+      toast.info('Bạn cần đăng nhập để xem đơn hàng.');
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await getOrdersByUser(userId);
+      const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => {
+        const ta = new Date(a.orderDate ?? '').getTime();
+        const tb = new Date(b.orderDate ?? '').getTime();
+        return tb - ta;
+      });
+      setOrders(sorted);
+      setPage(1);
+    } catch {
+      toast.error('Không tải được danh sách đơn.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ——— ACTIONS ———
+  const payWithMoMo = async (o: Order) => {
+    try {
+      const { payUrl } = await createMoMoPayment({
+        orderId: o.orderId,
+        orderInfo: `Đơn hàng #${o.orderId}`,
+        payAll: true,
+      });
+      window.location.href = payUrl;
+    } catch (err) {
+      console.error(err);
+      toast.error('Không tạo được giao dịch MoMo.');
+    }
+  };
+
+  const openReview = (o: Order) => {
+    const firstItem = o.orderItems?.[0]?.orderItemId ?? null;
+    setReview({
+      open: true,
+      order: o,
+      orderItemId: firstItem,
+      rating: 5,
+      comment: '',
+      file: null,
+    });
+  };
+
+  const submitReview = async () => {
+    try {
+      if (!review.order || !review.orderItemId) return;
+      if (review.rating < 1 || review.rating > 5) {
+        toast.info('Điểm đánh giá từ 1 đến 5.');
+        return;
+      }
+      const fb = await createFeedback({
+        orderItemId: review.orderItemId,
+        rating: review.rating,
+        comment: review.comment || '',
+      });
+
+      const fid: number =
+        fb?.feedbackId ?? fb?.data?.feedbackId ?? fb?.id ?? fb?.data?.id;
+
+      if (fid && review.file) {
+        await uploadFeedbackImage(fid, review.file);
+      }
+
+      toast.success('Đã gửi đánh giá. Cảm ơn bạn!');
+      setReview((s) => ({ ...s, open: false }));
+    } catch (e) {
+      console.error(e);
+      toast.error('Gửi đánh giá thất bại.');
+    }
+  };
+
+  const canRate = (o: Order) => isCompleted(o.status);
+  const canPay = (o: Order) => isUnpaid(o.paymentStatus);
+
+  // ——— PAGINATION DATA ———
+  const total = orders.length;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedOrders = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return orders.slice(start, start + PER_PAGE);
+  }, [orders, currentPage]);
+
+  const from = total === 0 ? 0 : (currentPage - 1) * PER_PAGE + 1;
+  const to = Math.min(currentPage * PER_PAGE, total);
+
+  const goPage = (p: number) => {
+    const np = Math.min(Math.max(1, p), totalPages);
+    setPage(np);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const placeholderCount = Math.max(0, PER_PAGE - pagedOrders.length);
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-green-700 mb-4">
+          Đơn hàng của tôi
+        </h1>
+
+        {loading ? (
+          <div className="text-center text-gray-600">Đang tải...</div>
+        ) : total === 0 ? (
+          <div className="bg-white p-8 rounded-lg shadow text-center">
+            Chưa có đơn hàng nào.
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 min-h-0">
+              {pagedOrders.map((o) => (
+                <div
+                  key={o.orderId}
+                  className="bg-white rounded-lg shadow border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="font-semibold text-gray-800">
+                      Đơn hàng #{o.orderId}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Ngày đặt:{' '}
+                      {o.orderDate
+                        ? new Date(o.orderDate).toLocaleString('vi-VN')
+                        : 'N/A'}
+                    </div>
+                    <div className="text-sm">
+                      Tổng tiền:{' '}
+                      <span className="font-semibold">{money(o.totalAmount)}</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span
+                        className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(
+                          o.status
+                        )}`}
+                        title={String(o.status)}
+                      >
+                        {orderStatusToVi(o.status)}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(
+                          o.paymentStatus
+                        )}`}
+                        title={String(o.paymentStatus)}
+                      >
+                        {paymentStatusToVi(o.paymentStatus)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() =>
+                        navigate(`/customer-dashboard/orders/${o.orderId}`)
+                      }
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                    >
+                      <Eye size={16} />
+                      Xem chi tiết
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        toast.info('Chức năng hủy sẽ cập nhật sau từ BE.')
+                      }
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded"
+                    >
+                      <XCircle size={16} />
+                      Hủy đơn
+                    </button>
+
+                    {canRate(o) && (
+                      <button
+                        onClick={() => openReview(o)}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded"
+                      >
+                        <Star size={16} />
+                        Đánh giá
+                      </button>
+                    )}
+
+                    {canPay(o) && (
+                      <button
+                        onClick={() => payWithMoMo(o)}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded"
+                      >
+                        <Wallet size={16} />
+                        Thanh toán
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* giữ layout cao như 5 thẻ để thanh phân trang không “nhảy” */}
+              {Array.from({ length: placeholderCount }).map((_, i) => (
+                <div
+                  key={`ph-${i}`}
+                  className="bg-white rounded-lg shadow border p-4 opacity-0 pointer-events-none select-none"
+                  aria-hidden="true"
+                >
+                  placeholder
+                </div>
+              ))}
+            </div>
+
+            {/* phân trang */}
+            <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm text-gray-600">
+                Hiển thị <b>{from}</b>–<b>{to}</b> trong <b>{total}</b> đơn hàng
+              </div>
+
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => goPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50"
+                  aria-label="Trang trước"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+
+                {Array.from({ length: Math.max(1, totalPages) }).map((_, idx) => {
+                  const p = idx + 1;
+                  const withinWindow =
+                    p === 1 ||
+                    p === totalPages ||
+                    (p >= currentPage - 2 && p <= currentPage + 2);
+
+                  if (!withinWindow) {
+                    if (p === 2 && currentPage > 4)
+                      return (
+                        <span key={p} className="px-2">
+                          …
+                        </span>
+                      );
+                    if (p === totalPages - 1 && currentPage < totalPages - 3)
+                      return (
+                        <span key={p} className="px-2">
+                          …
+                        </span>
+                      );
+                    return null;
+                  }
+
+                  const active = p === currentPage;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => goPage(p)}
+                      className={`px-3 py-1.5 rounded border ${
+                        active
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={() => goPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50"
+                  aria-label="Trang sau"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center min-h-[200px]">
-          <Spin size="large" />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {paginatedOrders.length > 0 ? (
-            paginatedOrders.map((order) => {
-              const info = itemInfos[order.orderId] || {};
-              return (
-                <OrderItem
-                  key={order.orderId}
-                  name={info.name || "Sản phẩm"}
-                  price={order.totalAmount}
-                  image={info.image || "/default.jpg"}
-                  date={
-                    order.orderDate
-                      ? new Date(order.orderDate).toLocaleDateString("vi-VN")
-                      : ""
-                  }
-                  status={getStatusVN(order.status)}
-                  onClick={() => handleOrderClick(order.orderId)}
-                />
-              );
-            })
-          ) : (
-            <p className="text-center text-gray-500">Không có đơn hàng nào.</p>
-          )}
-        </div>
-      )}
+      {/* Modal đánh giá (dùng StarRating) */}
+      {review.open && review.order && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
+            <div className="px-5 py-3 border-b font-semibold">
+              Đánh giá sản phẩm
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Điểm (1–5)
+                  </label>
+                  <StarRating
+                    value={review.rating}
+                    onChange={(n) => setReview((s) => ({ ...s, rating: n }))}
+                  />
+                </div>
 
-      {/* 🆕 Pagination */}
-      {filteredOrders.length > pageSize && (
-        <div className="flex justify-center mt-6">
-          <Pagination
-          current={currentPage}
-          pageSize={pageSize}
-          total={filteredOrders.length}
-          onChange={(page, size) => {
-            setCurrentPage(page);
-            setPageSize(size);
-          }}
-          showSizeChanger
-        />
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Ảnh (tùy chọn)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setReview((s) => ({
+                        ...s,
+                        file: e.target.files?.[0] ?? null,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Chọn sản phẩm trong đơn
+                </label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={review.orderItemId ?? undefined}
+                  onChange={(e) =>
+                    setReview((s) => ({
+                      ...s,
+                      orderItemId: Number(e.target.value),
+                    }))
+                  }
+                >
+                  {review.order.orderItems.map((it: OrderItem) => (
+                    <option key={it.orderItemId} value={it.orderItemId}>
+                      #{it.orderItemId} •{' '}
+                      {it.accessoryId
+                        ? `Phụ kiện ${it.accessoryId}`
+                        : `Variant ${it.terrariumVariantId}`}
+                      {' · '}SL {it.quantity}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Nhận xét
+                </label>
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  rows={4}
+                  value={review.comment}
+                  onChange={(e) =>
+                    setReview((s) => ({ ...s, comment: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setReview((s) => ({ ...s, open: false }))}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={submitReview}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              >
+                Gửi đánh giá
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-export default Orders;
+export default Order;

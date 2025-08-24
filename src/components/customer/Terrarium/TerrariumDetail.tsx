@@ -67,7 +67,7 @@ const TerrariumDetail: React.FC<Props> = ({
 
   const fallbackImage =
     terrarium.terrariumImages?.[0]?.imageUrl ||
-    'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg';
+    '/public/TerraTechLogo.png';
 
   const mainImage = selectedVariant?.urlImage || fallbackImage;
 
@@ -146,7 +146,7 @@ const TerrariumDetail: React.FC<Props> = ({
                       onError={(e) => {
                         e.currentTarget.onerror = null;
                         e.currentTarget.src =
-                          'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_100x100.jpg';
+                          '/public/TerraTechLogo.png';
                       }}
                     />
                     <span className="text-sm whitespace-nowrap">{variant.variantName}</span>

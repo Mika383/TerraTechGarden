@@ -60,7 +60,7 @@ const BodyDetail: React.FC<BodyDetailProps> = ({
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src =
-                        'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg';
+                        '/TerraTechLogo.png';
                     }}
                   />
                 </SwiperSlide>

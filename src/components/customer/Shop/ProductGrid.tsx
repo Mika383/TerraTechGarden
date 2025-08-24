@@ -81,7 +81,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({
             price={product.minPrice ?? 0}
             rating={0}
             purchases={0}
-            image={product.terrariumImages?.[0]?.imageUrl || '/src/assets/image/1.jpg'}
+            image={product.terrariumImages?.[0]?.imageUrl || '/TerraTechLogo.png'}
             environmentName={getEnvironmentName(product.environmentId)}
           />
         ))}

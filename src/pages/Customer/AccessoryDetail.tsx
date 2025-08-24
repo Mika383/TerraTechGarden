@@ -72,7 +72,7 @@ const AccessoryDetail: React.FC = () => {
         accessoryId: accessory.accessoryId,
         name: accessory.name,
         price: accessory.price,
-        image: images[0] || accessory.accessoryImages?.[0]?.imageUrl || '/default.jpg',
+        image: images[0] || accessory.accessoryImages?.[0]?.imageUrl || '/TerraTechLogo.png',
         quantity,
         selected: false,
       };

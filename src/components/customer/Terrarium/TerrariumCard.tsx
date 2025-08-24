@@ -47,7 +47,7 @@ const TerrariumCard: React.FC<TerrariumCardProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  const fallbackSrc = '/assets/image/1.jpg';
+  const fallbackSrc = '/TerraTechLogo.png';
   const [imgSrc, setImgSrc] = useState(image);
 
   useEffect(() => setImgSrc(image), [image]);
