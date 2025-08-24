@@ -46,7 +46,7 @@ const Detail: React.FC = () => {
           type: `#${apiData.environmentId || 'N/A'}`,
           image:
             apiData.terrariumImages?.[0]?.imageUrl ||
-            'https://res.cloudinary.com/dia8sg8u7/image/upload/v1753283976/placeholder/placeholder_400x300.jpg',
+            '/TerraTechLogo.png',
           terrariumImages: apiData.terrariumImages || [],
         };
 
@@ -161,7 +161,7 @@ const Detail: React.FC = () => {
           price: acc.price,
           image:
             (Array.isArray(acc.accessoryImages) && acc.accessoryImages[0]?.imageUrl) ||
-            'https://via.placeholder.com/100',
+            '/TerraTechLogo.png',
           quantity: 1,
           selected: false,
           createdAt: new Date().toISOString(),

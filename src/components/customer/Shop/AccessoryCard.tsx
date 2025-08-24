@@ -107,7 +107,7 @@ const AccessoryCard: React.FC<AccessoryCardProps> = ({
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
-    target.src = '/src/assets/image/1.jpg';
+    target.src = '/TerraTechLogo.png';
   };
 
   return (

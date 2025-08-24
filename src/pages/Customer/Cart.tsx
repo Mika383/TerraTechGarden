@@ -6,32 +6,40 @@ import {
   getCart,
   updateCartItem,
   deleteCartItem,
-  addTerrariumVariantToCart, // đổi variant
+  changeCartItemVariant, // ✅ API đổi variant trực tiếp từ BE
 } from '@/api/cart';
 import { getTerrariumById, getVariantsByTerrariumId } from '@/api/terrarium';
+import { getAccessoryById } from '@/api/accessory';
 import type { CartResponseNew, CartBundle, RawCartEntry } from '@/types/cart';
 
+const FALLBACK_IMG = '/TerraTechLogo.png'; // ✅ dùng logo trong public
 const currency = (v: number) => (v || 0).toLocaleString('vi-VN') + ' VND';
-const firstItem = (e: RawCartEntry) => (e.item && e.item.length ? e.item[0] : null);
 const keyOfEntry = (e: RawCartEntry) => `ci_${e.cartItemId}`;
 const keyOfBundle = (b: CartBundle) => `b_${b.mainItem.terrariumId ?? 'x'}`;
+const unitPriceOf = (e: RawCartEntry) => {
+  const qty = e.totalCartQuantity || 0;
+  return qty > 0 ? e.totalCartPrice / qty : 0;
+};
 
 const Cart: React.FC = () => {
   const [data, setData] = useState<CartResponseNew | null>(null);
 
-  // luôn thu gọn mặc định
+  // UI state
   const [bundleOpen, setBundleOpen] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [variantChanging, setVariantChanging] = useState<Record<number, boolean>>({});
 
-  // cache tên + thumbnail terrarium
+  // Terrarium meta
   const [terrariumName, setTerrariumName] = useState<Record<number, string>>({});
   const [terrariumThumb, setTerrariumThumb] = useState<Record<number, string>>({});
 
-  // cache danh sách variant theo terrarium
+  // Accessory meta
+  const [accessoryName, setAccessoryName] = useState<Record<number, string>>({});
+  const [accessoryThumb, setAccessoryThumb] = useState<Record<number, string>>({});
+
+  // Variants cache
   const [variantsMap, setVariantsMap] = useState<Record<number, any[]>>({});
-  // map variantId -> terrariumId
   const [variantToTerrariumMap, setVariantToTerrariumMap] = useState<Record<number, number>>({});
 
   const navigate = useNavigate();
@@ -52,7 +60,7 @@ const Cart: React.FC = () => {
     load();
   }, []);
 
-  // lấy tên + thumbnail terrarium cho nhóm bundle & single
+  // === TERRARIUM META ===
   useEffect(() => {
     const fetchTerrariumMeta = async () => {
       if (!data) return;
@@ -76,10 +84,10 @@ const Cart: React.FC = () => {
             return {
               id,
               name: t?.terrariumName || `Bể terrarium #${id}`,
-              thumb: t?.terrariumImages?.[0]?.imageUrl || '/default.jpg',
+              thumb: t?.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG,
             };
           } catch {
-            return { id, name: `Bể terrarium #${id}`, thumb: '/default.jpg' };
+            return { id, name: `Bể terrarium #${id}`, thumb: FALLBACK_IMG };
           }
         })
       );
@@ -96,15 +104,63 @@ const Cart: React.FC = () => {
       });
     };
     fetchTerrariumMeta();
-  }, [data, terrariumName, terrariumThumb]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
-  // lọc bundle chỉ gồm accessories (để hiển thị dạng nhóm)
+  // === ACCESSORY META ===
+  useEffect(() => {
+    const fetchAccessoryMeta = async () => {
+      if (!data) return;
+      const ids = new Set<number>();
+
+      for (const b of data.bundleItems || []) {
+        for (const e of b.bundleAccessories || []) {
+          if (e.accessoryId) ids.add(e.accessoryId);
+        }
+      }
+      for (const e of data.singleItems || []) {
+        if (e.accessoryId) ids.add(e.accessoryId);
+      }
+
+      const missing = [...ids].filter((id) => !accessoryName[id] || !accessoryThumb[id]);
+      if (!missing.length) return;
+
+      const pairs = await Promise.all(
+        missing.map(async (id) => {
+          try {
+            const a = await getAccessoryById(id);
+            return {
+              id,
+              name: a?.name || `Phụ kiện #${id}`,
+              thumb: a?.accessoryImages?.[0]?.imageUrl || FALLBACK_IMG,
+            };
+          } catch {
+            return { id, name: `Phụ kiện #${id}`, thumb: FALLBACK_IMG };
+          }
+        })
+      );
+
+      setAccessoryName((m) => {
+        const n = { ...m };
+        for (const p of pairs) n[p.id] = p.name;
+        return n;
+      });
+      setAccessoryThumb((m) => {
+        const n = { ...m };
+        for (const p of pairs) n[p.id] = p.thumb;
+        return n;
+      });
+    };
+    fetchAccessoryMeta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // === BUNDLES / SINGLES ===
   const bundlesToShow = useMemo(() => {
     const src = data?.bundleItems || [];
     return src.filter((b) => (b.bundleAccessories?.length || 0) > 0);
   }, [data]);
 
-  // item là variant nhưng nằm trong bundle (bundleAccessories rỗng) → hiển thị như single
   const variantSinglesFromBundles = useMemo<RawCartEntry[]>(() => {
     const src = data?.bundleItems || [];
     return src
@@ -112,54 +168,57 @@ const Cart: React.FC = () => {
       .map((b) => b.mainItem);
   }, [data]);
 
-  // gộp singleItems + các variantSingle tách từ bundle
   const mergedSingles = useMemo<RawCartEntry[]>(() => {
     const singles = data?.singleItems || [];
     return [...variantSinglesFromBundles, ...singles];
   }, [data, variantSinglesFromBundles]);
 
-  // danh sách tất cả entry có thể chọn để checkout
+  // tất cả các dòng có thể chọn
   const allEntries = useMemo<RawCartEntry[]>(
     () => [...mergedSingles, ...bundlesToShow.flatMap((b) => b.bundleAccessories)],
     [mergedSingles, bundlesToShow]
   );
 
-  // prefetch variants cho các item là variant (để đổi variant)
+  // === VARIANTS (prefetch) ===
   useEffect(() => {
-    const run = async () => {
-      const targets = mergedSingles.filter((e) => !!e.terrariumVariantId);
-      if (!targets.length) return;
+  const run = async () => {
+    const targets = mergedSingles.filter((e) => !!e.terrariumVariantId);
+    if (!targets.length) return;
 
-      const variantIds = [...new Set(targets.map((e) => e.terrariumVariantId!).filter(Boolean))];
-      const missingVariants = variantIds.filter((vid) => !variantToTerrariumMap[vid]);
-      if (!missingVariants.length) return;
+    const variantIds = [...new Set(targets.map((e) => e.terrariumVariantId!).filter(Boolean))];
+    const missingVariants = variantIds.filter((vid) => !variantToTerrariumMap[vid]);
+    if (!missingVariants.length) return;
 
-      try {
-        // bạn có thể thay danh sách này bằng fetch từ BE nếu có
-        const possibleTerrariumIds = [22, 24, 25, 26, 27, 28];
-        const variantMappings: Record<number, number> = {};
+    // ➜ Thu thập terrariumId có khả năng chứa các variant đang có
+    const dynamicTerrariumIds = new Set<number>();
+    // 1) từ chính entries (nếu BE có trả kèm terrariumId)
+    targets.forEach((e) => e.terrariumId && dynamicTerrariumIds.add(e.terrariumId));
+    // 2) từ bundles (mainItem luôn có terrariumId)
+    (data?.bundleItems || []).forEach((b) => b.mainItem?.terrariumId && dynamicTerrariumIds.add(b.mainItem.terrariumId));
 
-        for (const tid of possibleTerrariumIds) {
-          try {
-            const variants = await getVariantsByTerrariumId(tid);
-            setVariantsMap((prev) => ({ ...prev, [tid]: variants }));
-            for (const v of variants) {
-              if (variantIds.includes(v.terrariumVariantId)) {
-                variantMappings[v.terrariumVariantId] = tid;
-              }
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-        setVariantToTerrariumMap((prev) => ({ ...prev, ...variantMappings }));
-      } catch (err) {
-        console.error('Error fetching variants:', err);
+    // fallback nhẹ nếu rỗng
+    if (dynamicTerrariumIds.size === 0) [22, 24, 25, 26, 27, 28].forEach((id) => dynamicTerrariumIds.add(id));
+
+    try {
+      const map: Record<number, number> = {};
+      for (const tid of dynamicTerrariumIds) {
+        try {
+          const variants = await getVariantsByTerrariumId(tid);
+          setVariantsMap((prev) => ({ ...prev, [tid]: variants }));
+          for (const v of variants) if (variantIds.includes(v.terrariumVariantId)) map[v.terrariumVariantId] = tid;
+        } catch {/* ignore */}
       }
-    };
-    run();
-  }, [mergedSingles, variantToTerrariumMap]);
+      setVariantToTerrariumMap((prev) => ({ ...prev, ...map }));
+    } catch (err) {
+      console.error('fetch variants error:', err);
+    }
+  };
+  run();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [mergedSingles, data, variantToTerrariumMap]);
 
+
+  // === SELECT / GROUP TOGGLE ===
   const isEntryChecked = (e: RawCartEntry) => !!selected[keyOfEntry(e)];
   const isBundleChecked = (b: CartBundle) => {
     const ids = b.bundleAccessories.map((e) => keyOfEntry(e));
@@ -181,10 +240,10 @@ const Cart: React.FC = () => {
     });
   };
 
+  // === QUANTITY (dựa trên totalCartQuantity) ===
   const inc = async (e: RawCartEntry) => {
     try {
-      const i = firstItem(e);
-      const next = (i?.quantity || 0) + 1;
+      const next = (e.totalCartQuantity || 0) + 1;
       if (e.accessoryId) await updateCartItem(e.cartItemId, { accessoryQuantity: next });
       else if (e.terrariumVariantId) await updateCartItem(e.cartItemId, { variantQuantity: next });
       await load();
@@ -195,8 +254,8 @@ const Cart: React.FC = () => {
 
   const dec = async (e: RawCartEntry) => {
     try {
-      const i = firstItem(e);
-      const next = Math.max(1, (i?.quantity || 1) - 1);
+      const current = e.totalCartQuantity || 1;
+      const next = Math.max(1, current - 1);
       if (e.accessoryId) await updateCartItem(e.cartItemId, { accessoryQuantity: next });
       else if (e.terrariumVariantId) await updateCartItem(e.cartItemId, { variantQuantity: next });
       await load();
@@ -233,7 +292,7 @@ const Cart: React.FC = () => {
       if (!items.length) return;
 
       if (delta < 0) {
-        const hasMin = items.some((e) => (firstItem(e)?.quantity || 1) <= 1);
+        const hasMin = items.some((e) => (e.totalCartQuantity || 1) <= 1);
         if (hasMin) {
           toast.info('Không thể giảm vì có phụ kiện đang ở số lượng 1');
           return;
@@ -242,8 +301,7 @@ const Cart: React.FC = () => {
 
       await Promise.all(
         items.map(async (e) => {
-          const i = firstItem(e);
-          const current = i?.quantity || 1;
+          const current = e.totalCartQuantity || 1;
           const next = Math.max(1, current + delta);
           await updateCartItem(e.cartItemId, { accessoryQuantity: next });
         })
@@ -256,7 +314,7 @@ const Cart: React.FC = () => {
     }
   };
 
-  // đổi variant
+  // === ĐỔI VARIANT: API mới từ BE ===
   const changeVariant = async (e: RawCartEntry, newVariantId: number) => {
     if (e.terrariumVariantId === newVariantId) return;
 
@@ -264,14 +322,8 @@ const Cart: React.FC = () => {
     setVariantChanging((prev) => ({ ...prev, [cartItemId]: true }));
 
     try {
-      const i = firstItem(e);
-      const qty = i?.quantity || 1;
-
-      const terrariumId = variantToTerrariumMap[e.terrariumVariantId!];
-      if (!terrariumId) throw new Error('Không tìm thấy thông tin terrarium');
-
-      await deleteCartItem(e.cartItemId);
-      await addTerrariumVariantToCart(terrariumId, newVariantId, qty);
+      const qty = e.totalCartQuantity || 1;
+      await changeCartItemVariant(e.cartItemId, newVariantId, qty);
       await load();
       toast.success('Đã thay đổi phân loại hàng');
     } catch (error) {
@@ -283,6 +335,7 @@ const Cart: React.FC = () => {
     }
   };
 
+  // === CHECKOUT DATA (từ số liệu tổng BE + meta hiển thị) ===
   const selectedItemsForCheckout = useMemo(() => {
     const list: {
       id: string;
@@ -294,25 +347,44 @@ const Cart: React.FC = () => {
       accessoryId?: number | null;
       variantId?: number | null;
     }[] = [];
+
     for (const e of allEntries) {
       if (!isEntryChecked(e)) continue;
-      const i = firstItem(e);
-      if (!i) continue;
+
+      const isVariant = !!e.terrariumVariantId;
+      const actualTerrariumId = isVariant ? variantToTerrariumMap[e.terrariumVariantId!] : e.terrariumId || undefined;
+
+      // name + image
+      let name = 'Sản phẩm';
+      let image = FALLBACK_IMG;
+
+      if (isVariant && actualTerrariumId) {
+        name = terrariumName[actualTerrariumId] || `Bể terrarium #${actualTerrariumId}`;
+        image = terrariumThumb[actualTerrariumId] || FALLBACK_IMG;
+      } else if (e.accessoryId) {
+        name = accessoryName[e.accessoryId] || `Phụ kiện #${e.accessoryId}`;
+        image = accessoryThumb[e.accessoryId] || FALLBACK_IMG;
+      }
+
       list.push({
         id: keyOfEntry(e),
-        name: i.productName,
-        price: i.price,
-        image: i.imageUrl || '/default.jpg',
-        quantity: i.quantity,
+        name,
+        price: unitPriceOf(e),
+        image,
+        quantity: e.totalCartQuantity || 1,
         selected: true,
         accessoryId: e.accessoryId ?? undefined,
         variantId: e.terrariumVariantId ?? undefined,
       });
     }
     return list;
-  }, [allEntries, selected]);
+  }, [allEntries, selected, terrariumName, terrariumThumb, accessoryName, accessoryThumb, variantToTerrariumMap]);
 
-  const subtotal = selectedItemsForCheckout.reduce((s, it) => s + it.price * it.quantity, 0);
+  // Subtotal từ tổng dòng BE
+  const subtotal = useMemo(
+    () => allEntries.reduce((s, e) => (isEntryChecked(e) ? s + (e.totalCartPrice || 0) : s), 0),
+    [allEntries, selected]
+  );
 
   const goCheckout = () => {
     if (!selectedItemsForCheckout.length) {
@@ -330,20 +402,20 @@ const Cart: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-8 md:py-10">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* LEFT */}
         <div className="lg:col-span-2 space-y-4">
           <h1 className="text-2xl md:text-3xl font-bold text-green-700">Giỏ hàng</h1>
 
-          {/* BUNDLE: chỉ hiển thị nhóm cho phụ kiện (mặc định thu gọn) */}
+          {/* BUNDLE: nhóm phụ kiện theo bể (mặc định thu gọn) */}
           {bundlesToShow.map((b) => {
             const tid = b.mainItem.terrariumId ?? b.bundleAccessories[0]?.terrariumId ?? 0;
             const bundleId = keyOfBundle(b);
             const name = tid ? terrariumName[tid] || `Bể terrarium #${tid}` : 'Bể terrarium';
-            const thumb = tid ? terrariumThumb[tid] || '/default.jpg' : '/default.jpg';
+            const thumb = tid ? terrariumThumb[tid] || FALLBACK_IMG : FALLBACK_IMG;
 
-            // luôn thu gọn nếu chưa có state
-            const isOpen = (bundleOpen[bundleId] ?? false);
+            const isOpen = bundleOpen[bundleId] ?? false;
             const groupChecked = isBundleChecked(b);
-            const canDecBundle = b.bundleAccessories.every((e) => (firstItem(e)?.quantity || 1) > 1);
+            const canDecBundle = b.bundleAccessories.every((e) => (e.totalCartQuantity || 1) > 1);
 
             return (
               <div key={bundleId} className="bg-white rounded-lg shadow border">
@@ -355,14 +427,13 @@ const Cart: React.FC = () => {
                       onChange={() => toggleBundle(b)}
                       className="w-5 h-5 accent-green-600"
                     />
-                    {/* thumbnail bể */}
                     <img
                       src={thumb}
                       alt={name}
-                      className="w-10 h-10 rounded border object-cover cursor-pointer"
+                      className="w-10 h-10 rounded border bg-white object-cover cursor-pointer" // ✅ nền trắng
                       onClick={() => tid && navigate(`/terrarium/${tid}`)}
                       onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = '/default.jpg';
+                        (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                       }}
                     />
                     <div className="font-semibold">
@@ -377,7 +448,6 @@ const Cart: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {/* Nút xem bể */}
                     <button
                       onClick={() => tid && navigate(`/terrarium/${tid}`)}
                       className="px-3 py-1 text-sm bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100"
@@ -385,7 +455,6 @@ const Cart: React.FC = () => {
                       Xem bể
                     </button>
 
-                    {/* Điều khiển SL cả bộ */}
                     <div className="flex items-center border rounded overflow-hidden">
                       <button
                         onClick={() => changeBundleQuantity(b, -1)}
@@ -424,7 +493,10 @@ const Cart: React.FC = () => {
                 {isOpen && (
                   <div className="divide-y">
                     {b.bundleAccessories.map((e) => {
-                      const i = firstItem(e);
+                      const aId = e.accessoryId || 0;
+                      const aName = aId ? (accessoryName[aId] || `Phụ kiện #${aId}`) : 'Phụ kiện';
+                      const aThumb = aId ? (accessoryThumb[aId] || FALLBACK_IMG) : FALLBACK_IMG;
+
                       return (
                         <div key={e.cartItemId} className="p-4 flex items-center gap-3">
                           <input
@@ -433,24 +505,21 @@ const Cart: React.FC = () => {
                             onChange={() => toggleEntry(e)}
                             className="w-5 h-5 accent-green-600"
                           />
-                          {i?.imageUrl ? (
-                            <img
-                              src={i.imageUrl}
-                              alt={i.productName}
-                              className="w-14 h-14 object-cover rounded border"
-                              onError={(ev) => {
-                                (ev.currentTarget as HTMLImageElement).src = '/default.jpg';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-14 h-14 bg-gray-100 rounded border" />
-                          )}
+
+                          <img
+                            src={aThumb}
+                            alt={aName}
+                            className="w-14 h-14 object-cover rounded border bg-white" // ✅ nền trắng
+                            onError={(ev) => {
+                              (ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
+                            }}
+                          />
+
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-800 truncate">{i?.productName || 'Phụ kiện'}</div>
-                            <div className="text-sm text-gray-600">{currency(i?.price || 0)}</div>
+                            <div className="font-medium text-gray-800 truncate">{aName}</div>
+                            <div className="text-sm text-gray-600">{currency(unitPriceOf(e))}</div>
                           </div>
 
-                          {/* nút xem phụ kiện */}
                           {e.accessoryId && (
                             <button
                               onClick={() => navigate(`/accessory/${e.accessoryId}`)}
@@ -464,13 +533,14 @@ const Cart: React.FC = () => {
                             <button onClick={() => dec(e)} className="px-3 py-1 bg-gray-100 hover:bg-gray-200">
                               −
                             </button>
-                            <span className="px-4 py-1">{i?.quantity ?? 1}</span>
+                            <span className="px-4 py-1">{e.totalCartQuantity ?? 1}</span>
                             <button onClick={() => inc(e)} className="px-3 py-1 bg-gray-100 hover:bg-gray-200">
                               +
                             </button>
                           </div>
+
                           <div className="w-32 text-right font-semibold text-gray-800">
-                            {currency((i?.price || 0) * (i?.quantity || 0))}
+                            {currency(e.totalCartPrice || 0)}
                           </div>
                           <button onClick={() => removeEntry(e)} className="text-red-600 hover:underline text-sm">
                             Xoá
@@ -484,13 +554,12 @@ const Cart: React.FC = () => {
             );
           })}
 
-          {/* SINGLE ITEMS + VARIANT */}
+          {/* SẢN PHẨM LẺ (single accessories + variant singles) */}
           {mergedSingles.length > 0 && (
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b font-semibold">Sản phẩm lẻ</div>
               <div className="divide-y">
                 {mergedSingles.map((e) => {
-                  const i = firstItem(e);
                   const checked = isEntryChecked(e);
                   const isChangingVariant = variantChanging[e.cartItemId] || false;
 
@@ -501,10 +570,12 @@ const Cart: React.FC = () => {
                   const currentVariant = hasVariant ? list.find((v: any) => v.terrariumVariantId === e.terrariumVariantId) : null;
 
                   const terrariumDisplayName = actualTerrariumId ? terrariumName[actualTerrariumId] || `Bể terrarium #${actualTerrariumId}` : '';
-                  const productDisplayName = hasVariant && terrariumDisplayName ? terrariumDisplayName : i?.productName || 'Sản phẩm';
+                  const accessoryDisplayName = e.accessoryId ? (accessoryName[e.accessoryId] || `Phụ kiện #${e.accessoryId}`) : '';
+                  const productDisplayName = hasVariant && terrariumDisplayName ? terrariumDisplayName : (accessoryDisplayName || 'Sản phẩm');
 
-                  // ảnh ưu tiên: ảnh item -> thumbnail terrarium
-                  const imgSrc = i?.imageUrl || (actualTerrariumId ? terrariumThumb[actualTerrariumId] : '') || '/default.jpg';
+                  const imgSrc =
+                    (hasVariant && actualTerrariumId ? (terrariumThumb[actualTerrariumId] || '') : (e.accessoryId ? (accessoryThumb[e.accessoryId] || '') : ''))
+                    || FALLBACK_IMG;
 
                   return (
                     <div key={e.cartItemId} className={`p-4 flex items-start gap-3 ${isChangingVariant ? 'opacity-60' : ''}`}>
@@ -519,17 +590,29 @@ const Cart: React.FC = () => {
                       <img
                         src={imgSrc}
                         alt={productDisplayName}
-                        className="w-14 h-14 object-cover rounded border cursor-pointer"
-                        onClick={() => actualTerrariumId && navigate(`/terrarium/${actualTerrariumId}`)}
+                        className="w-14 h-14 object-cover rounded border bg-white cursor-pointer" // ✅ nền trắng
+                        onClick={() =>
+                          hasVariant && actualTerrariumId
+                            ? navigate(`/terrarium/${actualTerrariumId}`)
+                            : e.accessoryId
+                            ? navigate(`/accessory/${e.accessoryId}`)
+                            : undefined
+                        }
                         onError={(ev) => {
-                          (ev.currentTarget as HTMLImageElement).src = '/default.jpg';
+                          (ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                         }}
                       />
 
                       <div className="flex-1 min-w-0">
                         <div
                           className="font-medium text-gray-800 cursor-pointer hover:underline mb-1"
-                          onClick={() => actualTerrariumId && navigate(`/terrarium/${actualTerrariumId}`)}
+                          onClick={() =>
+                            hasVariant && actualTerrariumId
+                              ? navigate(`/terrarium/${actualTerrariumId}`)
+                              : e.accessoryId
+                              ? navigate(`/accessory/${e.accessoryId}`)
+                              : undefined
+                          }
                           title={productDisplayName}
                         >
                           {productDisplayName}
@@ -557,7 +640,6 @@ const Cart: React.FC = () => {
                                 ))}
                               </select>
 
-                              {/* nút xem bể */}
                               {actualTerrariumId && (
                                 <button
                                   onClick={() => navigate(`/terrarium/${actualTerrariumId}`)}
@@ -584,7 +666,7 @@ const Cart: React.FC = () => {
                           </div>
                         )}
 
-                        <div className="text-sm text-green-600 font-semibold">{currency(i?.price || 0)}</div>
+                        <div className="text-sm text-green-600 font-semibold">{currency(unitPriceOf(e))}</div>
                       </div>
 
                       {!e.comboId && (
@@ -596,7 +678,7 @@ const Cart: React.FC = () => {
                           >
                             −
                           </button>
-                          <span className="px-4 py-1 min-w-[50px] text-center">{i?.quantity ?? 1}</span>
+                          <span className="px-4 py-1 min-w-[50px] text-center">{e.totalCartQuantity ?? 1}</span>
                           <button
                             onClick={() => inc(e)}
                             className="px-3 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
@@ -608,7 +690,7 @@ const Cart: React.FC = () => {
                       )}
 
                       <div className="w-32 text-right">
-                        <div className="font-semibold text-gray-800">{currency((i?.price || 0) * (i?.quantity || 0))}</div>
+                        <div className="font-semibold text-gray-800">{currency(e.totalCartPrice || 0)}</div>
                         <button
                           onClick={() => removeEntry(e)}
                           className="text-red-600 hover:underline text-sm mt-1 disabled:opacity-50"
@@ -616,7 +698,6 @@ const Cart: React.FC = () => {
                         >
                           Xoá
                         </button>
-                        {/* nếu là phụ kiện đơn lẻ -> nút xem phụ kiện */}
                         {e.accessoryId && (
                           <button
                             onClick={() => navigate(`/accessory/${e.accessoryId}`)}
@@ -643,14 +724,16 @@ const Cart: React.FC = () => {
           )}
         </div>
 
-        {/* Summary */}
+        {/* RIGHT: Summary */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow p-4 sticky top-6">
             <h2 className="text-lg font-bold text-green-700 mb-3">Tóm tắt đơn hàng</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>Số sản phẩm đã chọn</span>
-                <span className="font-medium">{selectedItemsForCheckout.reduce((s, it) => s + it.quantity, 0)}</span>
+                <span className="font-medium">
+                  {allEntries.reduce((s, e) => (isEntryChecked(e) ? s + (e.totalCartQuantity || 0) : s), 0)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Tạm tính</span>

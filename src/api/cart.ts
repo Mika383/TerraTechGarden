@@ -28,18 +28,14 @@ export const getCart = async (): Promise<CartResponseNew> => {
     message: string;
     data: CartResponseNew;
   }>(`${BASE_URL}/Cart/get-all`, authHeader());
-
   return res.data.data;
 };
 
 /**
- * ADD BUNDLE ACCESSORIES (MUA DƯỚI DẠNG LINH KIỆN)
+ * ADD BUNDLE ACCESSORIES (mua nhiều phụ kiện theo bể)
  * POST /Cart/add-items/multiple
- * body: AddBundleAccessoriesPayload[]
  */
-export const addBundleAccessories = async (
-  items: AddBundleAccessoriesPayload[]
-) => {
+export const addBundleAccessories = async (items: AddBundleAccessoriesPayload[]) => {
   const res = await axios.post(
     `${BASE_URL}/Cart/add-items/multiple`,
     items,
@@ -51,29 +47,21 @@ export const addBundleAccessories = async (
 /**
  * ADD SINGLE ITEM - ACCESSORY
  * POST /Cart/add-item
- * body: AddAccessoryToCartPayload
+ * body: { accessoryId, accessoryQuantity }
  */
-export const addAccessoryToCart = async (
-  accessoryId: number,
-  quantity: number
-) => {
+export const addAccessoryToCart = async (accessoryId: number, quantity: number) => {
   const payload: AddAccessoryToCartPayload = {
     accessoryId,
     accessoryQuantity: quantity,
   };
-
-  const res = await axios.post(
-    `${BASE_URL}/Cart/add-item`,
-    payload,
-    authHeader()
-  );
+  const res = await axios.post(`${BASE_URL}/Cart/add-item`, payload, authHeader());
   return res.data;
 };
 
 /**
  * ADD SINGLE ITEM - TERRARIUM VARIANT
  * POST /Cart/add-item
- * body: AddVariantToCartPayload
+ * body: { terrariumId, terrariumVariantId, variantQuantity }
  */
 export const addTerrariumVariantToCart = async (
   terrariumId: number,
@@ -85,10 +73,23 @@ export const addTerrariumVariantToCart = async (
     terrariumVariantId,
     variantQuantity,
   };
+  const res = await axios.post(`${BASE_URL}/Cart/add-item`, payload, authHeader());
+  return res.data;
+};
 
-  const res = await axios.post(
-    `${BASE_URL}/Cart/add-item`,
-    payload,
+/**
+ * 🔄 CHANGE VARIANT BY CART ITEM ID (API mới của BE)
+ * PUT /Cart/change-variant/{cartItemId}
+ * body: { newVariantId: number, quantity: number }
+ */
+export const changeCartItemVariant = async (
+  cartItemId: number,
+  newVariantId: number,
+  quantity: number
+) => {
+  const res = await axios.put(
+    `${BASE_URL}/Cart/change-variant/${cartItemId}`,
+    { newVariantId, quantity },
     authHeader()
   );
   return res.data;

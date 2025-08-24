@@ -201,12 +201,12 @@ const FeaturedCombos: React.FC = () => {
                 {/* Image */}
                 <div className="relative h-48 overflow-hidden">
                   <img
-                    src={combo.imageUrl || '/api/placeholder/400/300'}
+                    src={combo.imageUrl || '/public/TerraTechLogo.png'}
                     alt={combo.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      target.src = '/api/placeholder/400/300';
+                      target.src = '/public/TerraTechLogo.png';
                     }}
                   />
                   
