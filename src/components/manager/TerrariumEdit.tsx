@@ -13,7 +13,11 @@ interface ApiResponse<T> {
   message: string;
   data: T;
 }
-
+interface Category {
+  categoryId: number;
+  categoryName: string;
+  description: string;
+}
 interface AccessoryApiResponse {
   results: Accessory[];
   includeProperties: null;
@@ -81,6 +85,13 @@ interface Environment {
   environmentDescription: string;
 }
 
+// Extended form data to store selected items info
+interface ExtendedFormData extends FormData {
+  selectedTankMethod?: TankMethod;
+  selectedShape?: Shape;
+  selectedEnvironment?: Environment;
+}
+
 const ApiDropdown = <T extends Record<string, any>>({
   apiUrl,
   placeholder,
@@ -138,6 +149,7 @@ const ApiDropdown = <T extends Record<string, any>>({
   return (
     <div className={`relative ${className}`}>
       <button
+        type="button" // Add explicit type="button"
         onClick={() => !disabled && !loading && setIsOpen(!isOpen)}
         disabled={disabled || loading}
         className={`w-full px-4 py-3 text-left bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:bg-gray-50 transition-colors duration-200 ${disabled || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${error ? 'border-red-300' : ''}`}
@@ -158,7 +170,7 @@ const ApiDropdown = <T extends Record<string, any>>({
         <div className="mt-1 text-sm text-red-600 flex items-center">
           <AlertCircle className="w-4 h-4 mr-1" />
           {error}
-          <button onClick={fetchData} className="ml-2 text-blue-600 hover:text-blue-800 underline">Thử lại</button>
+          <button type="button" onClick={fetchData} className="ml-2 text-blue-600 hover:text-blue-800 underline">Thử lại</button>
         </div>
       )}
 
@@ -169,6 +181,7 @@ const ApiDropdown = <T extends Record<string, any>>({
           ) : (
             data.map((item) => (
               <button
+                type="button" // Add explicit type="button"
                 key={String(getItemValue(item))}
                 onClick={() => handleSelect(item)}
                 className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors duration-150 ${selected && getItemValue(selected) === getItemValue(item) ? 'bg-blue-100 text-blue-900' : 'text-gray-900'}`}
@@ -190,83 +203,71 @@ const ApiDropdown = <T extends Record<string, any>>({
   );
 };
 
-const AccessoryMultiSelect: React.FC<{
-  apiUrl: string;
-  placeholder: string;
+const CategoryBasedAccessorySelector: React.FC<{
   selectedAccessories: Accessory[];
   onSelectionChange: (accessories: Accessory[]) => void;
   className?: string;
   disabled?: boolean;
-}> = ({ apiUrl, placeholder, selectedAccessories, onSelectionChange, className = '', disabled = false }) => {
-  const [data, setData] = useState<Accessory[]>([]);
-  const [filteredData, setFilteredData] = useState<Accessory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
+}> = ({ selectedAccessories, onSelectionChange, className = '', disabled = false }) => {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [accessories, setAccessories] = useState<Accessory[]>([]);
+  const [filteredAccessories, setFilteredAccessories] = useState<Accessory[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingAccessories, setLoadingAccessories] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  const fetchData = async () => {
+  // Fetch categories
+  const fetchCategories = async () => {
     try {
-      setLoading(true);
+      setLoadingCategories(true);
       setError(null);
-      const response = await fetch(apiUrl);
+      const response = await fetch('https://terarium.shop/api/Category/get-all');
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const result: ApiResponse<AccessoryApiResponse> = await response.json();
-      if (result.status !== 200) throw new Error(result.message || 'Failed to fetch data');
-      setData(result.data.results);
-      setFilteredData(result.data.results);
+      const result: ApiResponse<Category[]> = await response.json();
+      if (result.status !== 200) throw new Error(result.message || 'Failed to fetch categories');
+      setCategories(result.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
-      setLoading(false);
+      setLoadingCategories(false);
     }
   };
 
-  const searchAccessories = async (searchTerm: string) => {
+  // Fetch accessories by category
+  const fetchAccessoriesByCategory = async (categoryId: number) => {
+    try {
+      setLoadingAccessories(true);
+      setError(null);
+      const response = await fetch(`https://terarium.shop/api/Accessory/filter-by-category/${categoryId}`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const result: ApiResponse<Accessory[]> = await response.json();
+      if (result.status !== 200) throw new Error(result.message || 'Failed to fetch accessories');
+      setAccessories(result.data);
+      setFilteredAccessories(result.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      setAccessories([]);
+      setFilteredAccessories([]);
+    } finally {
+      setLoadingAccessories(false);
+    }
+  };
+
+  // Search accessories locally
+  const searchAccessories = (searchTerm: string) => {
     if (!searchTerm.trim()) {
-      setFilteredData(data);
+      setFilteredAccessories(accessories);
       return;
     }
 
-    try {
-      setSearchLoading(true);
-      const encodedSearchTerm = encodeURIComponent(searchTerm.trim());
-      const searchUrl = `https://terarium.shop/api/Accessory/get-by-name/${encodedSearchTerm}`;
-      
-      const response = await fetch(searchUrl);
-      if (!response.ok) {
-        // If search fails, fall back to local filtering
-        const localFiltered = data.filter(accessory => 
-          accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        setFilteredData(localFiltered);
-        return;
-      }
-      
-      const result: ApiResponse<Accessory[]> = await response.json();
-      if (result.status === 200) {
-        setFilteredData(result.data);
-      } else {
-        // Fall back to local filtering if API search fails
-        const localFiltered = data.filter(accessory => 
-          accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        setFilteredData(localFiltered);
-      }
-    } catch (err) {
-      // Fall back to local filtering on error
-      const localFiltered = data.filter(accessory => 
-        accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredData(localFiltered);
-    } finally {
-      setSearchLoading(false);
-    }
+    const filtered = accessories.filter(accessory => 
+      accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      accessory.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredAccessories(filtered);
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,13 +282,13 @@ const AccessoryMultiSelect: React.FC<{
     // Set new timeout for debounced search
     const timeout = setTimeout(() => {
       searchAccessories(value);
-    }, 300); // 300ms delay
+    }, 300);
 
     setSearchTimeout(timeout);
   };
 
   React.useEffect(() => {
-    fetchData();
+    fetchCategories();
     
     // Cleanup timeout on unmount
     return () => {
@@ -295,15 +296,18 @@ const AccessoryMultiSelect: React.FC<{
         clearTimeout(searchTimeout);
       }
     };
-  }, [apiUrl]);
+  }, []);
 
   React.useEffect(() => {
-    // Reset search when dropdown closes
-    if (!isOpen) {
+    if (selectedCategory) {
+      fetchAccessoriesByCategory(selectedCategory.categoryId);
       setSearchTerm('');
-      setFilteredData(data);
     }
-  }, [isOpen, data]);
+  }, [selectedCategory]);
+
+  const handleCategorySelect = (category: Category) => {
+    setSelectedCategory(category);
+  };
 
   const handleToggleAccessory = (accessory: Accessory) => {
     const newSelection = selectedAccessories.some(a => a.accessoryId === accessory.accessoryId)
@@ -314,149 +318,165 @@ const AccessoryMultiSelect: React.FC<{
 
   const clearSearch = () => {
     setSearchTerm('');
-    setFilteredData(data);
+    setFilteredAccessories(accessories);
   };
 
   return (
-    <div className={`relative ${className}`}>
-      <div
-        onClick={() => !disabled && !loading && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:bg-gray-50 transition-colors duration-200 cursor-pointer ${disabled || loading ? 'opacity-50 cursor-not-allowed' : ''} ${error ? 'border-red-300' : ''}`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            {selectedAccessories.length === 0 ? (
-              <span className="text-gray-500">{placeholder}</span>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {selectedAccessories.map((accessory) => (
-                  <div key={accessory.accessoryId} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
-                    <span className="truncate max-w-20">{accessory.name}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectionChange(selectedAccessories.filter(a => a.accessoryId !== accessory.accessoryId));
-                      }}
-                      className="ml-1 inline-flex items-center p-0.5 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center space-x-2 ml-2">
-            {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
-            {error && <AlertCircle className="w-4 h-4 text-red-400" />}
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-          </div>
-        </div>
+    <div className={`space-y-4 ${className}`}>
+      {/* Category Selection */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Chọn danh mục phụ kiện</label>
+        <ApiDropdown<Category>
+          apiUrl="https://terarium.shop/api/Category/get-all"
+          placeholder="Chọn danh mục"
+          valueKey="categoryId"
+          labelKey="categoryName"
+          onSelect={handleCategorySelect}
+          className="w-full"
+          disabled={disabled}
+          customRenderer={(category) => (
+            <div>
+              <div className="font-medium">{category.categoryName}</div>
+              <div className="text-sm text-gray-500 mt-1">{category.description}</div>
+            </div>
+          )}
+        />
       </div>
 
-      {error && (
-        <div className="mt-1 text-sm text-red-600 flex items-center">
-          <AlertCircle className="w-4 h-4 mr-1" />
-          {error}
-          <button onClick={fetchData} className="ml-2 text-blue-600 hover:text-blue-800 underline">Thử lại</button>
+      {/* Selected Accessories Display */}
+      {selectedAccessories.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Phụ kiện đã chọn ({selectedAccessories.length})
+          </label>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <div className="flex flex-wrap gap-2">
+              {selectedAccessories.map((accessory) => (
+                <div key={accessory.accessoryId} className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-800">
+                  <span className="truncate max-w-32" title={accessory.name}>{accessory.name}</span>
+                  <button
+                    onClick={() => onSelectionChange(selectedAccessories.filter(a => a.accessoryId !== accessory.accessoryId))}
+                    className="ml-2 inline-flex items-center p-0.5 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600"
+                    type="button"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {isOpen && !loading && !error && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden">
-          {/* Search Input */}
-          <div className="p-3 border-b border-gray-200 bg-gray-50">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Tìm kiếm phụ kiện..."
-                value={searchTerm}
-                onChange={handleSearchChange}
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                {searchLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                ) : (
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                )}
-              </div>
-              {searchTerm && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    clearSearch();
-                  }}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600"
-                >
-                  <X className="w-4 h-4 text-gray-400" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Results */}
-          <div className="max-h-60 overflow-auto">
-            {filteredData.length === 0 ? (
-              <div className="px-4 py-3 text-gray-500 text-center">
-                {searchTerm ? 'Không tìm thấy phụ kiện nào' : 'Không có phụ kiện'}
-              </div>
-            ) : (
-              <>
+      {/* Accessory Selection */}
+      {selectedCategory && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Phụ kiện từ danh mục "{selectedCategory.categoryName}"
+          </label>
+          
+          <div className="border border-gray-300 rounded-lg bg-white">
+            {/* Search Input */}
+            <div className="p-3 border-b border-gray-200 bg-gray-50">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm phụ kiện..."
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  {loadingAccessories ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  ) : (
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  )}
+                </div>
                 {searchTerm && (
-                  <div className="px-3 py-2 text-xs text-gray-600 bg-blue-50 border-b border-gray-200">
-                    Tìm thấy {filteredData.length} kết quả cho "{searchTerm}"
-                  </div>
-                )}
-                {filteredData.map((accessory) => (
-                  <div
-                    key={accessory.accessoryId}
-                    onClick={() => handleToggleAccessory(accessory)}
-                    className={`px-4 py-3 hover:bg-blue-50 transition-colors duration-150 cursor-pointer border-b border-gray-100 last:border-b-0 ${selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) ? 'bg-blue-100' : ''}`}
+                  <button
+                    onClick={clearSearch}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600"
+                    type="button"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900">
-                          {searchTerm && accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ? (
-                            <span dangerouslySetInnerHTML={{
-                              __html: accessory.name.replace(
-                                new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                                '<mark class="bg-yellow-200 px-0.5">$1</mark>'
-                              )
-                            }} />
-                          ) : (
-                            accessory.name
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1 space-y-1">
-                          <div>
-                            Mô tả: {searchTerm && accessory.description.toLowerCase().includes(searchTerm.toLowerCase()) ? (
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="max-h-60 overflow-auto">
+              {loadingAccessories ? (
+                <div className="px-4 py-6 text-center text-gray-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  Đang tải phụ kiện...
+                </div>
+              ) : error ? (
+                <div className="px-4 py-6 text-center text-red-600">
+                  <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+                  {error}
+                </div>
+              ) : filteredAccessories.length === 0 ? (
+                <div className="px-4 py-6 text-center text-gray-500">
+                  {searchTerm ? `Không tìm thấy phụ kiện nào cho "${searchTerm}"` : 'Không có phụ kiện trong danh mục này'}
+                </div>
+              ) : (
+                <>
+                  {searchTerm && (
+                    <div className="px-3 py-2 text-xs text-gray-600 bg-blue-50 border-b border-gray-200">
+                      Tìm thấy {filteredAccessories.length} kết quả cho "{searchTerm}"
+                    </div>
+                  )}
+                  {filteredAccessories.map((accessory) => (
+                    <div
+                      key={accessory.accessoryId}
+                      onClick={() => handleToggleAccessory(accessory)}
+                      className={`px-4 py-3 hover:bg-blue-50 transition-colors duration-150 cursor-pointer border-b border-gray-100 last:border-b-0 ${selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) ? 'bg-blue-100' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900">
+                            {searchTerm && accessory.name.toLowerCase().includes(searchTerm.toLowerCase()) ? (
                               <span dangerouslySetInnerHTML={{
-                                __html: accessory.description.replace(
+                                __html: accessory.name.replace(
                                   new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
                                   '<mark class="bg-yellow-200 px-0.5">$1</mark>'
                                 )
                               }} />
                             ) : (
-                              accessory.description
+                              accessory.name
                             )}
                           </div>
-                          <div>Kích thước: {accessory.size || 'Không có'}</div>
-                          <div>Giá: {accessory.price.toLocaleString()} VNĐ</div>
-                          <div>Tồn kho: {accessory.stockQuantity}</div>
+                          <div className="text-sm text-gray-500 mt-1 space-y-1">
+                            <div>
+                              Mô tả: {searchTerm && accessory.description.toLowerCase().includes(searchTerm.toLowerCase()) ? (
+                                <span dangerouslySetInnerHTML={{
+                                  __html: accessory.description.replace(
+                                    new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                                    '<mark class="bg-yellow-200 px-0.5">$1</mark>'
+                                  )
+                                }} />
+                              ) : (
+                                accessory.description
+                              )}
+                            </div>
+                            <div>Kích thước: {accessory.size || 'Không có'}</div>
+                            <div>Giá: {accessory.price.toLocaleString()} VNĐ</div>
+                            <div>Tồn kho: {accessory.stockQuantity}</div>
+                          </div>
                         </div>
+                        {selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) && (
+                          <Check className="w-5 h-5 text-blue-600 ml-3 flex-shrink-0" />
+                        )}
                       </div>
-                      {selectedAccessories.some(a => a.accessoryId === accessory.accessoryId) && (
-                        <Check className="w-5 h-5 text-blue-600 ml-3 flex-shrink-0" />
-                      )}
                     </div>
-                  </div>
-                ))}
-              </>
-            )}
+                  ))}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -467,7 +487,7 @@ const AccessoryMultiSelect: React.FC<{
 const TerrariumEdit: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<ExtendedFormData>({
     terrariumId: 0,
     tankMethodId: 0,
     shapeId: 0,
@@ -476,7 +496,10 @@ const TerrariumEdit: React.FC = () => {
     description: '',
     status: 'active',
     bodyHTML: '',
-    accessories: []
+    accessories: [],
+    selectedTankMethod: undefined,
+    selectedShape: undefined,
+    selectedEnvironment: undefined
   });
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -499,7 +522,10 @@ const TerrariumEdit: React.FC = () => {
           description: result.data.description,
           status: result.data.status,
           bodyHTML: result.data.bodyHTML,
-          accessories: result.data.accessories || []
+          accessories: result.data.accessories || [],
+          selectedTankMethod: undefined,
+          selectedShape: undefined,
+          selectedEnvironment: undefined
         });
       } catch (error) {
         setSubmitMessage({ type: 'error', text: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải dữ liệu terrarium' });
@@ -524,9 +550,19 @@ const TerrariumEdit: React.FC = () => {
     setFormData(prev => ({
       ...prev,
       [type]: type === 'accessories' ? value : value[type === 'tankMethodId' ? 'tankMethodId' : type === 'shapeId' ? 'shapeId' : 'environmentId'],
-      ...(type === 'tankMethodId' && { tankMethodId: value.tankMethodId }),
-      ...(type === 'shapeId' && { shapeId: value.shapeId }),
-      ...(type === 'environmentId' && { environmentId: value.environmentId })
+      ...(type === 'tankMethodId' && { 
+        tankMethodId: value.tankMethodId, 
+        selectedTankMethod: value 
+      }),
+      ...(type === 'shapeId' && { 
+        shapeId: value.shapeId, 
+        selectedShape: value 
+      }),
+      ...(type === 'environmentId' && { 
+        environmentId: value.environmentId, 
+        selectedEnvironment: value 
+      }),
+      ...(type === 'accessories' && { accessories: value })
     }));
   };
 
@@ -546,7 +582,7 @@ const TerrariumEdit: React.FC = () => {
     const payload = {
       ...formData,
       updatedAt: new Date().toISOString(),
-      accessoryIds: formData.accessories.map((a) => a.accessoryId),
+      accessoryNames: formData.accessories.map(a => a.name),
     };
 
     try {
@@ -647,7 +683,7 @@ const TerrariumEdit: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Cấu hình Terrarium</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Phương pháp Tank *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Loại bể *</label>
                     <ApiDropdown<TankMethod>
                       apiUrl="https://terarium.shop/api/TankMethod/get-all"
                       placeholder="Chọn phương pháp tank"
@@ -691,14 +727,10 @@ const TerrariumEdit: React.FC = () => {
                       className="w-full"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Phụ kiện (Tùy chọn)</label>
-                    <AccessoryMultiSelect
-                      apiUrl="https://terarium.shop/api/Accessory/get-all?Pagination.PageSize=100"
-                      placeholder="Chọn phụ kiện"
+                  <div className="md:col-span-2">
+                    <CategoryBasedAccessorySelector
                       selectedAccessories={formData.accessories}
                       onSelectionChange={(accessories) => handleApiSelection('accessories', accessories)}
-                      className="w-full"
                     />
                   </div>
                 </div>
@@ -780,15 +812,24 @@ const TerrariumEdit: React.FC = () => {
                 <div className="space-y-3">
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <div className="font-medium text-gray-700 text-sm">Tank Method</div>
-                    <div className="text-sm text-gray-600">{formData.tankMethodId ? `ID: ${formData.tankMethodId}` : 'Chưa chọn'}</div>
+                    <div className="text-sm text-gray-600">
+                      {formData.selectedTankMethod ? formData.selectedTankMethod.tankMethodType : 
+                       formData.tankMethodId ? `ID: ${formData.tankMethodId}` : 'Chưa chọn'}
+                    </div>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <div className="font-medium text-gray-700 text-sm">Shape</div>
-                    <div className="text-sm text-gray-600">{formData.shapeId ? `ID: ${formData.shapeId}` : 'Chưa chọn'}</div>
+                    <div className="text-sm text-gray-600">
+                      {formData.selectedShape ? formData.selectedShape.shapeName : 
+                       formData.shapeId ? `ID: ${formData.shapeId}` : 'Chưa chọn'}
+                    </div>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <div className="font-medium text-gray-700 text-sm">Environment</div>
-                    <div className="text-sm text-gray-600">{formData.environmentId ? `ID: ${formData.environmentId}` : 'Chưa chọn'}</div>
+                    <div className="text-sm text-gray-600">
+                      {formData.selectedEnvironment ? formData.selectedEnvironment.environmentName : 
+                       formData.environmentId ? `ID: ${formData.environmentId}` : 'Chưa chọn'}
+                    </div>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <div className="font-medium text-gray-700 text-sm">Phụ kiện</div>
