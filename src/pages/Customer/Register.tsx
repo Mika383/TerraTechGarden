@@ -18,6 +18,67 @@ type FormData = {
   acceptTerms: boolean;
 };
 
+// Password validation function (mirroring backend logic)
+const validatePassword = (password: string): { isValid: boolean; error: string } => {
+  if (!password) {
+    return { isValid: false, error: "Mật khẩu không được để trống" };
+  }
+
+  // 1) ≥ 9 ký tự
+  if (password.length < 9) {
+    return { isValid: false, error: "Mật khẩu phải có ít nhất 9 ký tự" };
+  }
+
+  // 2) ít nhất 1 ký tự đặc biệt (kể cả '_')
+  if (!/[\W_]/.test(password)) {
+    return { isValid: false, error: "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt" };
+  }
+
+  // 3) ít nhất 1 chữ in hoa
+  if (!/[A-Z]/.test(password)) {
+    return { isValid: false, error: "Mật khẩu phải chứa ít nhất 1 chữ in hoa" };
+  }
+
+  // 4) ít nhất 1 số
+  if (!/[0-9]/.test(password)) {
+    return { isValid: false, error: "Mật khẩu phải chứa ít nhất 1 chữ số" };
+  }
+
+  // 5) không chứa khoảng trắng
+  if (/\s/.test(password)) {
+    return { isValid: false, error: "Mật khẩu không được chứa khoảng trắng" };
+  }
+
+  // 6) không chứa chuỗi số liền mạch tăng dần (>=3): 123, 456, 6789,...
+  if (hasAscendingDigitRun(password, 3)) {
+    return { isValid: false, error: "Mật khẩu không được chứa chuỗi số liền mạch như 123, 456..." };
+  }
+
+  return { isValid: true, error: "Mật khẩu hợp lệ" };
+};
+
+// Helper function to check ascending digit runs
+const hasAscendingDigitRun = (password: string, minLength: number): boolean => {
+  const digits = password.match(/\d/g);
+  if (!digits || digits.length < minLength) return false;
+  
+  let consecutiveCount = 1;
+  for (let i = 1; i < digits.length; i++) {
+    const current = parseInt(digits[i]);
+    const previous = parseInt(digits[i - 1]);
+    
+    if (current === previous + 1) {
+      consecutiveCount++;
+      if (consecutiveCount >= minLength) {
+        return true;
+      }
+    } else {
+      consecutiveCount = 1;
+    }
+  }
+  return false;
+};
+
 const Register: React.FC = () => {
   const navigate = useNavigate();
 
@@ -55,10 +116,50 @@ const Register: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [emailForOTP, setEmailForOTP] = useState('');
 
+  // New state for real-time password validation
+  const [passwordValidation, setPasswordValidation] = useState<{
+    length: boolean;
+    special: boolean;
+    uppercase: boolean;
+    digit: boolean;
+    noSpace: boolean;
+    noSequence: boolean;
+  }>({
+    length: false,
+    special: false,
+    uppercase: false,
+    digit: false,
+    noSpace: true,
+    noSequence: true,
+  });
+
   // refs
   const containerRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const animationInitialized = useRef(false);
+
+  // Real-time password validation
+  useEffect(() => {
+    if (formData.password) {
+      setPasswordValidation({
+        length: formData.password.length >= 9,
+        special: /[\W_]/.test(formData.password),
+        uppercase: /[A-Z]/.test(formData.password),
+        digit: /[0-9]/.test(formData.password),
+        noSpace: !/\s/.test(formData.password),
+        noSequence: !hasAscendingDigitRun(formData.password, 3),
+      });
+    } else {
+      setPasswordValidation({
+        length: false,
+        special: false,
+        uppercase: false,
+        digit: false,
+        noSpace: true,
+        noSequence: true,
+      });
+    }
+  }, [formData.password]);
 
   // input handler (giữ fix không mất focus)
   const handleFormInputChange = useCallback((field: keyof FormData, value: string | boolean) => {
@@ -100,8 +201,19 @@ const Register: React.FC = () => {
       if (!formData.username.trim()) { errors.username = 'Vui lòng nhập tên tài khoản!'; ok = false; }
       if (!formData.email.trim()) { errors.email = 'Vui lòng nhập email!'; ok = false; }
       else if (!/\S+@\S+\.\S+/.test(formData.email)) { errors.email = 'Email không hợp lệ!'; ok = false; }
-      if (!formData.password) { errors.password = 'Vui lòng nhập mật khẩu!'; ok = false; }
-      else if (formData.password.length < 6) { errors.password = 'Mật khẩu phải có ít nhất 6 ký tự!'; ok = false; }
+      
+      // Use backend validation for password
+      if (!formData.password) { 
+        errors.password = 'Vui lòng nhập mật khẩu!'; 
+        ok = false; 
+      } else {
+        const passwordValidationResult = validatePassword(formData.password);
+        if (!passwordValidationResult.isValid) {
+          errors.password = passwordValidationResult.error;
+          ok = false;
+        }
+      }
+      
       if (!formData.confirmPassword) { errors.confirmPassword = 'Vui lòng xác nhận mật khẩu!'; ok = false; }
       else if (formData.password !== formData.confirmPassword) { errors.confirmPassword = 'Mật khẩu xác nhận không khớp!'; ok = false; }
     }
@@ -218,7 +330,40 @@ const Register: React.FC = () => {
     [fieldErrors]
   );
 
-  // Step 1
+  // Password Strength Indicator Component
+  const PasswordStrengthIndicator = useMemo(() => (
+    <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
+      <h4 className="text-sm font-medium text-gray-700 mb-2">Yêu cầu mật khẩu:</h4>
+      <div className="space-y-1">
+        <div className={`flex items-center text-xs ${passwordValidation.length ? 'text-green-600' : 'text-gray-500'}`}>
+          <span className={`mr-2 ${passwordValidation.length ? '✓' : '○'}`}></span>
+          Ít nhất 9 ký tự
+        </div>
+        <div className={`flex items-center text-xs ${passwordValidation.special ? 'text-green-600' : 'text-gray-500'}`}>
+          <span className={`mr-2 ${passwordValidation.special ? '✓' : '○'}`}></span>
+          Chứa ít nhất 1 ký tự đặc biệt
+        </div>
+        <div className={`flex items-center text-xs ${passwordValidation.uppercase ? 'text-green-600' : 'text-gray-500'}`}>
+          <span className={`mr-2 ${passwordValidation.uppercase ? '✓' : '○'}`}></span>
+          Chứa ít nhất 1 chữ in hoa
+        </div>
+        <div className={`flex items-center text-xs ${passwordValidation.digit ? 'text-green-600' : 'text-gray-500'}`}>
+          <span className={`mr-2 ${passwordValidation.digit ? '✓' : '○'}`}></span>
+          Chứa ít nhất 1 chữ số
+        </div>
+        <div className={`flex items-center text-xs ${passwordValidation.noSpace ? 'text-green-600' : 'text-red-500'}`}>
+          <span className={`mr-2 ${passwordValidation.noSpace ? '✓' : '✗'}`}></span>
+          Không chứa khoảng trắng
+        </div>
+        <div className={`flex items-center text-xs ${passwordValidation.noSequence ? 'text-green-600' : 'text-red-500'}`}>
+          <span className={`mr-2 ${passwordValidation.noSequence ? '✓' : '✗'}`}></span>
+          Không chứa chuỗi số liền mạch (123, 456...)
+        </div>
+      </div>
+    </div>
+  ), [passwordValidation]);
+
+  // Step 1 với password strength indicator
   const Step1 = useMemo(() => (
     <div className="step-content space-y-6">
       <div>
@@ -272,7 +417,6 @@ const Register: React.FC = () => {
             className="relative z-20 w-full pl-10 pr-12 py-3 border-2 border-green-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors bg-white"
             placeholder="Tạo mật khẩu mạnh"
             autoComplete="new-password"
-            minLength={6}
           />
           <button
             type="button"
@@ -283,6 +427,7 @@ const Register: React.FC = () => {
           </button>
         </div>
         <ErrorMessage field="password" />
+        {formData.password && PasswordStrengthIndicator}
       </div>
 
       {/* Confirm Password */}
@@ -309,7 +454,7 @@ const Register: React.FC = () => {
         <ErrorMessage field="confirmPassword" />
       </div>
     </div>
-  ), [formData, showPassword, showConfirmPassword, handleFormInputChange, ErrorMessage]);
+  ), [formData, showPassword, showConfirmPassword, handleFormInputChange, ErrorMessage, PasswordStrengthIndicator]);
 
   // Step 2
   const Step2 = useMemo(() => (
@@ -561,28 +706,48 @@ const Register: React.FC = () => {
             <p className="text-gray-600">Bắt đầu hành trình terrarium của bạn</p>
           </div>
 
-          {/* progress */}
+          {/* progress - FIXED VERSION */}
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-2">
-              {[1, 2, 3, 4].map((step) => (
-                <div
-                  key={step}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${
-                    step <= currentStep ? 'bg-gradient-to-br from-emerald-500 to-green-600 text-white' : 'bg-gray-200 text-gray-500'
-                  }`}
-                >
-                  {step === 4 ? <Mail className="w-4 h-4" /> : step}
-                </div>
+            <div className="flex items-center justify-between mb-4 relative">
+              {[1, 2, 3, 4].map((step, index) => (
+                <React.Fragment key={step}>
+                  <div
+                    className={`relative w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-500 z-10 ${
+                      step <= currentStep 
+                        ? 'bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg' 
+                        : 'bg-gray-200 text-gray-500'
+                    }`}
+                  >
+                    {step === 4 ? <Mail className="w-5 h-5" /> : step}
+                  </div>
+                  {/* Connection line */}
+                  {index < 3 && (
+                    <div className="flex-1 h-1 mx-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full bg-gradient-to-r from-emerald-500 to-green-600 rounded-full transition-all duration-500 ease-out ${
+                          step < currentStep ? 'w-full' : 'w-0'
+                        }`}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
               ))}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-gradient-to-r from-emerald-500 to-green-600 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${(currentStep / 4) * 100}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-gray-500 mt-2">
-              <span>Tài khoản</span><span>Cá nhân</span><span>Xác nhận</span><span>OTP</span>
+            
+            {/* Step labels */}
+            <div className="flex justify-between text-xs text-gray-500 px-1">
+              <span className={`transition-colors duration-300 ${currentStep >= 1 ? 'text-emerald-600 font-medium' : ''}`}>
+                Tài khoản
+              </span>
+              <span className={`transition-colors duration-300 ${currentStep >= 2 ? 'text-emerald-600 font-medium' : ''}`}>
+                Cá nhân
+              </span>
+              <span className={`transition-colors duration-300 ${currentStep >= 3 ? 'text-emerald-600 font-medium' : ''}`}>
+                Xác nhận
+              </span>
+              <span className={`transition-colors duration-300 ${currentStep >= 4 ? 'text-emerald-600 font-medium' : ''}`}>
+                OTP
+              </span>
             </div>
           </div>
 
