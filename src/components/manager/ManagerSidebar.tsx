@@ -141,34 +141,34 @@ const ManagerSidebar: React.FC = () => {
       ],
     },
     {
-      title: 'Quản lý danh mục gói quà',
+      title: 'Quản lý danh mục combo',
       icon: Package,
       color: 'text-amber-600',
       submenu: [
         {
-          title: 'Danh sách danh mục gói quà',
+          title: 'Danh sách danh mục combo',
           icon: List,
           path: '/manager/combo-category/list',
         },
         {
-          title: 'Thêm danh mục gói quà',
+          title: 'Thêm danh mục combo',
           icon: Plus,
           path: '/manager/combo-category/create',
         },
       ],
     },
      {
-      title: 'Quản lý gói quà',
+      title: 'Quản lý combo',
       icon: Package,
       color: 'text-amber-600',
       submenu: [
         {
-          title: 'Danh sách gói quà',
+          title: 'Danh sách combo',
           icon: List,
           path: '/manager/combo/list',
         },
         {
-          title: 'Thêm gói quà',
+          title: 'Thêm combo',
           icon: Plus,
           path: '/manager/combo/create',
         },
