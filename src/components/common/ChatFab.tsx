@@ -19,7 +19,7 @@ const getUserIdFromToken = (): number | null => {
 // Ẩn trên các trang đặc biệt
 const HIDE_PATHS = [
   "/checkout", "/login", "/register", "/forgot-password", "/reset-password",
-  "/staff/*", "/manager/*", "/admin/*", "/auth/*",
+  "/staff/*", "/manager/*", "/admin/*", "/auth/*", "/customer-dashboard/*",
 ];
 
 export default function ChatFab() {
