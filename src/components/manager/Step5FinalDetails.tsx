@@ -1,8 +1,8 @@
-import React from 'react';
-import { ChevronLeft, Save, Loader2, AlertCircle } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ChevronLeft, Save, Loader2, AlertCircle, Upload as UploadIcon, Link, Copy } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
 import axios from 'axios';
-
+import {PictureOutlined} from '@ant-design/icons'
 const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
 const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
 
@@ -71,6 +71,13 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
   loading,
   submitMessage
 }) => {
+  const editorRef = useRef<any>(null);
+  
+  // Modal state cho upload ảnh
+  const [imgModalOpen, setImgModalOpen] = useState(false);
+  const [imgUploading, setImgUploading] = useState(false);
+  const [uploadedUrl, setUploadedUrl] = useState<string>('');
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     onFormDataChange({ [name]: value });
@@ -87,6 +94,50 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
                    selectedEnvironment;
 
   const totalAccessoryPrice = selectedAccessories.reduce((sum, acc) => sum + acc.price, 0);
+
+  // Cloudinary upload functions
+  const openImageModal = () => {
+    setUploadedUrl('');
+    setImgModalOpen(true);
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImgUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+    try {
+      const response = await axios.post(CLOUDINARY_UPLOAD_URL, formData);
+      const url = response.data.secure_url;
+      setUploadedUrl(url);
+    } catch (error) {
+      console.error('Upload failed:', error);
+    } finally {
+      setImgUploading(false);
+    }
+  };
+
+  const copyUrl = async () => {
+    if (!uploadedUrl) return;
+    try {
+      await navigator.clipboard.writeText(uploadedUrl);
+      alert('Đã copy URL ảnh');
+    } catch (error) {
+      console.error('Copy failed:', error);
+    }
+  };
+
+  const insertToEditor = () => {
+    if (!uploadedUrl || !editorRef.current) return;
+    editorRef.current.insertContent(`<img src="${uploadedUrl}" alt="" />`);
+    const latest = editorRef.current.getContent();
+    onFormDataChange({ bodyHTML: latest });
+    setImgModalOpen(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -165,30 +216,35 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
           </div>
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Nội dung HTML (Tùy chọn)</h3>
-            {/* <Editor
-              apiKey="2pcpzgtdmmp5f43t7bqpc9rmxkok9ben1axiy628f53zad6s"
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">Nội dung HTML (Tùy chọn)</h3>
+              <button
+                type="button"
+                onClick={openImageModal}
+                className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <PictureOutlined className="w-4 h-4 mr-1" />
+                Upload ảnh
+              </button>
+            </div>
+            
+            <Editor
+              apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
               value={formData.bodyHTML}
-              init={{
-                height: 400,
-                resize: true,
-                plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'paste', 'help', 'wordcount'],
-                toolbar: 'undo redo | formatselect | bold italic backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | image | help',
-                images_upload_handler: async (blobInfo: any, success: (url: string) => void, failure: (err: string) => void) => {
-                  const formDataUpload = new FormData();
-                  formDataUpload.append('file', blobInfo.blob());
-                  formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                  try {
-                    const res = await axios.post(CLOUDINARY_UPLOAD_URL, formDataUpload);
-                    success(res.data.secure_url || '');
-                  } catch {
-                    failure('Upload ảnh thất bại');
-                  }
-                },
-                content_style: 'img { max-width: 400px; height: auto; }'
+              onInit={(_, editor) => {
+                editorRef.current = editor;
               }}
               onEditorChange={handleEditorChange}
-            /> */}
+              init={{
+                height: 500,
+                menubar: false,
+                plugins: 'lists link image code table',
+                toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | removeformat | code',
+                automatic_uploads: false,
+                paste_data_images: false,
+                content_style: 'body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size:14px } img{max-width:100%;height:auto;}'
+              }}
+            />
           </div>
         </div>
 
@@ -290,6 +346,68 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
           {!canSubmit && "Vui lòng điền đầy đủ thông tin bắt buộc"}
         </div>
       </div>
+
+      {/* Image Upload Modal */}
+      {imgModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Upload ảnh (Cloudinary)</h3>
+              <button 
+                onClick={() => setImgModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+              <UploadIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 mb-2">Kéo & thả ảnh vào đây hoặc bấm để chọn</p>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={imgUploading}
+                className="hidden"
+                id="image-upload"
+              />
+              <label
+                htmlFor="image-upload"
+                className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700 disabled:opacity-50"
+              >
+                {imgUploading ? 'Đang upload...' : 'Chọn ảnh'}
+              </label>
+            </div>
+
+            {uploadedUrl && (
+              <div className="mt-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="text"
+                    value={uploadedUrl}
+                    readOnly
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="URL ảnh sau khi upload"
+                  />
+                  <button
+                    onClick={copyUrl}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={insertToEditor}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Chèn vào nội dung
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
