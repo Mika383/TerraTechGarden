@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Loader2, AlertCircle, X, Check, Search, Grid, List, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, AlertCircle, X, Check, Search, Grid, List, ChevronRight, Upload as UploadIcon, Copy } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
 import axios from 'axios';
 import { notification } from 'antd';
+import {PictureOutlined} from '@ant-design/icons'
 
 const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
 const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
@@ -585,6 +586,12 @@ const TerrariumEdit: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
+  // Image upload modal states
+  const [imgModalOpen, setImgModalOpen] = useState(false);
+  const [imgUploading, setImgUploading] = useState(false);
+  const [uploadedUrl, setUploadedUrl] = useState<string>('');
+  const editorRef = useRef<any>(null);
+
   const steps = [
     { name: 'Cấu hình', description: 'Loại bể, Hình dạng, Chủ đề' },
     { name: 'Phụ kiện', description: 'Chọn phụ kiện' },
@@ -592,60 +599,108 @@ const TerrariumEdit: React.FC = () => {
     { name: 'Hoàn tất', description: 'Xem lại và lưu' }
   ];
 
-  // Thay thế phần Load initial data trong useEffect:
-useEffect(() => {
-  const loadTerrarium = async () => {
+  // Load initial data
+  useEffect(() => {
+    const loadTerrarium = async () => {
+      try {
+        const response = await fetch(`https://terarium.shop/api/Terrarium/get/${id}`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const result: ApiResponse<FormData> = await response.json();
+        if (result.status !== 200) throw new Error(result.message || 'Failed to load terrarium data');
+        
+        // Fetch related information details
+        const [tankMethodResponse, shapeResponse, environmentResponse] = await Promise.all([
+          fetch('https://terarium.shop/api/TankMethod/get-all'),
+          fetch('https://terarium.shop/api/Shape/get-all'),
+          fetch('https://terarium.shop/api/Environment/get-all')
+        ]);
+
+        const [tankMethodResult, shapeResult, environmentResult] = await Promise.all([
+          tankMethodResponse.json() as Promise<ApiResponse<TankMethod[]>>,
+          shapeResponse.json() as Promise<ApiResponse<Shape[]>>,
+          environmentResponse.json() as Promise<ApiResponse<Environment[]>>
+        ]);
+
+        // Find objects corresponding to IDs
+        const selectedTankMethod = tankMethodResult.data?.find(
+          tm => tm.tankMethodId === result.data.tankMethodId
+        );
+        const selectedShape = shapeResult.data?.find(
+          s => s.shapeId === result.data.shapeId
+        );
+        const selectedEnvironment = environmentResult.data?.find(
+          e => e.environmentId === result.data.environmentId
+        );
+
+        setFormData({
+          ...result.data,
+          accessories: result.data.accessories || [],
+          selectedTankMethod,
+          selectedShape,
+          selectedEnvironment
+        });
+      } catch (error) {
+        notification.error({
+          message: 'Lỗi',
+          description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải dữ liệu terrarium',
+          placement: 'topRight',
+        });
+        setTimeout(() => navigate('/manager/terrarium/list'), 2000);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    if (id) loadTerrarium();
+  }, [id, navigate]);
+
+  // Image upload functions
+  const openImageModal = () => {
+    setUploadedUrl('');
+    setImgModalOpen(true);
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImgUploading(true);
+    const formDataUpload = new FormData();
+    formDataUpload.append('file', file);
+    formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
     try {
-      const response = await fetch(`https://terarium.shop/api/Terrarium/get/${id}`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const result: ApiResponse<FormData> = await response.json();
-      if (result.status !== 200) throw new Error(result.message || 'Failed to load terrarium data');
-      
-      // Fetch chi tiết các thông tin liên quan
-      const [tankMethodResponse, shapeResponse, environmentResponse] = await Promise.all([
-        fetch('https://terarium.shop/api/TankMethod/get-all'),
-        fetch('https://terarium.shop/api/Shape/get-all'),
-        fetch('https://terarium.shop/api/Environment/get-all')
-      ]);
-
-      const [tankMethodResult, shapeResult, environmentResult] = await Promise.all([
-        tankMethodResponse.json() as Promise<ApiResponse<TankMethod[]>>,
-        shapeResponse.json() as Promise<ApiResponse<Shape[]>>,
-        environmentResponse.json() as Promise<ApiResponse<Environment[]>>
-      ]);
-
-      // Tìm các object tương ứng với ID
-      const selectedTankMethod = tankMethodResult.data?.find(
-        tm => tm.tankMethodId === result.data.tankMethodId
-      );
-      const selectedShape = shapeResult.data?.find(
-        s => s.shapeId === result.data.shapeId
-      );
-      const selectedEnvironment = environmentResult.data?.find(
-        e => e.environmentId === result.data.environmentId
-      );
-
-      setFormData({
-        ...result.data,
-        accessories: result.data.accessories || [],
-        selectedTankMethod,
-        selectedShape,
-        selectedEnvironment
-      });
+      const response = await axios.post(CLOUDINARY_UPLOAD_URL, formDataUpload);
+      const url = response.data.secure_url;
+      setUploadedUrl(url);
     } catch (error) {
-      notification.error({
-        message: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải dữ liệu terrarium',
-        placement: 'topRight',
-      });
-      setTimeout(() => navigate('/manager/terrarium/list'), 2000);
+      console.error('Upload failed:', error);
     } finally {
-      setInitialLoading(false);
+      setImgUploading(false);
     }
   };
 
-  if (id) loadTerrarium();
-}, [id, navigate]);
+  const copyUrl = async () => {
+    if (!uploadedUrl) return;
+    try {
+      await navigator.clipboard.writeText(uploadedUrl);
+      notification.success({
+        message: 'Thành công',
+        description: 'Đã copy URL ảnh',
+        placement: 'topRight',
+      });
+    } catch (error) {
+      console.error('Copy failed:', error);
+    }
+  };
+
+  const insertToEditor = () => {
+    if (!uploadedUrl || !editorRef.current) return;
+    editorRef.current.insertContent(`<img src="${uploadedUrl}" alt="" />`);
+    const latest = editorRef.current.getContent();
+    setFormData(prev => ({ ...prev, bodyHTML: latest }));
+    setImgModalOpen(false);
+  };
 
   // Handle form submission
   const handleSubmit = async () => {
@@ -734,6 +789,10 @@ useEffect(() => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleEditorChange = (content: string) => {
+    setFormData(prev => ({ ...prev, bodyHTML: content }));
   };
 
   const canProceedToNextStep = () => {
@@ -924,36 +983,35 @@ useEffect(() => {
 
             {/* HTML Content Editor */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Nội dung HTML (Tùy chọn)</h3>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Nội dung HTML (Tùy chọn)</h3>
+                <button
+                  type="button"
+                  onClick={openImageModal}
+                  className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <PictureOutlined className="w-4 h-4 mr-1" />
+                  Upload ảnh
+                </button>
+              </div>
               <div className="border border-gray-300 rounded-lg overflow-hidden">
-                {/* <Editor
-                  apiKey="2pcpzgtdmmp5f43t7bqpc9rmxkok9ben1axiy628f53zad6s"
+                <Editor
+                  apiKey="lfiqogz55f5k6y6cuza7ih9b59tc7t8h62v0z9lp8661yu2w"
                   value={formData.bodyHTML}
-                  init={{
-                    height: 400,
-                    resize: true,
-                    plugins: [
-                      'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 
-                      'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 
-                      'fullscreen', 'insertdatetime', 'media', 'table', 'paste', 
-                      'help', 'wordcount'
-                    ],
-                    toolbar: 'undo redo | formatselect | bold italic backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | image | help',
-                    images_upload_handler: async (blobInfo: any, success: (url: string) => void, failure: (err: string) => void) => {
-                      const formDataUpload = new FormData();
-                      formDataUpload.append('file', blobInfo.blob());
-                      formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                      try {
-                        const res = await axios.post(CLOUDINARY_UPLOAD_URL, formDataUpload);
-                        success(res.data.secure_url || '');
-                      } catch {
-                        failure('Upload ảnh thất bại');
-                      }
-                    },
-                    content_style: 'img { max-width: 400px; height: auto; }'
+                  onInit={(_, editor) => {
+                    editorRef.current = editor;
                   }}
-                  onEditorChange={(content) => setFormData(prev => ({ ...prev, bodyHTML: content }))}
-                /> */}
+                  onEditorChange={handleEditorChange}
+                  init={{
+                    height: 500,
+                    menubar: false,
+                    plugins: 'lists link image code table',
+                    toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | removeformat | code',
+                    automatic_uploads: false,
+                    paste_data_images: false,
+                    content_style: 'body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size:14px } img{max-width:100%;height:auto;}'
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -1099,6 +1157,68 @@ useEffect(() => {
           </div>
         </div>
       </div>
+
+      {/* Image Upload Modal */}
+      {imgModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Upload ảnh (Cloudinary)</h3>
+              <button 
+                onClick={() => setImgModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+              <UploadIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 mb-2">Kéo & thả ảnh vào đây hoặc bấm để chọn</p>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={imgUploading}
+                className="hidden"
+                id="image-upload"
+              />
+              <label
+                htmlFor="image-upload"
+                className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700 disabled:opacity-50"
+              >
+                {imgUploading ? 'Đang upload...' : 'Chọn ảnh'}
+              </label>
+            </div>
+
+            {uploadedUrl && (
+              <div className="mt-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="text"
+                    value={uploadedUrl}
+                    readOnly
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="URL ảnh sau khi upload"
+                  />
+                  <button
+                    onClick={copyUrl}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={insertToEditor}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Chèn vào nội dung
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
