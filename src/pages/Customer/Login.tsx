@@ -340,7 +340,7 @@ const Login: React.FC = () => {
       <div className="absolute bottom-0 left-0 w-full overflow-hidden">
         <svg
           className="relative block w-full h-20"
-          xmlns="http://www.w3.org/2000/svg"
+          xmlns="/TerraTechLogo.png"
           viewBox="0 0 1200 120"
           preserveAspectRatio="none"
         >
