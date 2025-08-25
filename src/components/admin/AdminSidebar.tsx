@@ -94,29 +94,8 @@ const AdminSidebar: React.FC = () => {
           <span>Quản lý voucher</span>
         </li>
 
-        <li
-          className={`flex items-center space-x-3 p-2 rounded-lg transition-colors cursor-pointer ${
-            isActive('/admin/revenue')
-              ? 'bg-blue-100 text-blue-600 font-semibold'
-              : 'text-gray-700 hover:text-blue-600 hover:bg-blue-100'
-          }`}
-          onClick={() => navigate('/admin/revenue')}
-        >
-          <CurrencyDollarIcon className="h-6 w-6" />
-          <span>Quản lý doanh thu</span>
-        </li>
-
-        <li
-          className={`flex items-center space-x-3 p-2 rounded-lg transition-colors cursor-pointer ${
-            isActive('/admin/settings')
-              ? 'bg-blue-100 text-blue-600 font-semibold'
-              : 'text-gray-700 hover:text-blue-600 hover:bg-blue-100'
-          }`}
-          onClick={() => navigate('/admin/settings')}
-        >
-          <CogIcon className="h-6 w-6" />
-          <span>Cài đặt hệ thống</span>
-        </li>
+        
+       
 
         <li
           className={`flex items-center space-x-3 p-2 rounded-lg transition-colors cursor-pointer ${
@@ -130,17 +109,7 @@ const AdminSidebar: React.FC = () => {
           <span>Báo cáo & Thống kê</span>
         </li>
 
-        <li
-          className={`flex items-center space-x-3 p-2 rounded-lg transition-colors cursor-pointer ${
-            isActive('/admin/shift-management')
-              ? 'bg-blue-100 text-blue-600 font-semibold'
-              : 'text-gray-700 hover:text-blue-600 hover:bg-blue-100'
-          }`}
-          onClick={() => navigate('/admin/shift-management')}
-        >
-          <CalendarIcon className="h-6 w-6" />
-          <span>Quản lý ca làm</span>
-        </li>
+        
 
         {/* Bài viết: vẫn dropdown như cũ */}
         <li

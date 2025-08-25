@@ -3,11 +3,30 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, Lock, User, Leaf } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import type { LoginRequest } from '@/types';
+import type { LoginRequest } from '@/types/auth'; // ✅ { username, password }
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useGoogleLogin } from '@react-oauth/google';
-import { useMembership } from '@/store/membership'; // ⬅️ dùng để refresh membership sau login
+import { useMembership } from '@/store/membership';
+
+// ===== Helper: decode JWT payload =====
+function decodeJwtPayload(token?: string | null): Record<string, any> | null {
+  try {
+    if (!token) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => `%${('00' + c.charCodeAt(0).toString(16)).slice(-2)}`)
+        .join('')
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -18,10 +37,10 @@ const Login: React.FC = () => {
   const formRef = useRef<HTMLDivElement>(null);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState(''); // giữ nguyên UI gốc
+  const [password, setPassword] = useState(''); // giữ nguyên UI gốc
 
-  // ===== GSAP animation =====
+  // ===== GSAP animation (giữ nguyên UI gốc) =====
   useEffect(() => {
     const loadGSAPAndAnimate = () => {
       const script1 = document.createElement('script');
@@ -86,44 +105,36 @@ const Login: React.FC = () => {
     if (!(window as any).gsap) loadGSAPAndAnimate();
   }, []);
 
-  // ===== Google Login =====
-  const googleLogin = useGoogleLogin({
-    scope: 'email profile',
-    onSuccess: async (tokenResponse) => {
-      try {
-        const success = await handleGoogleLogin(tokenResponse.access_token);
-        if (success) {
-          // refresh membership ngay sau khi token đã được lưu bởi handleGoogleLogin
-          try {
-            await refreshMembership(); // ⬅️ rất quan trọng
-          } catch (e) {
-            // không chặn luồng nếu lỗi
-            console.warn('refreshMembership (google) failed:', e);
-          }
-          toast.success('Đăng nhập Google thành công! Chào mừng bạn!', {
-            position: 'top-right',
-            autoClose: 3000,
-          });
-          navigate('/personalize');
-        }
-      } catch (e) {
-        console.error('Đăng nhập Google thất bại:', e);
-        toast.error('Đăng nhập Google thất bại. Vui lòng thử lại.', {
-          position: 'top-right',
-          autoClose: 3000,
-        });
-      }
-    },
-    onError: (err) => {
-      console.error('Lỗi đăng nhập Google:', err);
-      toast.error('Không thể kết nối với Google. Vui lòng thử lại.', {
-        position: 'top-right',
-        autoClose: 3000,
-      });
-    },
-  });
+  // Show backend error (nếu có)
+  useEffect(() => {
+    if (error) toast.error(String(error));
+  }, [error]);
 
-  // ===== Đăng nhập thường =====
+  // ===== Điều hướng sau đăng nhập theo token claims =====
+  function routeAfterLogin(token: string | null) {
+    const payload = decodeJwtPayload(token);
+
+    const isOtp =
+      String(payload?.isOtp ?? payload?.IsOtp ?? payload?.is_otp ?? true).toLowerCase() === 'true';
+
+    if (!isOtp) {
+      // ⛳ Chưa xác thực email -> chuyển qua trang riêng
+      navigate('/verify-email', { replace: true });
+      return;
+    }
+
+    const isPersonalize = String(
+      payload?.isPersonalize ?? payload?.IsPersonalize ?? payload?.is_personalize ?? false
+    ).toLowerCase() === 'true';
+
+    // Làm tươi membership (không chặn flow)
+    refreshMembership().catch(() => {});
+
+    if (isPersonalize) navigate('/', { replace: true });
+    else navigate('/personalize', { replace: true });
+  }
+
+  // ===== Đăng nhập thường (giữ nguyên form username/password) =====
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -131,30 +142,34 @@ const Login: React.FC = () => {
       return;
     }
 
-    const credentials: LoginRequest = { username, password };
+    const credentials: LoginRequest = { username, password }; // ✅ đúng kiểu
     try {
       const success = await handleLogin(credentials);
       if (success) {
-        // refresh membership ngay sau khi token đã được lưu bởi handleLogin
-        try {
-          await refreshMembership(); // ⬅️ rất quan trọng
-        } catch (e) {
-          console.warn('refreshMembership failed:', e);
-        }
-
-        toast.success(`Đăng nhập thành công! Chào mừng ${username}`, {
-          position: 'top-right',
-          autoClose: 3000,
-        });
-        navigate('/personalize');
+        const token = localStorage.getItem('authToken'); // kỳ vọng useAuth đã lưu
+        routeAfterLogin(token);
       }
-    } catch (e) {
-      toast.error('Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin!', {
-        position: 'top-right',
-        autoClose: 3000,
-      });
+    } catch {
+      toast.error('Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin!');
     }
   };
+
+  // ===== Google Login (giữ UI, thêm route theo claims) =====
+  const googleLogin = useGoogleLogin({
+    scope: 'email profile',
+    onSuccess: async (tokenResponse) => {
+      try {
+        const ok = await handleGoogleLogin(tokenResponse.access_token);
+        if (ok) {
+          const token = localStorage.getItem('authToken');
+          routeAfterLogin(token);
+        }
+      } catch {
+        toast.error('Đăng nhập Google thất bại. Vui lòng thử lại.');
+      }
+    },
+    onError: () => toast.error('Không thể kết nối với Google. Vui lòng thử lại.'),
+  });
 
   return (
     <div
@@ -168,7 +183,7 @@ const Login: React.FC = () => {
     >
       <ToastContainer />
 
-      {/* Animated Background */}
+      {/* Animated Background (giữ nguyên) */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="floating-leaf absolute top-20 left-10 w-16 h-16 opacity-30">
           <Leaf className="w-full h-full text-emerald-300" />
@@ -206,7 +221,7 @@ const Login: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content (giữ nguyên UI) */}
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
         <div
           ref={formRef}
@@ -336,7 +351,7 @@ const Login: React.FC = () => {
         </div>
       </div>
 
-      {/* Decorative Wave */}
+      {/* Decorative Wave (giữ nguyên) */}
       <div className="absolute bottom-0 left-0 w-full overflow-hidden">
         <svg
           className="relative block w-full h-20"

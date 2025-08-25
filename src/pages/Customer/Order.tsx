@@ -2,9 +2,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 
-import { createMoMoPayment, getOrdersByUser } from '@/api/order';
+import { createMoMoPayment, getOrdersByUser, cancelOrder } from '@/api/order';
 import type { Order, OrderItem } from '@/types/order';
 
 import {
@@ -133,6 +133,30 @@ const Order: React.FC = () => {
     }
   };
 
+  const handleCancel = async (o: Order) => {
+    // xin lý do nhanh (tùy chọn)
+    const reason = window.prompt('Lý do hủy (tùy chọn):', 'Khách hàng yêu cầu hủy');
+    if (reason === null) return;
+
+    try {
+      await cancelOrder(o.orderId, userId, {
+        cancelReason: reason || 'Khách hàng yêu cầu hủy',
+        additionalNotes: '',
+      });
+      toast.success(`Đã gửi yêu cầu hủy đơn #${o.orderId}`);
+      await load();
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Hủy đơn thất bại.');
+    }
+  };
+
+  const requestRefund = (o: Order) => {
+    // chỗ này tùy flow của bạn (đi đến màn tạo yêu cầu hoàn, hoặc mở modal)
+    toast.info('Tính năng yêu cầu hoàn sẽ được bật cho đơn đã hoàn thành.');
+    // ví dụ: navigate(`/customer-dashboard/orders/${o.orderId}?tab=refund`);
+  };
+
   const openReview = (o: Order) => {
     const firstItem = o.orderItems?.[0]?.orderItemId ?? null;
     setReview({
@@ -173,8 +197,26 @@ const Order: React.FC = () => {
     }
   };
 
+  // —— Helpers (hiển thị nút) ——
+  const isCanceled = (s: string | number) => {
+    const v = String(s).toLowerCase();
+    return v === 'cancel' || v === 'cancle';
+  };
+  const isShipping = (o: Order) =>
+    String(o.status).toLowerCase() === 'shipping' ||
+    String(o.shippingStatus ?? '').toLowerCase() === 'shipping';
+  const isPaymentFailed = (o: Order) =>
+    String(o.paymentStatus ?? '').toLowerCase() === 'failed';
+
   const canRate = (o: Order) => isCompleted(o.status);
-  const canPay = (o: Order) => isUnpaid(o.paymentStatus);
+  // nút pay: chỉ khi unpaid và KHÔNG bị hủy
+  const canPay = (o: Order) => isUnpaid(o.paymentStatus) && !isCanceled(o.status);
+  // nút cancel: pending/processing, chưa shipping, chưa canceled, và không phải payment failed
+  const canCancel = (o: Order) => {
+    const st = String(o.status).toLowerCase();
+    const pendingOrProcessing = st === 'pending' || st === 'processing';
+    return pendingOrProcessing && !isShipping(o) && !isCanceled(o.status) && !isPaymentFailed(o);
+  };
 
   // ——— PAGINATION DATA ———
   const total = orders.length;
@@ -254,6 +296,7 @@ const Order: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    {/* Xem chi tiết: luôn có */}
                     <button
                       onClick={() =>
                         navigate(`/customer-dashboard/orders/${o.orderId}`)
@@ -264,34 +307,53 @@ const Order: React.FC = () => {
                       Xem chi tiết
                     </button>
 
-                    <button
-                      onClick={() =>
-                        toast.info('Chức năng hủy sẽ cập nhật sau từ BE.')
-                      }
-                      className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded"
-                    >
-                      <XCircle size={16} />
-                      Hủy đơn
-                    </button>
+                    {/* Khi payment lỗi: chỉ cho xem chi tiết */}
+                    {!isPaymentFailed(o) && (
+                      <>
+                        {/* Hủy đơn (pending/processing, chưa shipping) */}
+                        {canCancel(o) && (
+                          <button
+                            onClick={() => handleCancel(o)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded"
+                          >
+                            <XCircle size={16} />
+                            Hủy đơn
+                          </button>
+                        )}
 
-                    {canRate(o) && (
-                      <button
-                        onClick={() => openReview(o)}
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded"
-                      >
-                        <Star size={16} />
-                        Đánh giá
-                      </button>
-                    )}
+                        {/* Hoàn hàng/hoàn tiền – khi đã hoàn thành */}
+                        {isCompleted(o.status) && (
+                          <button
+                            onClick={() => requestRefund(o)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-purple-50 text-purple-700 border border-purple-200 rounded"
+                          >
+                            <RotateCcw size={16} />
+                            Yêu cầu hoàn hàng/hoàn tiền
+                          </button>
+                        )}
 
-                    {canPay(o) && (
-                      <button
-                        onClick={() => payWithMoMo(o)}
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded"
-                      >
-                        <Wallet size={16} />
-                        Thanh toán
-                      </button>
+                        {/* Đánh giá – khi đã hoàn thành */}
+                        {isCompleted(o.status) && (
+                          <button
+                            onClick={() => openReview(o)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded"
+                          >
+                            <Star size={16} />
+                            Đánh giá
+                          </button>
+                        )}
+
+                        {/* Thanh toán – chỉ khi unpaid và chưa bị hủy */}
+                        {canPay(o) && (
+                          <button
+                            onClick={() => payWithMoMo(o)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded"
+                          >
+                            <Wallet size={16} />
+                            Thanh toán
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
