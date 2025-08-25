@@ -80,9 +80,10 @@ const Step5TerrariumVariant: React.FC<Step5Props> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({
     pageNumber: 1,
-    pageSize: 20,
+    pageSize: 6,
     totalPages: 1,
   });
+  const [isModalOpen, setIsModalOpen] = useState(false); // New state for modal
 
   useEffect(() => {
     fetchTerrariums();
@@ -162,7 +163,8 @@ const Step5TerrariumVariant: React.FC<Step5Props> = ({
 
   const handleTerrariumSelect = (terrarium: Terrarium) => {
     setSelectedTerrarium(terrarium);
-    setTerrariumVariants([]);
+    setIsModalOpen(true); // Open modal when selecting terrarium
+    setTerrariumVariants([]); // Reset variants
   };
 
   const handleVariantQuantityChange = (variant: TerrariumVariant, quantity: number) => {
@@ -222,6 +224,11 @@ const Step5TerrariumVariant: React.FC<Step5Props> = ({
 
   const handlePageChange = (newPage: number) => {
     setPagination(prev => ({ ...prev, pageNumber: newPage }));
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    // Optional: setSelectedTerrarium(null); if you want to reset selection
   };
 
   return (
@@ -411,75 +418,92 @@ const Step5TerrariumVariant: React.FC<Step5Props> = ({
         )}
       </div>
 
-      {/* Terrarium Variants */}
-      {selectedTerrarium && (
-        <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Biến thể của "{selectedTerrarium.terrariumName}"
-          </h3>
-          <div className="border border-gray-300 rounded-lg bg-white">
-            {loadingVariants ? (
-              <div className="px-4 py-8 text-center text-gray-500">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                Đang tải biến thể...
-              </div>
-            ) : error ? (
-              <div className="px-4 py-8 text-center text-red-600">
-                <AlertCircle className="w-6 h-6 mx-auto mb-2" />
-                {error}
-                <button
-                  onClick={() => fetchTerrariumVariants(selectedTerrarium.terrariumId)}
-                  className="mt-2 text-sm text-blue-600 hover:text-blue-800"
-                  type="button"
-                  aria-label="Thử lại tải biến thể"
-                >
-                  Thử lại
-                </button>
-              </div>
-            ) : terrariumVariants.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-500">
-                Terrarium này không có biến thể nào
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-200">
-                {terrariumVariants.map((variant) => (
-                  <div key={variant.terrariumVariantId} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{variant.variantName}</h4>
-                        <div className="text-sm text-gray-600 mt-1">
-                          <div>Giá: {variant.price.toLocaleString()} VNĐ</div>
-                          <div>Tồn kho: {variant.stockQuantity}</div>
-                          {variant.updatedAt && (
-                            <div>Cập nhật: {new Date(variant.updatedAt).toLocaleDateString()}</div>
-                          )}
+      {/* Modal for Terrarium Variants */}
+      {isModalOpen && selectedTerrarium && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 p-6 relative max-h-[80vh] overflow-y-auto">
+            <button
+              onClick={closeModal}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              aria-label="Đóng modal"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Biến thể của "{selectedTerrarium.terrariumName}"
+            </h3>
+            <div className="border border-gray-300 rounded-lg bg-white">
+              {loadingVariants ? (
+                <div className="px-4 py-8 text-center text-gray-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  Đang tải biến thể...
+                </div>
+              ) : error ? (
+                <div className="px-4 py-8 text-center text-red-600">
+                  <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+                  {error}
+                  <button
+                    onClick={() => fetchTerrariumVariants(selectedTerrarium.terrariumId)}
+                    className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                    type="button"
+                    aria-label="Thử lại tải biến thể"
+                  >
+                    Thử lại
+                  </button>
+                </div>
+              ) : terrariumVariants.length === 0 ? (
+                <div className="px-4 py-8 text-center text-gray-500">
+                  Terrarium này không có biến thể nào
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {terrariumVariants.map((variant) => (
+                    <div key={variant.terrariumVariantId} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900">{variant.variantName}</h4>
+                          <div className="text-sm text-gray-600 mt-1">
+                            <div>Giá: {variant.price.toLocaleString()} VNĐ</div>
+                            <div>Tồn kho: {variant.stockQuantity}</div>
+                            {variant.updatedAt && (
+                              <div>Cập nhật: {new Date(variant.updatedAt).toLocaleDateString()}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <label className="text-sm text-gray-600">Số lượng:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max={variant.stockQuantity}
+                            value={getSelectedQuantity(variant.terrariumVariantId)}
+                            onChange={(e) => handleVariantQuantityChange(variant, parseInt(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <label className="text-sm text-gray-600">Số lượng:</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={variant.stockQuantity}
-                          value={getSelectedQuantity(variant.terrariumVariantId)}
-                          onChange={(e) => handleVariantQuantityChange(variant, parseInt(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+                      {variant.urlImage && (
+                        <div className="mt-3">
+                          <img
+                            src={variant.urlImage}
+                            alt={variant.variantName}
+                            className="w-20 h-20 object-cover rounded border"
+                          />
+                        </div>
+                      )}
                     </div>
-                    {variant.urlImage && (
-                      <div className="mt-3">
-                        <img
-                          src={variant.urlImage}
-                          alt={variant.variantName}
-                          className="w-20 h-20 object-cover rounded border"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

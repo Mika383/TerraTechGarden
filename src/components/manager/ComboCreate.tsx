@@ -5,6 +5,7 @@ import { notification } from 'antd';
 import Step4Accessories from './Step4Accessories';
 import Step5TerrariumVariant from './Step5TerrariumVariant';
 
+// Update the ComboFormData interface
 interface ComboFormData {
   comboCategoryId: number;
   name: string;
@@ -15,9 +16,9 @@ interface ComboFormData {
   stockQuantity: number;
   isFeatured: boolean;
   items: {
-    terrariumId: number;
-    terrariumVariantId: number;
-    accessoryId: number;
+    terrariumId?: number;
+    terrariumVariantId?: number;
+    accessoryId?: number;
     quantity: number;
   }[];
 }
@@ -112,32 +113,30 @@ const ComboCreate: React.FC = () => {
     fetchData();
   }, []);
 
-  // Update items when accessories or terrarium variants change
-  useEffect(() => {
-    const items: ComboFormData['items'] = [];
-    
-    // Add accessories
-    selectedAccessories.forEach(accessory => {
-      items.push({
-        terrariumId: 0,
-        terrariumVariantId: 0,
-        accessoryId: accessory.accessoryId,
-        quantity: 1,
-      });
+
+// Update the useEffect that manages items in ComboCreate.tsx
+useEffect(() => {
+  const items: ComboFormData['items'] = [];
+  
+  // Add accessories with simplified structure
+  selectedAccessories.forEach(accessory => {
+    items.push({
+      accessoryId: accessory.accessoryId,
+      quantity: 1,
     });
-    
-    // Add terrarium variants
-    selectedTerrariumVariants.forEach(variant => {
-      items.push({
-        terrariumId: variant.terrariumId,
-        terrariumVariantId: variant.terrariumVariantId,
-        accessoryId: 0,
-        quantity: variant.quantity,
-      });
+  });
+  
+  // Add terrarium variants with simplified structure  
+  selectedTerrariumVariants.forEach(variant => {
+    items.push({
+      terrariumId: variant.terrariumId,
+      terrariumVariantId: variant.terrariumVariantId,
+      quantity: variant.quantity,
     });
-    
-    setFormData(prev => ({ ...prev, items }));
-  }, [selectedAccessories, selectedTerrariumVariants]);
+  });
+  
+  setFormData(prev => ({ ...prev, items }));
+}, [selectedAccessories, selectedTerrariumVariants]);
 
   // Image upload function
   const uploadImage = async (file: File): Promise<string> => {
