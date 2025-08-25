@@ -75,7 +75,7 @@ const ComboList: React.FC = () => {
         queryParams.append('search', search.trim());
       }
       
-      const response = await fetch(`https://terarium.shop/api/Combos?${queryParams}`, {
+      const response = await fetch(`https://terarium.shop/api/Combos?IncludeInactive=true`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
