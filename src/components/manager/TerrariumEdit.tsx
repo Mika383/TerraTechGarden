@@ -765,7 +765,7 @@ const TerrariumEdit: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nội dung HTML (Tùy chọn)</label>
-                    <Editor
+                    {/* <Editor
                       apiKey="2pcpzgtdmmp5f43t7bqpc9rmxkok9ben1axiy628f53zad6s"
                       value={formData.bodyHTML}
                       init={{
@@ -787,7 +787,7 @@ const TerrariumEdit: React.FC = () => {
                         content_style: 'img { max-width: 400px; height: auto; }'
                       }}
                       onEditorChange={(content) => setFormData(prev => ({ ...prev, bodyHTML: content }))}
-                    />
+                    /> */}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Trạng thái *</label>
