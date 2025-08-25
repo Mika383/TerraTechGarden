@@ -11,7 +11,7 @@ const FALLBACK_IMG = "/TerraTechLogo.png"; // ✅ logo nền trắng
 
 // ---- MoMo query params ----
 interface MoMoParams {
-  orderId?: string;      // mã đơn hàng
+  orderId?: string;      // mã đơn hàng (có thể là "1228-xxxxx")
   status?: string;       // "success" | ...
   amount?: string;       // số tiền (VND) dạng string
   transId?: string;      // mã giao dịch momo
@@ -58,11 +58,24 @@ const safeDecodeURIComponent = (str?: string) => {
 const isMoMoSuccess = (p: MoMoParams) =>
   p.resultCode === "0" || p.status?.toLowerCase() === "success";
 
+/** Lấy raw orderId từ nhiều khóa khác nhau do gateway có thể khác tên */
+const rawOrderIdFromParams = (all: Record<string, string | undefined>) =>
+  all.orderId || all.order || all.order_id || all.oid || "";
+
+/** Trích số đầu tiên từ chuỗi (vd "1228-a5d2..." -> 1228). Trả về null nếu không có số. */
+const extractNumericId = (raw: string | undefined): number | null => {
+  if (!raw) return null;
+  const m = String(raw).match(/\d+/);
+  return m ? Number(m[0]) : null;
+};
+
 // ---- UI blocks ----
 const PaymentInfoMoMo: React.FC<{ params: MoMoParams }> = ({ params }) => {
   const success = isMoMoSuccess(params);
   const amount = params.amount ? Number(params.amount) : 0;
   const showResultCode = !success && !!params.resultCode; // ❗ chỉ hiện khi KHÔNG thành công
+  const rawId = rawOrderIdFromParams(params as any);
+  const displayOrderId = rawId || (extractNumericId(rawId) ?? "N/A");
 
   return (
     <div className={`bg-white p-6 rounded-lg shadow-lg border ${success ? "border-green-200" : "border-red-200"}`}>
@@ -88,7 +101,7 @@ const PaymentInfoMoMo: React.FC<{ params: MoMoParams }> = ({ params }) => {
               {success ? "Thành công" : "Thất bại"}
             </span>
           </p>
-          <p><strong>Mã đơn hàng:</strong> {params.orderId || "N/A"}</p>
+          <p><strong>Mã đơn hàng:</strong> {String(displayOrderId)}</p>
         </div>
       </div>
     </div>
@@ -169,8 +182,8 @@ const PaymentSuccess: React.FC = () => {
   // parse chỉ tham số MoMo
   useEffect(() => {
     const sp = new URLSearchParams(location.search);
-    const p: MoMoParams = {};
-    sp.forEach((v, k) => ((p as any)[k] = v));
+    const p: Record<string, string> = {};
+    sp.forEach((v, k) => (p[k] = v));
 
     // DEV mock khi không có query
     if (import.meta.env.DEV && sp.size === 0) {
@@ -187,18 +200,22 @@ const PaymentSuccess: React.FC = () => {
         responseTime: `${Date.now()}`,
       });
     }
-    setParams(p);
+    setParams(p as MoMoParams);
   }, [location.search]);
 
   // lấy đơn hàng & enrich item khi thanh toán thành công
   useEffect(() => {
     const fetchOrder = async () => {
-      if (!(params.orderId && isMoMoSuccess(params))) return;
+      const rawId = rawOrderIdFromParams(params as any);
+      const numericOrderId = extractNumericId(rawId);
+
+      // chỉ chạy khi có orderId và thanh toán thành công
+      if (!(numericOrderId && isMoMoSuccess(params))) return;
 
       setLoading(true);
       setOrderError(null);
       try {
-        const od = await getOrderById(Number(params.orderId));
+        const od = await getOrderById(numericOrderId);
         if (!od?.orderId) {
           setOrderError("Không tìm thấy đơn hàng.");
           return;

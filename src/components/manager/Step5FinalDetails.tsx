@@ -166,7 +166,7 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Nội dung HTML (Tùy chọn)</h3>
-            <Editor
+            {/* <Editor
               apiKey="2pcpzgtdmmp5f43t7bqpc9rmxkok9ben1axiy628f53zad6s"
               value={formData.bodyHTML}
               init={{
@@ -188,7 +188,7 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
                 content_style: 'img { max-width: 400px; height: auto; }'
               }}
               onEditorChange={handleEditorChange}
-            />
+            /> */}
           </div>
         </div>
 

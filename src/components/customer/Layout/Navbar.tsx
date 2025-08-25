@@ -86,7 +86,7 @@ const Navbar: React.FC = () => {
   const isActive = (path: string) => location.pathname === path;
 
   const dropdownItems: MenuProps['items'] = [
-    ...(userRole === 'User'
+    ...(userRole === 'User' ||userRole === 'Staff' || userRole === 'Manager' || userRole === 'Admin'
       ? [
           {
             key: '1',
@@ -95,7 +95,7 @@ const Navbar: React.FC = () => {
           },
         ]
       : []),
-    ...(userRole === 'Staff' || userRole === 'Manager' || userRole === 'Admin'
+    ...(userRole === 'Staff' 
       ? [
           {
             key: '2',
@@ -104,7 +104,7 @@ const Navbar: React.FC = () => {
           },
         ]
       : []),
-    ...(userRole === 'Manager' || userRole === 'Admin'
+    ...(userRole === 'Manager' 
       ? [
           {
             key: '3',

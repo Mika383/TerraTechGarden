@@ -926,7 +926,7 @@ useEffect(() => {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-6">Nội dung HTML (Tùy chọn)</h3>
               <div className="border border-gray-300 rounded-lg overflow-hidden">
-                <Editor
+                {/* <Editor
                   apiKey="2pcpzgtdmmp5f43t7bqpc9rmxkok9ben1axiy628f53zad6s"
                   value={formData.bodyHTML}
                   init={{
@@ -953,7 +953,7 @@ useEffect(() => {
                     content_style: 'img { max-width: 400px; height: auto; }'
                   }}
                   onEditorChange={(content) => setFormData(prev => ({ ...prev, bodyHTML: content }))}
-                />
+                /> */}
               </div>
             </div>
           </div>
