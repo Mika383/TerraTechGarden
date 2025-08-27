@@ -234,7 +234,7 @@ const Step5TerrariumVariant: React.FC<Step5Props> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 5: Chọn Terrarium Variant</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Chọn Terrarium Variant</h2>
         <p className="text-gray-600">Chọn các biến thể terrarium cho combo của bạn (tùy chọn)</p>
       </div>
 

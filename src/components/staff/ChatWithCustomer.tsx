@@ -721,12 +721,6 @@ const ChatWithCustomer: React.FC = () => {
                   <p className="text-gray-600">Quản lý các cuộc trò chuyện với khách hàng</p>
                 </div>
               </div>
-              <button
-                onClick={() => navigate('/staff-dashboard')}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                ← Quay lại Dashboard
-              </button>
             </div>
           </div>
 

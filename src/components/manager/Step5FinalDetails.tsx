@@ -142,7 +142,7 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 5: Thông Tin Chi Tiết</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Thông Tin Chi Tiết</h2>
         <p className="text-gray-600">Hoàn thiện thông tin cho terrarium của bạn</p>
       </div>
 

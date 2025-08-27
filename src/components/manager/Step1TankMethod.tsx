@@ -59,7 +59,7 @@ const Step1TankMethod: React.FC<Step1Props> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 1: Chọn Loại Bể</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Chọn Loại Bể</h2>
         <p className="text-gray-600">Vui lòng chọn loại bể phù hợp cho terrarium của bạn</p>
       </div>
 

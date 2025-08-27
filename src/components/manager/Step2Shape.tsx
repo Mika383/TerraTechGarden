@@ -60,7 +60,7 @@ const Step2Shape: React.FC<Step2Props> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 2: Chọn Hình Dạng</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Chọn Hình Dạng</h2>
         <p className="text-gray-600">Chọn hình dạng và chất liệu cho terrarium của bạn</p>
       </div>
 

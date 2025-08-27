@@ -283,65 +283,77 @@ const TerrariumList: React.FC = () => {
     }
   };
 
-  const handleImageUpload = async (terrariumId: number, file: File) => {
-    try {
-      setUploadingImages(prev => ({ ...prev, [terrariumId]: true }));
+const handleImageUpload = async (terrariumId: number, file: File) => {
+  try {
+    setUploadingImages(prev => ({ ...prev, [terrariumId]: true }));
 
-      const formData = new FormData();
-      formData.append('TerrariumId', terrariumId.toString());
-      formData.append('ImageFile', file);
+    const formData = new FormData();
+    formData.append('TerrariumId', terrariumId.toString());
+    formData.append('ImageFile', file);
 
-      const token = localStorage.getItem('authToken');
-      const response = await fetch('https://terarium.shop/api/TerrariumImage/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        body: formData,
-      });
+    const token = localStorage.getItem('authToken');
+    const response = await fetch('https://terarium.shop/api/TerrariumImage/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: formData,
+    });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          notification.error({
-            message: 'Lỗi',
-            description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
-            placement: 'topRight',
-          });
-          navigate('/login');
-          return;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.status === 200) {
-        // Refresh the current view (search results or all terrariums)
-        if (isSearching && searchTerm.trim()) {
-          await handleSearch(searchTerm.trim());
-        } else {
-          await fetchTerrariums();
-        }
-        
-        notification.success({
-          message: 'Thành công',
-          description: 'Hình ảnh đã được tải lên thành công!',
+    if (!response.ok) {
+      if (response.status === 401) {
+        notification.error({
+          message: 'Lỗi',
+          description: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
           placement: 'topRight',
         });
-      } else {
-        throw new Error(result.message || 'Failed to upload image');
+        navigate('/login');
+        return;
       }
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      notification.error({
-        message: 'Lỗi',
-        description: 'Có lỗi xảy ra khi tải lên hình ảnh',
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.status === 201) {
+      console.log('Upload successful, refreshing data...');
+      console.log('isSearching:', isSearching);
+      console.log('searchTerm:', searchTerm);
+      
+      notification.success({
+        message: 'Thành công',
+        description: 'Hình ảnh đã được tải lên thành công!',
         placement: 'topRight',
       });
-    } finally {
-      setUploadingImages(prev => ({ ...prev, [terrariumId]: false }));
+
+      // Refresh data immediately after successful upload
+      try {
+        if (isSearching && searchTerm.trim()) {
+          console.log('Refreshing search results...');
+          await handleSearch(searchTerm.trim());
+        } else {
+          console.log('Refreshing all terrariums...');
+          await fetchTerrariums();
+        }
+        console.log('Data refresh completed');
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
+
+    } else {
+      throw new Error(result.message || 'Failed to upload image');
     }
-  };
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    notification.error({
+      message: 'Lỗi',
+      description: 'Có lỗi xảy ra khi tải lên hình ảnh',
+      placement: 'topRight',
+    });
+  } finally {
+    setUploadingImages(prev => ({ ...prev, [terrariumId]: false }));
+  }
+};
 
   const handleImageDelete = async (imageId: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa hình ảnh này?')) {
