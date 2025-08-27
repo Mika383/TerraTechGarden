@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Archive, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Archive, ChevronLeft, ChevronRight, Eye, CheckCircle, Clock, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface OrderItem {
@@ -104,6 +104,57 @@ const getStatusColor = (status: string | null | undefined, type: 'order' | 'paym
   return 'text-gray-600 bg-gray-50';
 };
 
+// Get next status for progression
+const getNextStatus = (currentStatus: string | null): string | null => {
+  if (!currentStatus) return null;
+  
+  switch (currentStatus.toLowerCase()) {
+    case 'pending': return 'confirmed';
+    case 'confirmed': return 'processing';
+    case 'processing': return 'shipping';
+    case 'shipping': return 'completed';
+    default: return null;
+  }
+};
+
+// Get button config for status updates
+const getStatusButtonConfig = (status: string | null) => {
+  if (!status) return null;
+  
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return {
+        text: 'Xác nhận đơn',
+        icon: CheckCircle,
+        className: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md',
+        nextStatus: 'confirmed'
+      };
+    case 'confirmed':
+      return {
+        text: 'Bắt đầu xử lý',
+        icon: Clock,
+        className: 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm hover:shadow-md',
+        nextStatus: 'processing'
+      };
+    // case 'processing':
+    //   return {
+    //     text: 'Chuyển giao hàng',
+    //     icon: ArrowRight,
+    //     className: 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-sm hover:shadow-md',
+    //     nextStatus: 'shipping'
+    //   };
+    // case 'shipping':
+    //   return {
+    //     text: 'Hoàn thành',
+    //     icon: CheckCircle,
+    //     className: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md',
+    //     nextStatus: 'completed'
+    //   };
+    default:
+      return null;
+  }
+};
+
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
@@ -127,6 +178,7 @@ const OrderList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -245,7 +297,16 @@ const OrderList: React.FC = () => {
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
-  const handleStatusUpdate = async (orderId: number, newStatus: string) => {
+  const handleStatusUpdate = async (orderId: number, currentStatus: string | null) => {
+    const nextStatus = getNextStatus(currentStatus);
+    if (!nextStatus) {
+      toast.error('Trạng thái không hợp lệ để cập nhật');
+      return;
+    }
+
+    // Add to updating set
+    setUpdatingOrders(prev => new Set(prev).add(orderId));
+
     try {
       const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
       
@@ -260,7 +321,7 @@ const OrderList: React.FC = () => {
       const response = await fetch(`https://terarium.shop/api/Order/${orderId}/status`, {
         method: 'PUT',
         headers: headers,
-        body: JSON.stringify(newStatus),
+        body: JSON.stringify(nextStatus),
       });
 
       if (response.status === 401) {
@@ -275,14 +336,21 @@ const OrderList: React.FC = () => {
       // Update the order status in state
       setOrders(orders.map(order => 
         order.orderId === orderId 
-          ? { ...order, status: newStatus }
+          ? { ...order, status: nextStatus }
           : order
       ));
       
-      toast.success('Cập nhật trạng thái thành công');
+      toast.success(`Cập nhật trạng thái thành: ${getStatusText(nextStatus)}`);
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Không thể cập nhật trạng thái');
+    } finally {
+      // Remove from updating set
+      setUpdatingOrders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
     }
   };
 
@@ -350,64 +418,11 @@ const OrderList: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Danh sách Đơn hàng</h1>
           <p className="text-gray-600">Quản lý đơn hàng trong hệ thống</p>
         </div>
-        <div className="flex space-x-3">
-          <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-200 transition-colors">
-            <Archive className="w-4 h-4" />
-            <span>Lưu bộ lọc</span>
-          </button>
-          <Link
-            to="/staff/order/create"
-            className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tạo đơn hàng</span>
-          </Link>
-        </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <select 
-            className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="pending">Chờ xử lý</option>
-            <option value="confirmed">Đã xác nhận</option>
-            <option value="processing">Đang xử lý</option>
-            <option value="shipping">Đang vận chuyển</option>
-            <option value="completed">Hoàn thành</option>
-            <option value="failed">Giao thất bại</option>
-            <option value="cancel">Đơn bị hủy</option>
-            <option value="requestrefund">Yêu cầu hoàn tiền</option>
-            <option value="refuning">Đang hoàn tiền</option>
-            <option value="refunded">Đã hoàn tiền</option>
-          </select>
-
-          <select 
-            className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value)}
-          >
-            <option value="all">Tất cả thanh toán</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-
           <select 
             className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
             value={pageSize}
@@ -418,17 +433,6 @@ const OrderList: React.FC = () => {
             <option value="20">20 / trang</option>
             <option value="50">50 / trang</option>
           </select>
-
-          <button 
-            onClick={() => {
-              setSearchTerm('');
-              setStatusFilter('all');
-              setPaymentFilter('all');
-            }}
-            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Xóa bộ lọc
-          </button>
         </div>
       </div>
 
@@ -478,62 +482,74 @@ const OrderList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Tổng tiền</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Cọc</th>
                 <th className="text-center py-3 px-4 font-medium text-gray-700">Cập nhật trạng thái</th>
+                <th className="text-center py-3 px-4 font-medium text-gray-700">Chi tiết</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredOrders.map((order) => (
-                <tr key={order.orderId} className="hover:bg-gray-50">
-                  <td className="py-3 px-4">
-                    <Link 
-                      to={`/staff/order/${order.orderId}`}
-                      className="text-green-600 hover:text-green-800 font-medium"
-                    >
-                      #{order.orderId}
-                    </Link>
-                  </td>
-                  <td className="py-3 px-4 text-gray-600 text-sm">
-                    {formatDate(order.orderDate)}
-                  </td>
-                  <td className="py-3 px-4 text-gray-900">
-                    User #{order.userId}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status, 'order')}`}>
-                      {getStatusText(order.status)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.paymentStatus, 'payment')}`}>
-                      {order.paymentStatus}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-medium text-gray-900">
-                    {formatCurrency(order.totalAmount)}
-                  </td>
-                  <td className="py-3 px-4 font-medium text-gray-600">
-                    {formatCurrency(order.deposit)}
-                  </td>
-                  <td className="py-3 px-4">
-                    <select
-                      value={order.status || ''}
-                      onChange={(e) => handleStatusUpdate(order.orderId, e.target.value)}
-                      className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    >
-                      <option value="">Chọn trạng thái</option>
-                      <option value="pending">Chờ xử lý</option>
-                      <option value="confirmed">Đã xác nhận</option>
-                      <option value="processing">Đang xử lý</option>
-                      <option value="shipping">Đang vận chuyển</option>
-                      <option value="completed">Hoàn thành</option>
-                      <option value="failed">Giao thất bại</option>
-                      <option value="cancel">Đơn bị hủy</option>
-                      <option value="requestrefund">Yêu cầu hoàn tiền</option>
-                      <option value="refuning">Đang hoàn tiền</option>
-                      <option value="refunded">Đã hoàn tiền</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
+              {filteredOrders.map((order) => {
+                const buttonConfig = getStatusButtonConfig(order.status);
+                const isUpdating = updatingOrders.has(order.orderId);
+                
+                return (
+                  <tr key={order.orderId} className="hover:bg-gray-50">
+                    <td className="py-3 px-4">
+                      <Link 
+                        to={`/staff/order/${order.orderId}`}
+                        className="text-green-600 hover:text-green-800 font-medium"
+                      >
+                        #{order.orderId}
+                      </Link>
+                    </td>
+                    <td className="py-3 px-4 text-gray-600 text-sm">
+                      {formatDate(order.orderDate)}
+                    </td>
+                    <td className="py-3 px-4 text-gray-900">
+                      User #{order.userId}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status, 'order')}`}>
+                        {getStatusText(order.status)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.paymentStatus, 'payment')}`}>
+                        {order.paymentStatus}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-medium text-gray-900">
+                      {formatCurrency(order.totalAmount)}
+                    </td>
+                    <td className="py-3 px-4 font-medium text-gray-600">
+                      {formatCurrency(order.deposit)}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {buttonConfig && (
+                        <button
+                          onClick={() => handleStatusUpdate(order.orderId, order.status)}
+                          disabled={isUpdating}
+                          className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${buttonConfig.className}`}
+                        >
+                          {isUpdating ? (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          ) : (
+                            <buttonConfig.icon className="w-4 h-4 mr-2" />
+                          )}
+                          {isUpdating ? 'Đang cập nhật...' : buttonConfig.text}
+                        </button>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <Link
+                        to={`/staff/order/${order.orderId}/detail`}
+                        className="inline-flex items-center px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        Xem chi tiết
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

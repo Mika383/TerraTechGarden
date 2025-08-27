@@ -162,7 +162,7 @@ const Step4Accessories: React.FC<Step4Props> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 4: Chọn Phụ Kiện</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2"> Chọn Phụ Kiện</h2>
         <p className="text-gray-600">Chọn các phụ kiện bổ sung cho terrarium của bạn (tùy chọn)</p>
       </div>
 

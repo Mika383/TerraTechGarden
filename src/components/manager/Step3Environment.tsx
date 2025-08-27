@@ -59,7 +59,7 @@ const Step3Environment: React.FC<Step3Props> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 3: Chọn Môi Trường</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2"> Chọn Môi Trường</h2>
         <p className="text-gray-600">Chọn loại môi trường sống phù hợp cho terrarium</p>
       </div>
 

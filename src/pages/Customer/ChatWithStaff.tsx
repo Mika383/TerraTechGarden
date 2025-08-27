@@ -120,7 +120,7 @@ const ChatWithStaff: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getAuthToken = () => {
-    return localStorage.getItem('authToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidW5pcXVlX25hbWUiOiJhZG1pbiIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwiZW1haWwiOiJzdHJpbmdAZ21haWwuY29tIiwiZnVsbE5hbWUiOiJOWFF1YW5nbmciLCJwaG9uZU51bWJlciI6InN0cmluZyIsImdlbmRlciI6Im1hbGUiLCJzdGF0dXMiOiJBY3RpdmUiLCJleHAiOjE3NTQ1NzkxNjEsImlzcyI6IlRlcnJhcml1bUdhcmRlblRlY2hBUEkiLCJhdWQiOiJUZXJyYXJpdW1HYXJkZW5UZWNoQ2xpZW50In0.acoY5Elcd1FnqR8bIzQPso52QkxkIN2uPfQocV8PvfY';
+    return localStorage.getItem('authToken');
   };
 
   const decodeToken = (token: string) => {
@@ -333,7 +333,7 @@ const ChatWithStaff: React.FC = () => {
         if (response.ok) {
           const result: ApiResponse<User[]> = await response.json();
           const staffOnly = result.data.filter(user => 
-            user.roleName === 'Staff' || user.roleName === 'Manager'
+            user.roleName === 'Staff'
           );
           setStaffUsers(staffOnly);
         }
@@ -725,7 +725,7 @@ const ChatWithStaff: React.FC = () => {
                   <p className="text-xs text-gray-500">{otherUser.role}</p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
+              {/* <div className="flex items-center space-x-2">
                 <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
                   <PhoneOutlined className="w-5 h-5" />
                 </button>
@@ -735,7 +735,7 @@ const ChatWithStaff: React.FC = () => {
                 <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
                   <InfoCircleOutlined className="w-5 h-5" />
                 </button>
-              </div>
+              </div> */}
             </div>
           </div>
 

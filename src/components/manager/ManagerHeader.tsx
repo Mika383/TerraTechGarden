@@ -132,7 +132,7 @@ const ManagerHeader: React.FC<ManagerHeaderProps> = ({
           {/* Right section */}
           <div className="flex items-center space-x-2">
             {/* Notifications */}
-            <div className="relative" ref={notificationRef}>
+            {/* <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
@@ -143,10 +143,10 @@ const ManagerHeader: React.FC<ManagerHeaderProps> = ({
                     {unreadCount}
                   </span>
                 )}
-              </button>
+              </button> */}
 
               {/* Notifications dropdown */}
-              {showNotifications && (
+              {/* {showNotifications && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
                   <div className="px-4 py-3 border-b border-gray-100">
                     <h3 className="text-lg font-semibold text-gray-800">Thông báo</h3>
@@ -183,7 +183,7 @@ const ManagerHeader: React.FC<ManagerHeaderProps> = ({
                   </div>
                 </div>
               )}
-            </div>
+            </div> */}
             {/* User Profile */}
             <div className="relative" ref={userMenuRef}>
               <button

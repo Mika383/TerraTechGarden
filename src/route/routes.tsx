@@ -29,6 +29,10 @@ import ComboCreate from '@/components/manager/ComboCreate';
 import ComboEdit from '@/components/manager/ComboEdit';
 import TerrariumChatbox from '@/pages/Customer/TerrariumChatbox';
 import MyLayoutsPage from '@/pages/Customer/MyLayouts';
+import OrderDetailStaff from '@/components/staff/OrderDetailStaff';
+import TerrariumRequestList from '@/components/staff/TerrariumRequestList';
+import TerrariumCustomizePage from '@/components/staff/TerrariumCustomizePage';
+import TerrariumRequestAll from '@/components/staff/TerrariumRequestAll';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -144,7 +148,11 @@ const AppRoutes = () => {
   <Route element={<Suspense fallback={<Loading />}><StaffLayout /></Suspense>}>
     <Route path="dashboard" element={<Suspense fallback={<Loading />}><StaffDashboard /></Suspense>} />
     <Route path="order/list" element={<Suspense fallback={<Loading />}><OrderList /></Suspense>} />
+    <Route path="order/:id/detail" element={<Suspense fallback={<Loading />}><OrderDetailStaff /></Suspense>} />
     <Route path="support/messages" element={<Suspense fallback={<Loading />}><ChatWithCustomer /></Suspense>} />
+    <Route path="support/requests" element={<Suspense fallback={<Loading />}><TerrariumRequestList /></Suspense>} />
+    <Route path="terrarium-requests" element={<Suspense fallback={<Loading />}><TerrariumRequestAll /></Suspense>} />
+    <Route path="terrarium-customize/:id" element={<Suspense fallback={<Loading />}><TerrariumCustomizePage /></Suspense>} />
   </Route>
 </Route>
       <Route path="manager" element={<PrivateRoute allowedRoles={['Manager', 'Admin']} />}>

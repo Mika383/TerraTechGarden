@@ -394,7 +394,7 @@ const AccessoryList: React.FC = () => {
         },
       });
 
-      if (response.data.status === 200 || response.status === 200) {
+      if (response.data.status === 201 || response.status === 200) {
         notification.success({
           message: 'Thành công',
           description: 'Tải ảnh lên thành công!',
