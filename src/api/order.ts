@@ -138,3 +138,19 @@ export const createMoMoPayment = async (payload: {
   }
   return { payUrl, qrImageBase64 };
 };
+
+export const cancelOrder = async (
+  orderId: number,
+  userId: number,
+  body: { cancelReason: string; additionalNotes?: string }
+): Promise<any> => {
+  const res = await axios.put(
+    `${BASE_URL}/Order/${orderId}/cancel?userId=${userId}`,
+    {
+      cancelReason: body.cancelReason,
+      additionalNotes: body.additionalNotes ?? '',
+    },
+    authHeader()
+  );
+  return res.data;
+};

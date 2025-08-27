@@ -7,7 +7,7 @@ import {
   VerifyOTPResponse
 } from '@/types';
 import { getRoleFromToken, getUserIdFromToken } from '../utils/jwt';
-import { getUserMembership } from '@/api/membership'; // 👈 THÊM
+import { getUserMembership } from '@/api/membership';
 import { Taggo } from "@/lib/taggoai"; 
 
 interface AuthHook {
@@ -50,43 +50,79 @@ export const useAuth = (): AuthHook => {
     window.dispatchEvent(new Event('tokenRefreshed'));
   };
 
-  // 👇 helper: phát sự kiện membershipChanged + set localStorage
+  // Helper: phát sự kiện membershipChanged + set localStorage
   const broadcastMembership = (has: boolean) => {
     localStorage.setItem('hasMembership', has ? '1' : '0');
-    window.dispatchEvent(new CustomEvent('membershipChanged', { detail: { hasMembership: has } }));
+    window.dispatchEvent(new CustomEvent('membershipChanged', { 
+      detail: { hasMembership: has } 
+    }));
+    
+    console.log('[useAuth] Broadcasting membership:', has);
   };
 
-  // 👇 helper: gọi API kiểm tra membership đang active (nếu BE trả danh sách)
+  // Helper: gọi API kiểm tra membership đang active
   const checkAndBroadcastMembership = async (uid: number) => {
     try {
+      console.log('[useAuth] Checking membership for user:', uid);
       const list = await getUserMembership(uid);
       const active = Array.isArray(list) && list.length > 0;
+      
+      console.log('[useAuth] Membership check result:', {
+        userId: uid,
+        membershipList: list,
+        hasActive: active
+      });
+      
       broadcastMembership(active);
+      
+      // Nếu không có membership -> force hide chat ngay
+      if (!active) {
+        try {
+          console.log('[useAuth] No membership - hiding chat widget');
+          Taggo.hide?.();
+          (Taggo as any).identify?.({});
+        } catch {}
+      }
+      
+      return active;
     } catch (e) {
+      console.error('[useAuth] Membership check error:', e);
       // Nếu lỗi → coi như chưa có để user vẫn có thể mua
       broadcastMembership(false);
+      try {
+        Taggo.hide?.();
+        (Taggo as any).identify?.({});
+      } catch {}
+      return false;
     }
   };
 
   const handleLogout = () => {
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('userId');
+    console.log('[useAuth] Logging out user');
+    
+    // Clear localStorage
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('hasMembership');
 
-  // Thông báo cho ChatFab & các nơi khác
-  try {
-    window.dispatchEvent(new Event('tokenRefreshed'));
-    window.dispatchEvent(new Event('membershipChanged'));
-  } catch {}
+    // Thông báo cho ChatFab & các nơi khác
+    try {
+      window.dispatchEvent(new Event('tokenRefreshed'));
+      window.dispatchEvent(new CustomEvent('membershipChanged', { 
+        detail: { hasMembership: false } 
+      }));
+    } catch {}
 
-  // Ẩn widget NGAY (khỏi phải reload)
-  try {
-    Taggo.hide?.();
-    (Taggo as any).identify?.({}); // xoá nhận diện nếu lib có
-  } catch {}
+    // Ẩn widget NGAY (khỏi phải reload)
+    try {
+      console.log('[useAuth] Hiding chat widget on logout');
+      Taggo.hide?.();
+      (Taggo as any).identify?.({}); // xoá nhận diện nếu lib có
+    } catch {}
 
-  navigate('/login');
-};
+    navigate('/login');
+  };
 
   const handleRegister = async (data: RegisterRequest) => {
     setLoading(true);
@@ -125,7 +161,10 @@ export const useAuth = (): AuthHook => {
         }
 
         const uid = getUserIdFromToken();
-        if (uid) await checkAndBroadcastMembership(uid); // 👈 CẬP NHẬT CHAT FAB NGAY
+        if (uid) {
+          console.log('[useAuth] Login successful, checking membership...');
+          await checkAndBroadcastMembership(uid); // CẬP NHẬT CHAT FAB NGAY
+        }
 
         navigate('/');
         return true;
@@ -159,7 +198,10 @@ export const useAuth = (): AuthHook => {
         }
 
         const uid = getUserIdFromToken();
-        if (uid) await checkAndBroadcastMembership(uid); // 👈
+        if (uid) {
+          console.log('[useAuth] Google login successful, checking membership...');
+          await checkAndBroadcastMembership(uid);
+        }
 
         navigate('/');
         return true;
@@ -184,7 +226,10 @@ export const useAuth = (): AuthHook => {
         if (response.token) {
           saveTokens(response.token, '');
           const uid = getUserIdFromToken();
-          if (uid) await checkAndBroadcastMembership(uid); // 👈
+          if (uid) {
+            console.log('[useAuth] OTP verify successful, checking membership...');
+            await checkAndBroadcastMembership(uid);
+          }
         }
         setShowOTP(false);
         setOtp('');

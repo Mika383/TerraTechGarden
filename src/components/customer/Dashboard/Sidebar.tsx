@@ -20,18 +20,15 @@ const Sidebar: React.FC = () => {
     { name: 'Tài khoản của tôi', path: '/customer-dashboard', icon: <UserOutlined /> },
     { name: 'Thông báo', path: '/customer-dashboard/notifications', icon: <MailOutlined /> },
     { name: 'Đơn mua', path: '/customer-dashboard/orders', icon: <ShoppingCartOutlined /> },
-    { name: 'Đánh giá của tôi', path: '/customer-dashboard/reviews', icon: <ShoppingCartOutlined /> },
     { name: 'Yêu thích', path: '/customer-dashboard/favorites', icon: <HeartOutlined /> },
-    { name: 'Wishlist', path: '/customer-dashboard/wishlist', icon: <StarOutlined /> },
     { name: 'Tạo Layout Terrarium', path: '/customer-dashboard/create-layout', icon: <ExperimentOutlined /> },
     { name: 'Layout của tôi', path: '/customer-dashboard/my-layouts', icon: <AppstoreOutlined /> },
-    { name: 'Layout đã lưu', path: '/customer-dashboard/layouts', icon: <FileTextOutlined /> },
     { name: 'Trò chuyện với staff', path: '/customer-dashboard/chat', icon: <MessageOutlined /> },
   ];
 
   return (
     <div className="w-64 bg-white shadow-lg p-6 min-h-screen">
-      <h2 className="text-2xl font-bold text-green-600 mb-6">Terrarium Dashboard</h2>
+      
       <div className="space-y-2">
         {menuItems.map((item) => (
           <div

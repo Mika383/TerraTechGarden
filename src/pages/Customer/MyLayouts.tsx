@@ -1,3 +1,4 @@
+// src/pages/Customer/MyLayoutsPage.tsx
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -14,7 +15,8 @@ import {
   PlusIcon,
   ChartBarIcon,
   FunnelIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolid,
@@ -25,7 +27,9 @@ import {
 import { getMyLayouts, deleteLayout } from '@/api/layout';
 import type { LayoutSummary } from '@/types/layout';
 import { getTerrariumById } from '@/api/terrarium';
+import api from '@/lib/axios/axiosInstance';
 
+// ===== Helpers =====
 type LayoutRow = LayoutSummary & {
   terrariumName?: string;
   terrariumImage?: string; // thumbnail
@@ -37,30 +41,44 @@ const money = (v?: number | null) =>
 const fmt = (d?: string | null) =>
   d ? new Date(d).toLocaleString('vi-VN') : 'N/A';
 
+const norm = (s?: string) => (s || '').trim().toLowerCase();
+
 const statusIcon = (s?: string) => {
-  switch ((s || '').toLowerCase()) {
+  switch (norm(s)) {
+    case 'draft':    return <PencilIcon className="w-5 h-5 text-slate-500" />;
     case 'pending':  return <ClockSolid className="w-5 h-5 text-amber-500" />;
     case 'approved': return <CheckCircleSolid className="w-5 h-5 text-emerald-500" />;
     case 'rejected': return <XCircleSolid className="w-5 h-5 text-red-500" />;
+    case 'ordered':  return <CheckCircleSolid className="w-5 h-5 text-sky-500" />;
     default:         return <ExclamationTriangleIcon className="w-5 h-5 text-gray-500" />;
   }
 };
 
 const statusText = (s?: string) => {
-  switch ((s || '').toLowerCase()) {
+  switch (norm(s)) {
+    case 'draft':    return 'Bản nháp';
     case 'pending':  return 'Đang chờ duyệt';
     case 'approved': return 'Đã duyệt';
     case 'rejected': return 'Bị từ chối';
+    case 'ordered':  return 'Đã đặt hàng';
     default:         return 'Không xác định';
   }
 };
 
 const statusClass = (s?: string) => {
-  switch ((s || '').toLowerCase()) {
-    case 'pending':  return 'bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border-amber-200 shadow-amber-100';
-    case 'approved': return 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-200 shadow-emerald-100';
-    case 'rejected': return 'bg-gradient-to-r from-red-50 to-red-100 text-red-800 border-red-200 shadow-red-100';
-    default:         return 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-800 border-gray-200 shadow-gray-100';
+  switch (norm(s)) {
+    case 'draft':
+      return 'bg-gradient-to-r from-slate-50 to-slate-100 text-slate-800 border-slate-200 shadow-slate-100';
+    case 'pending':
+      return 'bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border-amber-200 shadow-amber-100';
+    case 'approved':
+      return 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-200 shadow-emerald-100';
+    case 'rejected':
+      return 'bg-gradient-to-r from-red-50 to-red-100 text-red-800 border-red-200 shadow-red-100';
+    case 'ordered':
+      return 'bg-gradient-to-r from-sky-50 to-sky-100 text-sky-800 border-sky-200 shadow-sky-100';
+    default:
+      return 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-800 border-gray-200 shadow-gray-100';
   }
 };
 
@@ -71,12 +89,13 @@ const MyLayoutsPage: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [submittingId, setSubmittingId] = useState<number | null>(null);
 
   // ✅ Gán kiểu rõ ràng cho các ref để tránh 'never'
   const headerRef = useRef<HTMLDivElement | null>(null);
   const statsRef  = useRef<HTMLDivElement | null>(null);
   const tableRef  = useRef<HTMLDivElement | null>(null);
-  const cardsRef  = useRef<Array<HTMLDivElement | null>>([]); // mảng các card
+  const cardsRef  = useRef<Array<HTMLDivElement | null>>([]);
 
   const userId = Number(localStorage.getItem('userId') || 0);
 
@@ -135,12 +154,10 @@ const MyLayoutsPage: React.FC = () => {
     script.onload = () => {
       const gsap: any = (window as any).gsap;
       if (!loading && !err && gsap) {
-        // header
         if (headerRef.current) {
           const tl = gsap.timeline();
           tl.fromTo(headerRef.current, { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' });
         }
-        // stats (⚠️ .children cần ép kiểu)
         if (statsRef.current) {
           const children = Array.from(statsRef.current.children) as HTMLElement[];
           gsap.fromTo(
@@ -149,11 +166,9 @@ const MyLayoutsPage: React.FC = () => {
             { opacity: 1, y: 0, scale: 1, duration: 0.6, stagger: 0.1, ease: 'back.out(1.7)', delay: 0.3 }
           );
         }
-        // table
         if (tableRef.current) {
           gsap.fromTo(tableRef.current, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out', delay: 0.6 });
         }
-        // cards
         cardsRef.current.forEach((card, index) => {
           if (card) {
             gsap.fromTo(card, { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.5, delay: 0.8 + index * 0.1, ease: 'power2.out' });
@@ -170,16 +185,18 @@ const MyLayoutsPage: React.FC = () => {
       const matchesSearch =
         row.layoutName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (row.terrariumName || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = filterStatus === 'all' || (row.status || '').toLowerCase() === filterStatus;
+      const matchesStatus =
+        filterStatus === 'all' || norm(row.status) === filterStatus;
       return matchesSearch && matchesStatus;
     });
   }, [rows, searchTerm, filterStatus]);
 
   const stats = useMemo(() => ({
     total: rows.length,
-    pending: rows.filter(x => (x.status || '').toLowerCase() === 'pending').length,
-    approved: rows.filter(x => (x.status || '').toLowerCase() === 'approved').length,
-    rejected: rows.filter(x => (x.status || '').toLowerCase() === 'rejected').length,
+    pending: rows.filter(x => norm(x.status) === 'pending').length,
+    approved: rows.filter(x => norm(x.status) === 'approved').length,
+    rejected: rows.filter(x => norm(x.status) === 'rejected').length,
+    // Có thể bổ sung draft/ordered nếu cần hiển thị thêm
   }), [rows]);
 
   const handleDelete = async (id: number) => {
@@ -195,6 +212,31 @@ const MyLayoutsPage: React.FC = () => {
     } catch (e: any) {
       console.error(e);
       alert(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Xoá thất bại. Vui lòng thử lại.');
+    }
+  };
+
+  // ===== Gửi yêu cầu định giá (Draft -> Pending) =====
+  const handleSubmitPricing = async (layoutId: number) => {
+    if (!userId) {
+      alert('Bạn chưa đăng nhập.');
+      return;
+    }
+    if (!confirm('Gửi yêu cầu định giá cho layout này?')) return;
+
+    try {
+      setSubmittingId(layoutId);
+      // PUT /api/TerrariumLayout/{id}/submit?userId=...
+      await api.put(`/TerrariumLayout/${layoutId}/submit`, null, { params: { userId } });
+      // Cập nhật status local -> Pending
+      setRows(prev =>
+        prev.map(r => (r.layoutId === layoutId ? { ...r, status: 'Pending' } : r))
+      );
+      alert('Đã gửi yêu cầu định giá. Layout chuyển sang trạng thái "Đang chờ duyệt".');
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Gửi yêu cầu thất bại. Vui lòng thử lại.');
+    } finally {
+      setSubmittingId(null);
     }
   };
 
@@ -263,12 +305,14 @@ const MyLayoutsPage: React.FC = () => {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300 bg-white/80 min-w-[160px]"
+                  className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300 bg-white/80 min-w-[190px]"
                 >
                   <option value="all">Tất cả trạng thái</option>
+                  <option value="draft">Bản nháp</option>
                   <option value="pending">Đang chờ duyệt</option>
                   <option value="approved">Đã duyệt</option>
                   <option value="rejected">Bị từ chối</option>
+                  <option value="ordered">Đã đặt hàng</option>
                 </select>
               </div>
             </div>
@@ -361,103 +405,106 @@ const MyLayoutsPage: React.FC = () => {
               </div>
 
               <div className="divide-y divide-slate-100">
-                {filteredRows.map((layout, index) => (
-                  <div
-                    key={layout.layoutId}
-                    // ✅ gán ref an toàn, không return giá trị
-                    ref={(el) => { cardsRef.current[index] = el; }}
-                    className={`layout-row-${layout.layoutId} p-6 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 transition-all duration-300 group`}
-                  >
-                    <div className="flex items-center justify-between">
-                      {/* Layout Info */}
-                      <div className="flex items-center gap-6 flex-1">
-                        <div className="relative group-hover:scale-105 transition-transform duration-300">
-                          {layout.terrariumImage ? (
-                            <img
-                              src={layout.terrariumImage}
-                              alt={layout.terrariumName || 'Terrarium'}
-                              className="h-16 w-16 rounded-xl object-cover border-2 border-white shadow-lg cursor-pointer hover:shadow-xl transition-all duration-300"
-                              onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
-                            />
-                          ) : (
-                            <div
-                              className="h-16 w-16 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:shadow-xl transition-all duration-300"
-                              onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
-                              title="Xem terrarium"
-                            >
-                              <PhotoIcon className="w-8 h-8 text-slate-400" />
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h4 className="text-lg font-bold text-slate-900 group-hover:text-emerald-700 transition-colors duration-300">
-                                {layout.layoutName}
-                              </h4>
-                              <button
+                {filteredRows.map((layout, index) => {
+                  const isDraft = norm(layout.status) === 'draft';
+                  return (
+                    <div
+                      key={layout.layoutId}
+                      ref={(el) => { cardsRef.current[index] = el; }}
+                      className={`layout-row-${layout.layoutId} p-6 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 transition-all duration-300 group`}
+                    >
+                      <div className="flex items-center justify-between">
+                        {/* Layout Info */}
+                        <div className="flex items-center gap-6 flex-1">
+                          <div className="relative group-hover:scale-105 transition-transform duration-300">
+                            {layout.terrariumImage ? (
+                              <img
+                                src={layout.terrariumImage}
+                                alt={layout.terrariumName || 'Terrarium'}
+                                className="h-16 w-16 rounded-xl object-cover border-2 border-white shadow-lg cursor-pointer hover:shadow-xl transition-all duration-300"
                                 onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
-                                className="text-sm text-slate-600 hover:text-emerald-600 font-medium transition-colors duration-300"
-                                title="Đi đến trang Terrarium"
+                              />
+                            ) : (
+                              <div
+                                className="h-16 w-16 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:shadow-xl transition-all duration-300"
+                                onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
+                                title="Xem terrarium"
                               >
-                                {layout.terrariumName || `Terrarium #${layout.terrariumId}`}
-                              </button>
-                              <div className="text-xs text-slate-400 mt-1">ID: {layout.layoutId}</div>
-                            </div>
-
-                            {/* Status Badge */}
-                            <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border shadow-sm ${statusClass(layout.status)} group-hover:scale-105 transition-transform duration-300`}>
-                              {statusIcon(layout.status)}
-                              <span className="ml-2">{statusText(layout.status)}</span>
-                            </span>
+                                <PhotoIcon className="w-8 h-8 text-slate-400" />
+                              </div>
+                            )}
                           </div>
 
-                          {/* Details Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                            <div className="flex items-center text-sm text-slate-600">
-                              <CurrencyDollarIcon className="w-4 h-4 mr-2 text-emerald-600" />
-                              <span className="font-medium">{money(layout.finalPrice ?? null)}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="text-lg font-bold text-slate-900 group-hover:text-emerald-700 transition-colors duration-300">
+                                  {layout.layoutName}
+                                </h4>
+                                <button
+                                  onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
+                                  className="text-sm text-slate-600 hover:text-emerald-600 font-medium transition-colors duration-300"
+                                  title="Đi đến trang Terrarium"
+                                >
+                                  {layout.terrariumName || `Terrarium #${layout.terrariumId}`}
+                                </button>
+                                <div className="text-xs text-slate-400 mt-1">ID: {layout.layoutId}</div>
+                              </div>
+
+                              {/* Status Badge */}
+                              <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border shadow-sm ${statusClass(layout.status)} group-hover:scale-105 transition-transform duration-300`}>
+                                {statusIcon(layout.status)}
+                                <span className="ml-2">{statusText(layout.status)}</span>
+                              </span>
                             </div>
-                            <div className="flex items-center text-sm text-slate-600">
-                              <CalendarIcon className="w-4 h-4 mr-2 text-blue-600" />
-                              <span>Tạo: {fmt(layout.createdDate)}</span>
-                            </div>
-                            <div className="flex items-center text-sm text-slate-600">
-                              <CalendarIcon className="w-4 h-4 mr-2 text-purple-600" />
-                              <span>Duyệt: {layout.reviewDate ? fmt(layout.reviewDate) : 'Chưa duyệt'}</span>
+
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                              <div className="flex items-center text-sm text-slate-600">
+                                <CurrencyDollarIcon className="w-4 h-4 mr-2 text-emerald-600" />
+                                <span className="font-medium">{money(layout.finalPrice ?? null)}</span>
+                              </div>
+                              <div className="flex items-center text-sm text-slate-600">
+                                <CalendarIcon className="w-4 h-4 mr-2 text-blue-600" />
+                                <span>Tạo: {fmt(layout.createdDate)}</span>
+                              </div>
+                              <div className="flex items-center text-sm text-slate-600">
+                                <CalendarIcon className="w-4 h-4 mr-2 text-purple-600" />
+                                <span>Duyệt: {layout.reviewDate ? fmt(layout.reviewDate) : 'Chưa duyệt'}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 ml-6">
-                        <button
-                          onClick={() => navigate(`/customer-dashboard/layouts/${layout.layoutId}`)}
-                          className="p-3 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-xl transition-all duration-300 group-hover:scale-105"
-                          title="Xem chi tiết"
-                        >
-                          <EyeIcon className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => navigate(`/customer-dashboard/layouts/${layout.layoutId}/edit`)}
-                          className="p-3 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-xl transition-all duration-300 group-hover:scale-105"
-                          title="Chỉnh sửa"
-                        >
-                          <PencilIcon className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(layout.layoutId)}
-                          className="p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-all duration-300 group-hover:scale-105"
-                          title="Xoá"
-                        >
-                          <TrashIcon className="w-5 h-5" />
-                        </button>
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 ml-6">
+                          
+
+                          {/* Nút gửi yêu cầu định giá khi Draft */}
+                          {isDraft && (
+                            <button
+                              onClick={() => handleSubmitPricing(layout.layoutId)}
+                              disabled={submittingId === layout.layoutId}
+                              className="p-3 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-xl transition-all duration-300 group-hover:scale-105 font-medium"
+                              title="Gửi yêu cầu định giá"
+                            >
+                              <PaperAirplaneIcon className={`w-5 h-5 ${submittingId === layout.layoutId ? 'animate-pulse' : ''}`} />
+                            </button>
+                          )}
+
+                          
+                          <button
+                            onClick={() => handleDelete(layout.layoutId)}
+                            className="p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-all duration-300 group-hover:scale-105"
+                            title="Xoá"
+                          >
+                            <TrashIcon className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

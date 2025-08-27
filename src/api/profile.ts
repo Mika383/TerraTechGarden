@@ -46,6 +46,8 @@ export const addAddress = async (
     receiverAddress: payload.receiverAddress,
     provinceCode: payload.provinceCode,
     districtCode: payload.districtCode,
+    latitude: payload.latitude || "",  // Gửi string rỗng thay vì null để an toàn
+    longitude: payload.longitude || "",
     wardCode: payload.wardCode,
     isDefault: payload.isDefault,
   };

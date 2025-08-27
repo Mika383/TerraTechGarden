@@ -33,6 +33,7 @@ import OrderDetailStaff from '@/components/staff/OrderDetailStaff';
 import TerrariumRequestList from '@/components/staff/TerrariumRequestList';
 import TerrariumCustomizePage from '@/components/staff/TerrariumCustomizePage';
 import TerrariumRequestAll from '@/components/staff/TerrariumRequestAll';
+import VerifyEmail from '@/pages/Customer/VerifyEmail';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -121,6 +122,7 @@ const AppRoutes = () => {
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
         <Route path="thank-you/:id" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
         <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
+        <Route path="verify-email" element={<Suspense fallback={<Loading />}><VerifyEmail /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
@@ -193,7 +195,7 @@ const AppRoutes = () => {
           <Route path="shift-management" element={<Suspense fallback={<Loading />}><ShiftManagement /></Suspense>} />
           <Route path="overview" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
           <Route path="/admin/accounts" element={<AccountManagement />} />
-          <Route path="orders/all" element={<Suspense fallback={<Loading />}><AllOrders /></Suspense>} />
+          <Route path="orders" element={<Suspense fallback={<Loading />}><OrderList /></Suspense>} />
           <Route path="orders/preparing" element={<Suspense fallback={<Loading />}><PreparingOrders /></Suspense>} />
           <Route path="orders/shipping" element={<Suspense fallback={<Loading />}><ShippingOrders /></Suspense>} />
           <Route path="orders/completed" element={<Suspense fallback={<Loading />}><CompletedOrders /></Suspense>} />
