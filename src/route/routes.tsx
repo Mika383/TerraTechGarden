@@ -34,6 +34,7 @@ import TerrariumRequestList from '@/components/staff/TerrariumRequestList';
 import TerrariumCustomizePage from '@/components/staff/TerrariumCustomizePage';
 import TerrariumRequestAll from '@/components/staff/TerrariumRequestAll';
 import VerifyEmail from '@/pages/Customer/VerifyEmail';
+import ComboDetail from '@/pages/Customer/ComboDetail';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -123,6 +124,7 @@ const AppRoutes = () => {
         <Route path="thank-you/:id" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
         <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
         <Route path="verify-email" element={<Suspense fallback={<Loading />}><VerifyEmail /></Suspense>} />
+        <Route path="combo/:id" element={<Suspense fallback={<Loading />}><ComboDetail /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}

@@ -93,3 +93,31 @@ export async function purchaseMembership(payload: { userId: number; packageId: n
   const res = await axios.post(`${BASE_URL}/Membership/purchase`, payload, authHeader());
   return res?.data?.data ?? res?.data ?? null;
 }
+// ---- MoMo Direct: tạo thanh toán Membership & nhận payUrl + QR ----
+export type CreateMomoDirectPayload = {
+  userId: number;
+  packageId: number;
+  startDate: string; // ISO string
+};
+
+export type CreateMomoDirectResponse = {
+  payUrl: string;
+  qrImageBase64?: string;
+};
+
+export async function createMembershipMomoDirect(
+  payload: CreateMomoDirectPayload
+): Promise<CreateMomoDirectResponse> {
+  const res = await axios.post(
+    `${BASE_URL}/Membership/momo/create-direct`,
+    payload,
+    authHeader()
+  );
+
+  // BE có thể trả ở res.data hoặc res.data.data
+  const body = res?.data?.data ?? res?.data ?? {};
+  return {
+    payUrl: body.payUrl || '',
+    qrImageBase64: body.qrImageBase64 || '',
+  };
+}

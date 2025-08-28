@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Button, Empty, Badge, Row, Col, Typography, Divider, message } from 'antd';
+import { Card, Button, Empty, Badge, Row, Col, Typography, Divider, message, Modal, Space } from 'antd';
 import {
   CheckCircleOutlined,
   StarOutlined,
@@ -10,7 +10,13 @@ import {
   RocketOutlined
 } from '@ant-design/icons';
 import type { MembershipPackage } from '@/types/membership';
-import { getMembershipPackages, getUserMembership, purchaseMembership } from '@/api/membership';
+import {
+  getMembershipPackages,
+  getUserMembership,
+  // purchaseMembership, // giữ lại nếu cần flow cũ
+  createMembershipMomoDirect,
+  type CreateMomoDirectResponse
+} from '@/api/membership';
 import axios from 'axios';
 
 const { Title, Paragraph, Text } = Typography;
@@ -88,23 +94,6 @@ const getPlanStyling = (durationDays: number) => {
 };
 
 const formatPrice = (price: number): string => price.toLocaleString('vi-VN');
-
-const LoadingSkeleton: React.FC = () => (
-  <Row gutter={[24, 24]}>
-    {Array.from({ length: 3 }).map((_, index) => (
-      <Col xs={24} md={8} key={index}>
-        <Card className="h-full animate-pulse">
-          <div className="space-y-4 p-4">
-            <div className="h-8 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
-            <div className="h-12 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
-            <div className="h-6 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
-            <div className="h-10 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
-          </div>
-        </Card>
-      </Col>
-    ))}
-  </Row>
-);
 
 type PlanCardProps = {
   plan: MembershipPackage;
@@ -234,6 +223,23 @@ const PlanCard: React.FC<PlanCardProps> = ({
   );
 };
 
+const LoadingSkeleton: React.FC = () => (
+  <Row gutter={[24, 24]}>
+    {Array.from({ length: 3 }).map((_, index) => (
+      <Col xs={24} md={8} key={index}>
+        <Card className="h-full animate-pulse">
+          <div className="space-y-4 p-4">
+            <div className="h-8 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
+            <div className="h-12 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
+            <div className="h-6 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
+            <div className="h-10 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-shimmer"></div>
+          </div>
+        </Card>
+      </Col>
+    ))}
+  </Row>
+);
+
 const Membership: React.FC = () => {
   const [plans, setPlans] = useState<MembershipPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -246,9 +252,12 @@ const Membership: React.FC = () => {
   const [checkingMembership, setCheckingMembership] = useState(false);
   const [purchasingId, setPurchasingId] = useState<number | null>(null);
 
+  // Modal thanh toán
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<CreateMomoDirectResponse | null>(null);
+
   const navigate = useNavigate();
   const [heroRef, isHeroVisible] = useScrollAnimation();
-  const [featuresRef, isFeaturesVisible] = useScrollAnimation();
 
   const userId = getUserIdFromToken();
   const isLoggedIn = !!userId;
@@ -280,51 +289,81 @@ const Membership: React.FC = () => {
   }, []);
 
   // Kiểm tra membership của user
-useEffect(() => {
-  let alive = true;
-  (async () => {
-    if (!userId) { 
-      setHasMembership(false); 
-      return; 
-    }
-    
-    try {
-      setCheckingMembership(true);
-      const memberships = await getUserMembership(userId);
-      if (!alive) return;
-      
-      // Check if user has any active memberships
-      setHasMembership(memberships.length > 0);
-    } catch (e: any) {
-      console.error('Error checking membership:', e);
-      // On error, assume no membership to allow purchase attempt
-      if (alive) setHasMembership(false);
-    } finally {
-      if (alive) setCheckingMembership(false);
-    }
-  })();
-  return () => { alive = false; };
-}, [userId]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!userId) {
+        setHasMembership(false);
+        return;
+      }
 
-  // Mua gói
+      try {
+        setCheckingMembership(true);
+        const memberships = await getUserMembership(userId);
+        if (!alive) return;
+
+        setHasMembership(memberships.length > 0);
+      } catch (e: any) {
+        console.error('Error checking membership:', e);
+        if (alive) setHasMembership(false);
+      } finally {
+        if (alive) setCheckingMembership(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [userId]);
+
+  // Re-check membership sau khi thanh toán
+  const recheckMembership = async () => {
+    if (!userId) return;
+    try {
+      const memberships = await getUserMembership(userId);
+      if (memberships.length > 0) {
+        setHasMembership(true);
+        setPayModalOpen(false);
+        setPaymentInfo(null);
+        message.success('Xác nhận thanh toán thành công!');
+      } else {
+        message.info('Chưa ghi nhận thanh toán. Vui lòng thử lại sau ít phút.');
+      }
+    } catch (e) {
+      message.error('Không kiểm tra được trạng thái membership.');
+    }
+  };
+
+  // Mua gói (MoMo create-direct)
   const handlePurchase = async (planId: number) => {
     if (!isLoggedIn) return navigate('/login');
     if (hasMembership !== false) return; // chỉ cho mua khi CHẮC CHẮN chưa có
+
     try {
       setPurchasingId(planId);
-      await purchaseMembership({
+
+      const nowIso = new Date().toISOString();
+      const resp = await createMembershipMomoDirect({
         userId: userId as number,
         packageId: planId,
-        startDate: new Date().toISOString(),
+        startDate: nowIso,
       });
-      message.success('Đăng ký membership thành công!');
-      setHasMembership(true);
+
+      if (!resp?.payUrl) {
+        message.error('Không nhận được đường dẫn thanh toán.');
+        return;
+      }
+
+      setPaymentInfo(resp);
+      setPayModalOpen(true);
+
+      // Mở tab/thẻ mới đến MoMo (giữ nguyên modal để người dùng quét QR nếu muốn)
+      window.open(resp.payUrl, '_blank', 'noopener,noreferrer');
+
+      message.success('Đã tạo phiên thanh toán. Vui lòng hoàn tất trong ứng dụng MoMo hoặc quét QR.');
     } catch (e: any) {
       if (e?.response?.status === 401) {
         message.error('Vui lòng đăng nhập lại.');
         navigate('/login');
       } else {
-        message.error('Đăng ký thất bại, vui lòng thử lại.');
+        message.error('Tạo thanh toán thất bại, vui lòng thử lại.');
       }
     } finally {
       setPurchasingId(null);
@@ -347,7 +386,7 @@ useEffect(() => {
           <FloatingElement delay={2} className="absolute top-20 right-20 opacity-15"><div className="w-24 h-24 bg-white rounded-full"></div></FloatingElement>
           <FloatingElement delay={4} className="absolute bottom-20 left-1/4 opacity-10"><div className="w-40 h-40 bg-white rounded-full"></div></FloatingElement>
         </div>
-        <div className={`container mx-auto px-4 text-center relative z-10 transform transition-all duration-1000 ${isHeroVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+        <div className="container mx-auto px-4 text-center relative z-10">
           <Title level={1} className="!text-white mb-4 animate-pulse">🌿 Tham Gia Thành Viên Terrarium</Title>
           <Paragraph className="text-xl !text-emerald-100 mb-8 max-w-2xl mx-auto leading-relaxed">
             Mở khóa các quyền lợi độc quyền để chăm sóc và thiết kế Terrarium chuyên nghiệp hơn.
@@ -399,6 +438,51 @@ useEffect(() => {
           </div>
         )}
       </div>
+
+      {/* Modal thanh toán MoMo */}
+      <Modal
+        title="Thanh toán MemberShip qua MoMo"
+        open={payModalOpen}
+        onCancel={() => setPayModalOpen(false)}
+        footer={null}
+        centered
+      >
+        {paymentInfo?.qrImageBase64 ? (
+          <div className="text-center">
+            <img
+              src={`data:image/png;base64,${paymentInfo.qrImageBase64}`}
+              alt="MoMo QR"
+              style={{ maxWidth: '280px', width: '100%', margin: '0 auto', display: 'block' }}
+            />
+            <Paragraph className="mt-3 mb-1" style={{ textAlign: 'center' }}>
+              Quét QR trên ứng dụng MoMo để thanh toán
+            </Paragraph>
+          </div>
+        ) : (
+          <Paragraph>Không có mã QR, vui lòng dùng nút “Mở MoMo” để thanh toán.</Paragraph>
+        )}
+
+        <Space style={{ marginTop: 16 }} wrap>
+          <Button
+            type="primary"
+            onClick={() => {
+              if (paymentInfo?.payUrl) {
+                window.open(paymentInfo.payUrl, '_blank', 'noopener,noreferrer');
+              }
+            }}
+          >
+            Mở MoMo
+          </Button>
+
+          <Button onClick={recheckMembership}>
+            Đã thanh toán — Kiểm tra trạng thái
+          </Button>
+
+          <Button onClick={() => setPayModalOpen(false)}>
+            Để sau
+          </Button>
+        </Space>
+      </Modal>
 
       {/* Features */}
       <div className="bg-gray-50 py-16">
