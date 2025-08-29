@@ -5,7 +5,7 @@ import {
   UpdateMembershipPackageRequest,
   GrantMembershipRequest,
 } from '@/types/membership';
-const DEBUG_MEMBERSHIP = import.meta.env.DEV === true; 
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authHeader = () => {
@@ -13,47 +13,92 @@ const authHeader = () => {
   return { headers: { Authorization: `Bearer ${token || ''}` } };
 };
 
-const pickData = (res: any) => res?.data?.data ?? res?.data ?? [];
+// Chuẩn hóa lấy body + ném lỗi khi status != 200
+const norm = (res: any) => {
+  const body = res?.data ?? res;
+  const status = body?.status;
+  const message = body?.message;
+  const data = body?.data ?? body;
 
-/** Lấy tất cả gói membership package */
+  // Nếu BE có field status dạng số => cho phép 2xx (200..299)
+  if (typeof status === 'number' && (status < 200 || status >= 300)) {
+    const err = new Error(message || 'Yêu cầu thất bại');
+    (err as any).status = status;
+    throw err;
+  }
+  return data;
+};
+
+/** Lấy tất cả gói */
 export async function getMembershipPackages(): Promise<MembershipPackage[]> {
   const res = await axios.get(`${BASE_URL}/MembershipPackage`, authHeader());
-  const data = pickData(res);
+  const data = norm(res);
   return Array.isArray(data) ? data : (data?.data ?? []);
 }
 
 /** Lấy 1 gói theo id */
 export async function getMembershipPackage(id: number): Promise<MembershipPackage> {
   const res = await axios.get(`${BASE_URL}/MembershipPackage/${id}`, authHeader());
-  return pickData(res) as MembershipPackage;
+  return norm(res) as MembershipPackage;
 }
 
-/** Tạo gói (Admin) */
+/** Tạo gói (Admin) — ĐÚNG endpoint /create */
 export async function createMembershipPackage(payload: CreateMembershipPackageRequest) {
-  const res = await axios.post(`${BASE_URL}/MembershipPackage`, payload, authHeader());
-  return pickData(res);
+  // Validate tối thiểu để tránh 400 từ BE
+  if (!payload?.type?.trim()) throw new Error('Vui lòng nhập loại gói');
+  if (!Number.isFinite(payload.durationDays) || payload.durationDays < 1) {
+    throw new Error('Số ngày phải >= 1');
+  }
+  if (!Number.isFinite(payload.price) || payload.price < 1) {
+    throw new Error('Giá phải > 0');
+  }
+
+  const res = await axios.post(
+    `${BASE_URL}/MembershipPackage/create`,
+    payload,
+    authHeader()
+  );
+  return norm(res);
 }
 
 /** Cập nhật gói (Admin) */
-export async function updateMembershipPackage(id: number, payload: UpdateMembershipPackageRequest) {
-  const body = { packageId: id, ...payload };
-  const res = await axios.put(`${BASE_URL}/MembershipPackage/${id}`, body, authHeader());
-  return pickData(res);
+export async function updateMembershipPackage(
+  id: number,
+  payload: UpdateMembershipPackageRequest
+) {
+  // đảm bảo id là số hợp lệ
+  const pid = Number(id);
+  if (!Number.isFinite(pid) || pid <= 0) {
+    throw new Error('ID gói không hợp lệ');
+  }
+
+  // Một số BE yêu cầu ID nằm trong body với key cụ thể (packageId hoặc id).
+  // Gửi cả hai để an toàn.
+  const body = {
+    packageId: pid,   // ⭐ phổ biến theo thông điệp trước đó của bạn
+    id: pid,          // ⭐ fallback nếu BE đọc 'id'
+    ...payload,
+  };
+
+  // URL path vẫn giữ dạng /MembershipPackage/{id}
+  const res = await axios.put(`${BASE_URL}/MembershipPackage/${pid}`, body, authHeader());
+  return norm(res);
 }
+
 
 /** Xoá gói (Admin) */
 export async function deleteMembershipPackage(id: number) {
-  await axios.delete(`${BASE_URL}/MembershipPackage/${id}`, authHeader());
+  const res = await axios.delete(`${BASE_URL}/MembershipPackage/${id}`, authHeader());
+  return norm(res);
 }
 
 /** Cấp gói cho user (Admin) */
 export async function grantMembershipToUser(payload: GrantMembershipRequest) {
   const res = await axios.post(`${BASE_URL}/Membership`, payload, authHeader());
-  return pickData(res);
+  return norm(res);
 }
 
-/** Lấy membership hiện tại của user.
- *  Nuốt 404 => trả null (coi như chưa có membership) */
+/** Lấy membership hiện tại của user (lọc active-chưa hết hạn) */
 export type UserMembership = any;
 
 export async function getUserMembership(userId: number): Promise<UserMembership[]> {
@@ -61,35 +106,42 @@ export async function getUserMembership(userId: number): Promise<UserMembership[
     const res = await axios.get(`${BASE_URL}/Membership/user/${userId}`, authHeader());
     const body = res?.data;
 
-    // BE đôi khi trả 200 nhưng body.status = 404 -> coi như chưa có
-    if (body?.status === 404 || body?.data == null) {
-      return [];
-    }
-
+    if (body?.status === 404 || body?.data == null) return [];
     const data = body?.data ?? body;
 
-    // Trả về luôn dạng mảng để phía UI chỉ cần check length
-    if (Array.isArray(data)) {
-      // Filter only active memberships that haven't expired
-      return data.filter(membership => 
-        membership.status === 'Active' && 
-        new Date(membership.endDate) > new Date()
-      );
-    }
-    if (typeof data === 'object' && data.status === 'Active' && new Date(data.endDate) > new Date()) {
-      return [data];
-    }
+    const isActiveItem = (m: any) =>
+      m?.status === 'Active' && m?.endDate && new Date(m.endDate) > new Date();
+
+    if (Array.isArray(data)) return data.filter(isActiveItem);
+    if (typeof data === 'object' && isActiveItem(data)) return [data];
     return [];
   } catch (e: any) {
-    // HTTP 404 thực sự -> chưa có
     if (e?.response?.status === 404) return [];
     throw e;
   }
 }
 
-
-/** Mua (đăng ký) membership cho user hiện tại */
+/** Mua membership */
 export async function purchaseMembership(payload: { userId: number; packageId: number; startDate: string }) {
   const res = await axios.post(`${BASE_URL}/Membership/purchase`, payload, authHeader());
-  return res?.data?.data ?? res?.data ?? null;
+  return norm(res) ?? null;
+}
+
+// MoMo direct
+export type CreateMomoDirectPayload = {
+  userId: number;
+  packageId: number;
+  startDate: string; // ISO
+};
+export type CreateMomoDirectResponse = { payUrl: string; qrImageBase64?: string };
+
+export async function createMembershipMomoDirect(
+  payload: CreateMomoDirectPayload
+): Promise<CreateMomoDirectResponse> {
+  const res = await axios.post(`${BASE_URL}/Membership/momo/create-direct`, payload, authHeader());
+  const body = norm(res) || {};
+  return {
+    payUrl: body.payUrl || '',
+    qrImageBase64: body.qrImageBase64 || '',
+  };
 }

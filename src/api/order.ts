@@ -40,20 +40,30 @@ type CreateOrderAPIResponse =
   | { result?: { orderId?: number } }
   | any;
 
-/**
- * Gửi payload theo spec mới:
- * {
- *   voucherId, deposit, addressId, comboId,
- *   items: [{ itemType, accessoryId, terrariumVariantId, accessoryQuantity, terrariumVariantQuantity }],
- *   totalAmount
- * }
- */
 export const createOrder = async (
   payload: CreateOrderRequest
 ): Promise<{ orderId: number }> => {
+  // ✅ ép payload về dạng chuẩn, các field trống sẽ để = 0
+  const normalizedPayload = {
+    voucherId: payload.voucherId ?? 0,
+    deposit: payload.deposit ?? 0,
+    addressId: payload.addressId ?? 0,
+    comboId: payload.comboId ?? 0,
+    totalAmount: payload.totalAmount ?? 0,
+    items: (payload.items || []).map((item) => ({
+        itemType: item.itemType ?? "",
+        terrariumId: (item as any).terrariumId ?? 0,           // ✅ thêm dòng này
+        accessoryId: item.accessoryId ?? 0,
+        terrariumVariantId: item.terrariumVariantId ?? 0,
+        accessoryQuantity: item.accessoryQuantity ?? 0,
+        terrariumVariantQuantity: item.terrariumVariantQuantity ?? 0,
+      })),
+
+  };
+                        
   const res = await axios.post<CreateOrderAPIResponse>(
     `${BASE_URL}/Order`,
-    payload,
+    normalizedPayload,
     authHeader()
   );
 
@@ -62,13 +72,13 @@ export const createOrder = async (
     body.orderId ?? body?.data?.orderId ?? body?.result?.orderId;
 
   if (!orderId) {
-    // ném nguyên response để UI hiển thị lỗi validate (vd: thiếu ItemType)
-    const err: any = new Error('ORDER_ID_MISSING');
+    const err: any = new Error("ORDER_ID_MISSING");
     err.response = { data: body };
     throw err;
   }
   return { orderId };
 };
+
 
 // ---- VOUCHER ----
 export const validateVoucher = async (code: string): Promise<any> => {

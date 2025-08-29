@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
+  WalletOutlined,
   MailOutlined, 
   UserOutlined, 
   ShoppingCartOutlined, 
@@ -11,6 +12,8 @@ import {
   ExperimentOutlined,
   AppstoreOutlined 
 } from '@ant-design/icons';
+
+
 
 const Sidebar: React.FC = () => {
   const navigate = useNavigate();
@@ -24,6 +27,7 @@ const Sidebar: React.FC = () => {
     { name: 'Tạo Layout Terrarium', path: '/customer-dashboard/create-layout', icon: <ExperimentOutlined /> },
     { name: 'Layout của tôi', path: '/customer-dashboard/my-layouts', icon: <AppstoreOutlined /> },
     { name: 'Trò chuyện với staff', path: '/customer-dashboard/chat', icon: <MessageOutlined /> },
+    { name: 'Ví của tôi', path: '/customer-dashboard/wallet', icon: <WalletOutlined /> }
   ];
 
   return (

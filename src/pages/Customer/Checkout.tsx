@@ -1,4 +1,6 @@
+// src/pages/Customer/Checkout.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import AddressSelector from '@/components/customer/Layout/AddressSelector';
@@ -11,42 +13,24 @@ import {
   createMoMoPayment
 } from '@/api/order';
 import { getCart, deleteCartItem } from '@/api/cart';
-import { getTerrariumById, getVariantsByTerrariumId } from '@/api/terrarium';
+import { getTerrariumById, getVariantsByTerrariumId, getTerrariumVariantById } from '@/api/terrarium';
 import { getAccessoryById } from '@/api/accessory';
+import { getComboById } from '@/api/combo';
 import type { Voucher } from '@/types/order';
 import type { CartResponseNew, CartBundle, RawCartEntry } from '@/types/cart';
+import { useAuth } from '@/hooks/useAuth'; // ✅ dùng userId từ useAuth
 
 // ✅ placeholder logo nền trắng
-const FALLBACK_IMG = '/public/TerraTechLogo.png';
+const FALLBACK_IMG = '/TerraTechLogo.png';
 
 // ===== Helpers & currency =====
 const currency = (v: number) => (v || 0).toLocaleString('vi-VN') + ' VND';
 const keyOfEntry = (e: RawCartEntry) => `ci_${e.cartItemId}`;
 const keyOfBundle = (b: CartBundle) => `b_${b.mainItem.terrariumId ?? 'x'}`;
+const keyOfCombo = (e: RawCartEntry) => `combo_${e.cartItemId}`;
 const unitPriceOf = (e: RawCartEntry) => {
   const qty = e.totalCartQuantity || 0;
   return qty > 0 ? e.totalCartPrice / qty : 0;
-};
-
-// ===== Simple item for local fallback =====
-interface SimpleCartItem {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  quantity: number;
-  selected: boolean;
-  accessoryId?: number | null;
-  variantId?: number | null;
-}
-
-// ===== Order payload item (API mới) =====
-type NewOrderItemPayload = {
-  itemType: 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
-  accessoryId: number;
-  terrariumVariantId: number;
-  accessoryQuantity: number;
-  terrariumVariantQuantity: number;
 };
 
 // ===== Small logger (gói gọn, dễ tắt/bật) =====
@@ -72,8 +56,45 @@ const log = {
   }
 };
 
+// ===== Thêm API wrapper gửi thông báo web (giữ ngay trong file theo yêu cầu nhanh gọn) =====
+const sendWebNotification = async (userId: number, title: string, description: string) => {
+  // API: https://terarium.shop/api/Notification/web/create
+  // Nếu bạn muốn tách ra /api/notification.ts mình có thể tách ở bước sau.
+  await axios.post('https://terarium.shop/api/Notification/web/create', {
+    userId,
+    title,
+    description,
+    broadcastToAll: false
+  });
+};
+
+// ===== Order payload item (API mới) =====
+// ✅ BỔ SUNG terrariumId để truyền cho BUNDLE_ACCESSORY
+type NewOrderItemPayload = {
+  itemType: 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
+  terrariumId?: number;             // <-- thêm
+  accessoryId: number;
+  terrariumVariantId: number;
+  accessoryQuantity: number;
+  terrariumVariantQuantity: number;
+};
+
+// ===== Simple item for local fallback =====
+interface SimpleCartItem {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  quantity: number;
+  selected: boolean;
+  accessoryId?: number | null;
+  variantId?: number | null;
+  comboId?: number | null; // để hiển thị trong Summary khi user chọn combo từ Cart
+}
+
 const Checkout: React.FC = () => {
   const navigate = useNavigate();
+  const { userId } = useAuth(); // ✅ lấy userId từ hook
 
   // --- State chính ---
   const [address, setAddress] = useState<Address | null>(null);
@@ -107,11 +128,13 @@ const Checkout: React.FC = () => {
   const [variantsMap, setVariantsMap] = useState<Record<number, any[]>>({});
   const [variantToTerrariumMap, setVariantToTerrariumMap] = useState<Record<number, number>>({});
 
-  // Fallback local
-  const [localSimple, setLocalSimple] = useState<SimpleCartItem[]>([]);
+  // Combo meta (để show item trong combo)
+  const [comboMeta, setComboMeta] = useState<Record<number, { name: string; image: string; items: any[] }>>({});
+  const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({}); // UI toggle trong phần Sản phẩm
 
-  // ✅ chỉ khai báo 1 lần (fix TS2451)
-  const userId = Number(localStorage.getItem('userId') || 0);
+  // Fallback local + Summary toggle
+  const [localSimple, setLocalSimple] = useState<SimpleCartItem[]>([]);
+  const [summaryItemsOpen, setSummaryItemsOpen] = useState(false); // ✅ mặc định đóng
 
   // Load selected & cart
   useEffect(() => {
@@ -126,7 +149,6 @@ const Checkout: React.FC = () => {
     setSelectedIds(ids);
     setLocalSimple(raw);
 
-    // Log local selection
     log.group('Checkout ▶ Selected (localStorage)');
     log.info('checkoutItems (localSimple):', raw);
     log.info('selectedIds:', [...ids]);
@@ -242,7 +264,13 @@ const Checkout: React.FC = () => {
     })();
   }, [apiCart, accessoryName, accessoryThumb]);
 
-  // Nhóm giống Cart
+  // === Chọn theo Cart: tách combos, singles, bundles ===
+  const allSingles = apiCart?.singleItems || [];
+  const combosSelected = useMemo(() => {
+    const src = allSingles.filter(e => !!e.comboId);
+    return src.filter(e => selectedIds.has(keyOfCombo(e)));
+  }, [allSingles, selectedIds]);
+
   const bundlesAll = useMemo(() => {
     const src = apiCart?.bundleItems || [];
     const out = src
@@ -255,9 +283,6 @@ const Checkout: React.FC = () => {
 
     log.group('Checkout ▶ Bundles (selected)');
     log.info('bundlesAll.count:', out.length);
-    out.forEach((b, idx) => {
-      log.info(`#${idx + 1}: terrariumId=`, b.mainItem.terrariumId, 'accCount=', b.bundleAccessories.length);
-    });
     log.end();
 
     return out;
@@ -269,23 +294,14 @@ const Checkout: React.FC = () => {
       .filter((b) => (b.bundleAccessories?.length || 0) === 0 && !!b.mainItem.terrariumVariantId)
       .map((b) => b.mainItem)
       .filter((e) => selectedIds.has(keyOfEntry(e)));
-
-    log.group('Checkout ▶ Variant singles from bundles (selected)');
-    log.info('count:', out.length);
-    log.end();
-
     return out;
   }, [apiCart, selectedIds]);
 
   const mergedSingles = useMemo<RawCartEntry[]>(() => {
-    const singles = (apiCart?.singleItems || []).filter((e) => selectedIds.has(keyOfEntry(e)));
-    const out = [...variantSinglesFromBundles, ...singles];
-
-    log.group('Checkout ▶ Singles (selected)');
-    log.info('mergedSingles.count:', out.length);
-    log.end();
-
-    return out;
+    const singles = (apiCart?.singleItems || [])
+      .filter((e) => !e.comboId) // loại combo ra khỏi singles
+      .filter((e) => selectedIds.has(keyOfEntry(e)));
+    return [...variantSinglesFromBundles, ...singles];
   }, [apiCart, selectedIds, variantSinglesFromBundles]);
 
   // Prefetch variant names (read-only)
@@ -329,15 +345,87 @@ const Checkout: React.FC = () => {
     run();
   }, [mergedSingles, variantToTerrariumMap]);
 
-  // Tổng tiền
+  // === Fetch combo meta giống Cart (để show item trong combo) ===
+  useEffect(() => {
+    const fetchComboMeta = async () => {
+      if (!combosSelected.length) return;
+      const missingIds = [...new Set(combosSelected.map(e => e.comboId!))].filter(id => !comboMeta[id]);
+
+      if (!missingIds.length) return;
+
+      const comboDataPromises = missingIds.map(async (comboId) => {
+        try {
+          const comboData = await getComboById(comboId);
+
+          const itemDetailsPromises = comboData.items.map(async (item: any) => {
+            if (item.accessoryId) {
+              try {
+                const accessory = await getAccessoryById(item.accessoryId);
+                return {
+                  ...item,
+                  name: accessory?.name || `Phụ kiện #${item.accessoryId}`,
+                  image: accessory?.accessoryImages?.[0]?.imageUrl || FALLBACK_IMG,
+                  type: 'accessory'
+                };
+              } catch {
+                return { ...item, name: `Phụ kiện #${item.accessoryId}`, image: FALLBACK_IMG, type: 'accessory' };
+              }
+            } else if (item.terrariumVariantId) {
+              try {
+                const variant = await getTerrariumVariantById(item.terrariumVariantId);
+                if (!variant) {
+                  return { ...item, name: `Terrarium variant #${item.terrariumVariantId}`, image: FALLBACK_IMG, type: 'terrarium' };
+                }
+                const terrarium = await getTerrariumById(variant.terrariumId);
+                return {
+                  ...item,
+                  name: terrarium?.terrariumName || variant.variantName || `Terrarium #${variant.terrariumId}`,
+                  image: variant.urlImage || terrarium?.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG,
+                  type: 'terrarium',
+                  variantName: variant.variantName
+                };
+              } catch {
+                return { ...item, name: `Terrarium variant #${item.terrariumVariantId}`, image: FALLBACK_IMG, type: 'terrarium' };
+              }
+            }
+            return item;
+          });
+
+          const itemDetails = await Promise.all(itemDetailsPromises);
+
+          return {
+            comboId,
+            name: comboData.name,
+            image: comboData.imageUrl || FALLBACK_IMG,
+            items: itemDetails
+          };
+        } catch (error) {
+          console.error(`Error fetching combo ${comboId}:`, error);
+          return { comboId, name: `Combo #${comboId}`, image: FALLBACK_IMG, items: [] };
+        }
+      });
+
+      const results = await Promise.all(comboDataPromises);
+      setComboMeta((prev) => {
+        const n = { ...prev };
+        results.forEach(c => { n[c.comboId] = c; });
+        return n;
+      });
+    };
+
+    fetchComboMeta();
+  }, [combosSelected, comboMeta]);
+
+  // ====== TÍNH TIỀN (CỘNG CẢ COMBO) ======
   const subtotalFromAPI = useMemo(() => {
     const sumSingles = mergedSingles.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
     const sumBundles = bundlesAll.reduce(
       (s, b) => s + b.bundleAccessories.reduce((ss, e) => ss + (e.totalCartPrice || 0), 0),
       0
     );
-    return sumSingles + sumBundles;
-  }, [mergedSingles, bundlesAll]);
+    const sumCombos = combosSelected.reduce((s, e) => s + (e.totalCartPrice || 0), 0); // ✅ cộng combo
+    return sumSingles + sumBundles + sumCombos;
+  }, [mergedSingles, bundlesAll, combosSelected]);
 
   const subtotalLocal = useMemo(
     () => localSimple.reduce((s, it) => s + it.price * it.quantity, 0),
@@ -385,7 +473,8 @@ const Checkout: React.FC = () => {
     }
   };
 
-  // ===== Dựng items cho API Order MỚI, giữ semantics bundle/single =====
+  // ===== Dựng items cho API Order MỚI, giữ semantics bundle/single (chưa gửi combo) =====
+  // ✅ BỔ SUNG terrariumId cho BUNDLE_ACCESSORY
   const buildOrderItems = (): NewOrderItemPayload[] => {
     const items: NewOrderItemPayload[] = [];
 
@@ -395,6 +484,7 @@ const Checkout: React.FC = () => {
         for (const e of b.bundleAccessories) {
           items.push({
             itemType: 'BUNDLE_ACCESSORY',
+            terrariumId: e.terrariumId ?? b.mainItem.terrariumId ?? 0, // ✅ thêm terrariumId
             accessoryId: e.accessoryId ?? 0,
             terrariumVariantId: 0,
             accessoryQuantity: e.totalCartQuantity ?? 0,
@@ -402,6 +492,7 @@ const Checkout: React.FC = () => {
           });
         }
       }
+
 
       // 2) Singles & main items
       for (const e of mergedSingles) {
@@ -449,29 +540,66 @@ const Checkout: React.FC = () => {
     return items;
   };
 
+  // ===== Phân rã combo thành items (khi có nhiều combo/pha trộn) =====
+  const explodeCombosToItems = async (selectedCombos: RawCartEntry[]): Promise<NewOrderItemPayload[]> => {
+    const out: NewOrderItemPayload[] = [];
+    for (const ce of selectedCombos) {
+      const comboId = ce.comboId!;
+      // ưu tiên dùng comboMeta đã fetch để giữ đúng name/image/variantName
+      let cItems: any[] | undefined = comboMeta[comboId]?.items;
+      if (!cItems) {
+        try {
+          const c = await getComboById(comboId);
+          cItems = c.items || [];
+        } catch {
+          cItems = [];
+        }
+      }
+      const comboQty = ce.totalCartQuantity || 1;
+      for (const it of cItems) {
+        const q = (it.quantity || 1) * comboQty;
+        if (it.accessoryId) {
+          out.push({
+            itemType: 'SINGLE',
+            accessoryId: it.accessoryId,
+            terrariumVariantId: 0,
+            accessoryQuantity: q,
+            terrariumVariantQuantity: 0
+          });
+        } else if (it.terrariumVariantId) {
+          out.push({
+            itemType: 'MAIN_ITEM',
+            accessoryId: 0,
+            terrariumVariantId: it.terrariumVariantId,
+            accessoryQuantity: 0,
+            terrariumVariantQuantity: q
+          });
+        }
+      }
+    }
+    return out;
+  };
+
   // ======= CLEANUP CART ITEMS =======
-  const cleanupCartItems = async (orderItems: NewOrderItemPayload[]) => {
+  const cleanupCartItems = async (orderItems: NewOrderItemPayload[], selectedCombos: RawCartEntry[]) => {
     try {
       const cartData = await getCart();
 
-      let cartItemsFromAPI: any[] = [];
-      const anyCart = cartData as any;
-      if (Array.isArray(anyCart?.cartItems)) {
-        cartItemsFromAPI = anyCart.cartItems;
-      } else {
-        const singles = Array.isArray((cartData as any)?.singleItems)
-          ? (cartData as any).singleItems : [];
-        const bundles = Array.isArray((cartData as any)?.bundleItems)
-          ? (cartData as any).bundleItems : [];
-        const fromBundles = bundles.flatMap((b: any) => {
-          const accs = Array.isArray(b.bundleAccessories) ? b.bundleAccessories : [];
-          if (accs.length > 0) return accs;
-          return b?.mainItem ? [b.mainItem] : [];
-        });
-        cartItemsFromAPI = [...singles, ...fromBundles];
-      }
+      // chuẩn hóa danh sách items trong cart (API mới)
+      const singles = Array.isArray((cartData as any)?.singleItems)
+        ? (cartData as any).singleItems : [];
+      const bundles = Array.isArray((cartData as any)?.bundleItems)
+        ? (cartData as any).bundleItems : [];
+      const fromBundles = bundles.flatMap((b: any) => {
+        const accs = Array.isArray(b.bundleAccessories) ? b.bundleAccessories : [];
+        if (accs.length > 0) return accs;
+        return b?.mainItem ? [b.mainItem] : [];
+      });
+      const cartItemsFromAPI = [...singles, ...fromBundles];
 
       const itemsToDelete: number[] = [];
+
+      // match accessory/variant
       for (const orderItem of orderItems) {
         const matchingCartItem = cartItemsFromAPI.find((cartItem: any) => {
           if (orderItem.terrariumVariantId && cartItem.terrariumVariantId) {
@@ -485,21 +613,25 @@ const Checkout: React.FC = () => {
         if (matchingCartItem?.cartItemId) itemsToDelete.push(matchingCartItem.cartItemId);
       }
 
-      log.group('Checkout ▶ Cleanup Cart');
-      log.table(orderItems, 'orderItems (for cleanup)');
-      log.info('itemsToDelete:', itemsToDelete);
-      log.end();
+      // xóa combo (nếu combo được chọn)
+      const selectedComboIds = selectedCombos.map(c => c.comboId!);
+      for (const ci of singles) {
+        if (ci.comboId && selectedComboIds.includes(ci.comboId) && ci.cartItemId) {
+          itemsToDelete.push(ci.cartItemId);
+        }
+      }
 
-      if (itemsToDelete.length > 0) {
-        await Promise.all(itemsToDelete.map((cartItemId) => deleteCartItem(cartItemId)));
-        toast.success(`Đã xóa ${itemsToDelete.length} sản phẩm khỏi giỏ hàng`);
+      const uniq = [...new Set(itemsToDelete)];
+      if (uniq.length > 0) {
+        await Promise.all(uniq.map((cartItemId) => deleteCartItem(cartItemId)));
+        toast.success(`Đã xóa ${uniq.length} sản phẩm khỏi giỏ hàng`);
       }
     } catch (error) {
       console.error('Lỗi cleanup cart:', error);
     }
   };
 
-  // ===== Đặt hàng & thanh toán (chỉ MoMo) — THÊM LOG =====
+  // ===== Đặt hàng & thanh toán (chỉ MoMo) =====
   const handlePlaceOrder = async () => {
     if (!address?.id) {
       toast.error('Vui lòng chọn địa chỉ giao hàng!');
@@ -509,69 +641,78 @@ const Checkout: React.FC = () => {
       toast.error('Giỏ hàng trống!');
       return;
     }
+    if (!userId) {
+      toast.error('Bạn cần đăng nhập để đặt hàng!');
+      return;
+    }
 
     try {
-      const items = buildOrderItems();
+      // 1) Base items (không gồm combo)
+      const itemsBase = buildOrderItems();
 
-      // 🔎 LOG chi tiết items + phân nhóm
-      log.group('Checkout ▶ Build Order Items');
-      log.table(items, 'items (with itemType)');
-      const byType = items.reduce((m: any, it) => {
-        (m[it.itemType] ||= []).push(it);
-        return m;
-      }, {});
-      log.info('items grouped by itemType:', byType);
-      log.end();
+      // 2) Quyết định gửi combo thế nào
+      const hasCombos = combosSelected.length > 0;
+      const comboOnly = hasCombos && bundlesAll.length === 0 && mergedSingles.length === 0;
 
-      if (!items.length) {
+      let comboIdToSend = 0;
+      let itemsToSend = [...itemsBase];
+
+      if (hasCombos) {
+        if (comboOnly && combosSelected.length === 1) {
+          // ✅ BE hỗ trợ: đúng 1 combo và không kèm sản phẩm khác
+          comboIdToSend = combosSelected[0].comboId!;
+        } else {
+          // ⚠️ Nhiều combo hoặc pha trộn → phân rã thành items
+          const exploded = await explodeCombosToItems(combosSelected);
+          itemsToSend = [...itemsToSend, ...exploded];
+          comboIdToSend = 0;
+        }
+      }
+
+      if (!itemsToSend.length && comboIdToSend === 0) {
         toast.error('Không có sản phẩm hợp lệ để tạo đơn!');
         return;
       }
 
+      // 3) Payload tạo đơn (totalAmount đã tính gồm combo)
       const payload = {
         voucherId: voucher?.voucherId ?? 0,
         deposit: paymentOption === 'deposit' ? actualPaymentAmount : 0,
         addressId: (address as any).id,
-        comboId: 0,
-        items,
+        comboId: comboIdToSend,
+        items: itemsToSend,
         totalAmount: totalBeforeWallet
       } as any;
 
-      // 💾 để dễ kiểm tra lại trong DevTools
+      // debug
       // @ts-ignore
-      window.__lastOrderItems = items;
+      window.__lastOrderItems = itemsToSend;
       // @ts-ignore
       window.__lastOrderPayload = payload;
 
-      // 🔎 LOG payload gửi đi
-      log.group('Checkout ▶ createOrder payload');
-      log.info('payload:', payload);
-      log.info('summary:', {
-        subtotal, shippingFee, discountFromVoucher, discountFromFull,
-        totalBeforeWallet, actualPaymentAmount, walletUsageAmount, remainingPaymentAmount
-      });
-      log.end();
-
-      // Gọi API tạo đơn
       const { orderId } = await createOrder(payload);
-
-      log.group('Checkout ▶ createOrder response');
-      log.info('orderId:', orderId);
-      log.end();
-
       if (!orderId) {
         toast.error('Tạo đơn hàng thất bại!');
         return;
       }
 
-      await cleanupCartItems(items);
+      // ✅ Gửi thông báo web sau khi tạo đơn thành công (KHÔNG chặn luồng nếu lỗi)
+      try {
+        await sendWebNotification(
+          userId,
+          `Đặt hàng thành công #${orderId}`,
+          `Đơn hàng #${orderId} đã được tạo. Tổng tiền: ${totalBeforeWallet.toLocaleString('vi-VN')} VND`
+        );
+      } catch (e) {
+        console.warn('[Checkout] Gửi thông báo web thất bại:', e);
+      }
 
+      // 4) Cleanup cart
+      await cleanupCartItems(itemsToSend, combosSelected);
+
+      // 5) Thanh toán ví/MoMo
       if (useWallet && walletUsageAmount > 0) {
         try {
-          log.group('Checkout ▶ Use Wallet payload');
-          log.info({ userId, amount: walletUsageAmount, orderId });
-          log.end();
-
           await useWalletForPayment({ userId, amount: walletUsageAmount, orderId });
         } catch (error) {
           console.error('Error using wallet:', error);
@@ -595,18 +736,8 @@ const Checkout: React.FC = () => {
         payAll: paymentOption === 'full'
       };
 
-      // 🔎 LOG MoMo payload
-      log.group('Checkout ▶ createMoMoPayment payload');
-      log.info('momoPayload:', momoPayload);
-      log.end();
-
       try {
         const { payUrl, qrImageBase64 } = await createMoMoPayment(momoPayload);
-
-        log.group('Checkout ▶ createMoMoPayment response');
-        log.info('payUrl:', payUrl);
-        log.info('hasQR:', !!qrImageBase64);
-        log.end();
 
         if (qrImageBase64) {
           setMoMoQRCode(qrImageBase64);
@@ -627,13 +758,11 @@ const Checkout: React.FC = () => {
         toast.error('Không lấy được link thanh toán MoMo!');
       }
     } catch (err: any) {
-      // 🔎 LOG lỗi BE trả về (validation, v.v.)
       log.group('Checkout ▶ ERROR createOrder');
       log.info('error.response?.data:', err?.response?.data);
       log.info('error.message:', err?.message);
       log.end();
 
-      // Thông báo người dùng
       if (err?.response?.data?.errors) {
         const errors = err.response.data.errors;
         const firstKey = Object.keys(errors)[0];
@@ -645,7 +774,8 @@ const Checkout: React.FC = () => {
     }
   };
 
-  // ============ UI (không đổi logic hiển thị) ============
+  // ============ UI ============
+
   const MomoModal = showMoMoQR && momoQRCode && (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 max-w-md w-full text-center">
@@ -690,9 +820,89 @@ const Checkout: React.FC = () => {
     </div>
   );
 
+  // ====== SẢN PHẨM (hiển thị giống Cart — bổ sung COMBO) ======
   const ProductSectionAPI = (
     <div className="bg-white p-4 sm:p-5 rounded-lg shadow space-y-4">
       <h2 className="text-base sm:text-lg md:text-xl font-semibold">Sản phẩm</h2>
+
+      {/* COMBOS (mới thêm) */}
+      {combosSelected.map((e) => {
+        const comboKey = keyOfCombo(e);
+        const isOpen = comboOpen[comboKey] ?? true; // mở mặc định để người dùng kiểm tra
+        const data = e.comboId ? comboMeta[e.comboId] : undefined;
+
+        return (
+          <div key={e.cartItemId} className="rounded-lg border">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-purple-50">
+              <div className="flex items-center gap-3">
+                <img
+                  src={data?.image || FALLBACK_IMG}
+                  alt={data?.name || `Combo #${e.comboId}`}
+                  className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
+                  onClick={() => navigate(`/combo/${e.comboId}`)}
+                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                />
+                <div className="font-semibold">
+                  <button
+                    onClick={() => navigate(`/combo/${e.comboId}`)}
+                    className="text-purple-700 hover:underline"
+                  >
+                    {data?.name || `Combo #${e.comboId}`}
+                  </button>
+                  <div className="text-sm text-gray-600">SL: <b>{e.totalCartQuantity || 1}</b></div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 text-sm">
+                <div className="text-purple-700 font-semibold">{currency(e.totalCartPrice || 0)}</div>
+                <button
+                  onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))}
+                  className="text-gray-600 hover:text-gray-800"
+                >
+                  {isOpen ? 'Thu gọn' : 'Mở rộng'}
+                </button>
+              </div>
+            </div>
+
+            {isOpen && data?.items && (
+              <div className="divide-y bg-gray-50">
+                <div className="px-4 py-2 text-sm text-gray-600 font-medium bg-purple-50 border-b">
+                  Sản phẩm trong combo:
+                </div>
+                {data.items.map((it: any, idx: number) => (
+                  <div key={`combo-item-${idx}`} className="p-3 sm:p-4 flex items-center gap-3">
+                    <img
+                      src={it.image || FALLBACK_IMG}
+                      alt={it.name || 'Sản phẩm'}
+                      className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
+                      onClick={() => {
+                        if (it.type === 'accessory' && it.accessoryId) {
+                          navigate(`/accessory/${it.accessoryId}`);
+                        } else if (it.type === 'terrarium') {
+                          navigate(`/terrarium/${it.id ?? it.terrariumId ?? ''}`);
+                        }
+                      }}
+                      onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 truncate">{it.name || 'Sản phẩm'}</div>
+                      {it.variantName && (
+                        <div className="text-xs sm:text-sm text-gray-500">Phân loại: {it.variantName}</div>
+                      )}
+                      <div className="text-sm text-gray-600">
+                        {currency(it.unitPrice || 0)} × {it.quantity}
+                      </div>
+                    </div>
+                    <div className="w-32 text-right font-semibold text-gray-800">
+                      {currency(it.totalPrice || 0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {/* Bundles */}
       {bundlesAll.map((b) => {
@@ -888,10 +1098,10 @@ const Checkout: React.FC = () => {
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-green-700">Thanh Toán</h1>
 
-            {/* Sản phẩm — hiển thị giống Cart */}
+            {/* Sản phẩm — hiển thị giống Cart + COMBO */}
             {ProductSectionAPI}
 
-            <AddressSelector userId={userId} onSelect={(addr) => setAddress(addr)} />
+            <AddressSelector userId={userId || 0} onSelect={(addr) => setAddress(addr)} />
 
             {/* Loại thanh toán */}
             <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
@@ -1076,29 +1286,44 @@ const Checkout: React.FC = () => {
             </button>
 
             <div className="bg-white border border-gray-200 rounded-lg shadow p-4 sm:p-5 sticky top-4 sm:top-6">
-              <h2 className="text-base sm:text-lg md:text-xl font-bold mb-4 text-green-700">Tổng kết đơn hàng</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base sm:text-lg md:text-xl font-bold text-green-700">Tổng kết đơn hàng</h2>
+                {/* ✅ Nút thu gọn danh sách sản phẩm (mặc định đóng) */}
+                <button
+                  onClick={() => setSummaryItemsOpen((v) => !v)}
+                  className="text-sm text-gray-600 hover:text-gray-800 underline"
+                >
+                  {summaryItemsOpen ? 'Thu gọn sản phẩm' : 'Hiển thị sản phẩm'}
+                </button>
+              </div>
 
-              <div className="space-y-2 text-sm sm:text-base">
-                {localSimple.map((item) => (
-                  <div key={item.id} className="flex justify-between items-center">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <img
-                        src={item.image || FALLBACK_IMG}
-                        alt=""
-                        className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded bg-white"
-                        onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                      />
-                      <span className="truncate">
-                        {item.name} x {item.quantity}
+              {/* ✅ Danh sách sản phẩm trong tổng kết — chỉ hiển thị khi mở */}
+              {summaryItemsOpen && (
+                <div className="space-y-2 text-sm sm:text-base mb-2">
+                  {localSimple.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <img
+                          src={item.image || FALLBACK_IMG}
+                          alt=""
+                          className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded bg-white"
+                          onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                        />
+                        <span className="truncate">
+                          {item.name} x {item.quantity}
+                        </span>
+                      </div>
+                      <span className="text-right">
+                        {(item.price * item.quantity).toLocaleString('vi-VN')} VND
                       </span>
                     </div>
-                    <span className="text-right">
-                      {(item.price * item.quantity).toLocaleString('vi-VN')} VND
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                  <hr className="my-2" />
+                </div>
+              )}
 
-                <hr className="my-2" />
+              {/* ✅ Các dòng giá luôn hiển thị (không bị thu gọn) */}
+              <div className="space-y-2 text-sm sm:text-base">
                 <div className="flex justify-between">
                   <span>Tạm tính</span>
                   <span>{subtotal.toLocaleString('vi-VN')} VND</span>
@@ -1109,7 +1334,7 @@ const Checkout: React.FC = () => {
                     <span>-{discountFromVoucher.toLocaleString('vi-VN')} VND</span>
                   </div>
                 )}
-                {discountFromFull > 0 && (
+                {paymentOption === 'full' && discountFromFull > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Ưu đãi thanh toán toàn bộ</span>
                     <span>-{discountFromFull.toLocaleString('vi-VN')} VND</span>

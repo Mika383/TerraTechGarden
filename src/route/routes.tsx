@@ -15,7 +15,7 @@ import TerrariumVariants from '../components/manager/TerrariumVariants';
 import OrderList from '@/components/staff/OrderList';
 import ChatWithCustomer from '@/components/staff/ChatWithCustomer';
 import StaffLayout from '@/components/staff/StaffLayout';
-import ThankYou from '@/pages/Customer/ThankYou';
+
 import PaymentSuccess from '@/pages/Customer/PaymentSuccess';
 import EditTerrariumVariant from '@/components/manager/TerrariumVariantEdit';
 import VoucherManagement from '@/pages/Admin/VoucherManagement';
@@ -35,6 +35,9 @@ import TerrariumCustomizePage from '@/components/staff/TerrariumCustomizePage';
 import TerrariumRequestAll from '@/components/staff/TerrariumRequestAll';
 import VerifyEmail from '@/pages/Customer/VerifyEmail';
 import RefundRequestList from '@/components/staff/RefundRequestList';
+import ComboDetail from '@/pages/Customer/ComboDetail';
+import MembershipSuccess from '@/pages/Customer/MembershipSuccess';
+import WalletPage from '@/pages/Customer/WalletPage';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -121,9 +124,11 @@ const AppRoutes = () => {
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
         <Route path="accessory/:id" element={<Suspense fallback={<Loading />}><AccessoryDetail /></Suspense>} />
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
-        <Route path="thank-you/:id" element={<Suspense fallback={<Loading />}><ThankYou /></Suspense>} />
+        
         <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
         <Route path="verify-email" element={<Suspense fallback={<Loading />}><VerifyEmail /></Suspense>} />
+        <Route path="combo/:id" element={<Suspense fallback={<Loading />}><ComboDetail /></Suspense>} />
+        <Route path="membership-success" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
@@ -141,6 +146,7 @@ const AppRoutes = () => {
             <Route path="chat" element={<Suspense fallback={<Loading />}><ChatWithStaff /></Suspense>} />
             <Route path="reviews" element={<Suspense fallback={<Loading />}><MyReviews /></Suspense>} />
             <Route path="edit-profile" element={<Suspense fallback={<Loading />}><EditProfile /></Suspense>} />
+            <Route path="wallet" element={<Suspense fallback={<Loading />}><WalletPage /></Suspense>} />
             <Route path="create-layout" element={<Suspense fallback={<Loading />}><TerrariumChatbox /></Suspense>} />
             <Route path="my-layouts" element={<Suspense fallback={<Loading />}><MyLayoutsPage /></Suspense>} />
             <Route path="orders/:id" element={<Suspense fallback={<Loading />}><OrderDetail /></Suspense>} />
