@@ -77,3 +77,18 @@ export const isProcessing = (s: string | number) =>
   String(s).toLowerCase() === 'processing';
 export const isUnpaid = (s?: string | number) =>
   String(s ?? '').toLowerCase() === 'unpaid';
+
+// 👉 Thêm các helper còn thiếu
+export const isCancelled = (s: string | number) => {
+  const key = String(s).toLowerCase();
+  return key === 'cancel' || key === 'cancle' || key === 'failed';
+};
+
+// Cho phép thanh toán nếu: chưa thanh toán & chưa bị hủy/failed
+export const canPay = (o: { status: string | number; paymentStatus?: string | number }) => {
+  return isUnpaid(o.paymentStatus) && !isCancelled(o.status);
+};
+
+// Định dạng tiền VND
+export const money = (n: number | undefined | null) =>
+  Number(n ?? 0).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
