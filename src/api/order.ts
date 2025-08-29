@@ -51,12 +51,14 @@ export const createOrder = async (
     comboId: payload.comboId ?? 0,
     totalAmount: payload.totalAmount ?? 0,
     items: (payload.items || []).map((item) => ({
-      itemType: item.itemType ?? "",
-      accessoryId: item.accessoryId ?? 0,
-      terrariumVariantId: item.terrariumVariantId ?? 0,
-      accessoryQuantity: item.accessoryQuantity ?? 0,
-      terrariumVariantQuantity: item.terrariumVariantQuantity ?? 0,
-    })),
+        itemType: item.itemType ?? "",
+        terrariumId: (item as any).terrariumId ?? 0,           // ✅ thêm dòng này
+        accessoryId: item.accessoryId ?? 0,
+        terrariumVariantId: item.terrariumVariantId ?? 0,
+        accessoryQuantity: item.accessoryQuantity ?? 0,
+        terrariumVariantQuantity: item.terrariumVariantQuantity ?? 0,
+      })),
+
   };
                         
   const res = await axios.post<CreateOrderAPIResponse>(

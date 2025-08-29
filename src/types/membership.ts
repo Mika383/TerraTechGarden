@@ -1,4 +1,3 @@
-// src/types/membership.ts
 export interface MembershipPackage {
   id: number;
   type: string;
@@ -17,7 +16,6 @@ export interface CreateMembershipPackageRequest {
   isActive: boolean;
 }
 
-// BE nói sẽ bổ sung type & isActive cho PUT — để optional cho an toàn
 export interface UpdateMembershipPackageRequest {
   type?: string;
   durationDays?: number;
@@ -29,8 +27,8 @@ export interface UpdateMembershipPackageRequest {
 export interface GrantMembershipRequest {
   userId: number;
   packageId: number;
-  startDate: string;     
-  price?: number;        
+  startDate: string;
+  price?: number;
   durationDays: number;
-  description: 'string'; 
+  description: string; // <-- sửa từ 'string' -> string
 }

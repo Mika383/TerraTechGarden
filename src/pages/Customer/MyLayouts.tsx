@@ -1,4 +1,3 @@
-// src/pages/Customer/MyLayoutsPage.tsx
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -26,8 +25,12 @@ import {
 
 import { getMyLayouts, deleteLayout } from '@/api/layout';
 import type { LayoutSummary } from '@/types/layout';
-import { getTerrariumById } from '@/api/terrarium';
+import { getTerrariumById, getVariantsByTerrariumId } from '@/api/terrarium';
+import type { TerrariumVariant } from '@/types/terrarium';
 import api from '@/lib/axios/axiosInstance';
+
+// ✅ Thêm MembershipGate
+import MembershipGate from '@/components/common/MembershipGate';
 
 // ===== Helpers =====
 type LayoutRow = LayoutSummary & {
@@ -90,6 +93,7 @@ const MyLayoutsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [preorderingId, setPreorderingId] = useState<number | null>(null);
 
   // ✅ Gán kiểu rõ ràng cho các ref để tránh 'never'
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -196,7 +200,6 @@ const MyLayoutsPage: React.FC = () => {
     pending: rows.filter(x => norm(x.status) === 'pending').length,
     approved: rows.filter(x => norm(x.status) === 'approved').length,
     rejected: rows.filter(x => norm(x.status) === 'rejected').length,
-    // Có thể bổ sung draft/ordered nếu cần hiển thị thêm
   }), [rows]);
 
   const handleDelete = async (id: number) => {
@@ -225,9 +228,7 @@ const MyLayoutsPage: React.FC = () => {
 
     try {
       setSubmittingId(layoutId);
-      // PUT /api/TerrariumLayout/{id}/submit?userId=...
       await api.put(`/TerrariumLayout/${layoutId}/submit`, null, { params: { userId } });
-      // Cập nhật status local -> Pending
       setRows(prev =>
         prev.map(r => (r.layoutId === layoutId ? { ...r, status: 'Pending' } : r))
       );
@@ -237,6 +238,64 @@ const MyLayoutsPage: React.FC = () => {
       alert(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Gửi yêu cầu thất bại. Vui lòng thử lại.');
     } finally {
       setSubmittingId(null);
+    }
+  };
+
+  // ===== PRE-ORDER (logic mới) =====
+  const handlePreorder = async (layout: LayoutRow) => {
+    // Chỉ cho phép khi Approved
+    if (norm(layout.status) !== 'approved') {
+      alert('Layout chưa được duyệt để đặt trước.');
+      return;
+    }
+
+    try {
+      setPreorderingId(layout.layoutId);
+
+      // Lấy danh sách variant của terrarium
+      const variants: TerrariumVariant[] = await getVariantsByTerrariumId(layout.terrariumId);
+
+      if (!variants || variants.length === 0) {
+        alert('Terrarium này chưa có phân loại sản phẩm.');
+        navigate(`/terrarium/${layout.terrariumId}`);
+        return;
+      }
+
+      if (variants.length > 1) {
+        // Có nhiều variant → chuyển qua trang terrarium để người dùng chọn
+        alert('Terrarium có nhiều phân loại. Vui lòng chọn phân loại trước khi đặt.');
+        navigate(`/terrarium/${layout.terrariumId}`);
+        return;
+      }
+
+      // ✅ Chỉ có 1 variant → tạo "checkoutItems" và chuyển tới /checkout
+      const v = variants[0];
+      const name = layout.terrariumName || `Terrarium #${layout.terrariumId}`;
+      const image = layout.terrariumImage || v.urlImage || '';
+      const price = typeof (v as any)?.price === 'number' ? (v as any).price : 0;
+
+      const item = {
+        id: `pre_${layout.layoutId}_${v.terrariumVariantId}`,
+        name,
+        price,
+        image,
+        quantity: 1,
+        selected: true,
+        variantId: v.terrariumVariantId,
+        accessoryId: null,
+        comboId: null
+      };
+
+      // Xoá dữ liệu cũ để tránh cộng dồn
+      localStorage.removeItem('cartItems');
+      localStorage.setItem('checkoutItems', JSON.stringify([item]));
+
+      navigate('/checkout');
+    } catch (e) {
+      console.error('Preorder error:', e);
+      alert('Không thể tạo pre-order. Vui lòng thử lại sau.');
+    } finally {
+      setPreorderingId(null);
     }
   };
 
@@ -273,284 +332,299 @@ const MyLayoutsPage: React.FC = () => {
     );
   }
 
+  // ✅ Bọc UI chính bên trong MembershipGate
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div ref={headerRef} className="mb-10">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-emerald-600 via-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
-              Layout Terrarium của tôi
-            </h1>
-            <p className="text-slate-600 text-lg max-w-2xl mx-auto">
-              Quản lý và theo dõi các layout terrarium bạn đã tạo với giao diện hiện đại
-            </p>
-          </div>
-
-          {/* Search and Filter */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-6 mb-8">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm layout hoặc terrarium..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300 bg-white/80"
-                />
-              </div>
-              <div className="relative">
-                <FunnelIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300 bg-white/80 min-w-[190px]"
-                >
-                  <option value="all">Tất cả trạng thái</option>
-                  <option value="draft">Bản nháp</option>
-                  <option value="pending">Đang chờ duyệt</option>
-                  <option value="approved">Đã duyệt</option>
-                  <option value="rejected">Bị từ chối</option>
-                  <option value="ordered">Đã đặt hàng</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div ref={statsRef} className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Tổng layout</p>
-                <p className="text-3xl font-bold mt-2">{stats.total}</p>
-              </div>
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <ChartBarIcon className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-amber-100 text-sm font-medium uppercase tracking-wider">Đang chờ</p>
-                <p className="text-3xl font-bold mt-2">{stats.pending}</p>
-              </div>
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <ClockIcon className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100 text-sm font-medium uppercase tracking-wider">Đã duyệt</p>
-                <p className="text-3xl font-bold mt-2">{stats.approved}</p>
-              </div>
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <CheckCircleIcon className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-red-100 text-sm font-medium uppercase tracking-wider">Bị từ chối</p>
-                <p className="text-3xl font-bold mt-2">{stats.rejected}</p>
-              </div>
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <XCircleIcon className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div ref={tableRef}>
-          {filteredRows.length === 0 ? (
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-12 text-center">
-              <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
-                <EyeIcon className="w-12 h-12 text-slate-400" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">
-                {searchTerm || filterStatus !== 'all' ? 'Không tìm thấy layout nào' : 'Chưa có layout nào'}
-              </h3>
-              <p className="text-slate-500 text-lg mb-8 max-w-md mx-auto">
-                {searchTerm || filterStatus !== 'all'
-                  ? 'Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc để xem kết quả khác'
-                  : 'Bạn chưa tạo layout terrarium nào. Hãy bắt đầu tạo layout đầu tiên của bạn!'
-                }
+    <MembershipGate message="Bạn cần là thành viên để xem và quản lý Layout của mình.">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Header */}
+          <div ref={headerRef} className="mb-10">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-emerald-600 via-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+                Layout Terrarium của tôi
+              </h1>
+              <p className="text-slate-600 text-lg max-w-2xl mx-auto">
+                Quản lý và theo dõi các layout terrarium bạn đã tạo với giao diện hiện đại
               </p>
-              {!searchTerm && filterStatus === 'all' && (
-                <button
-                  onClick={() => navigate('/customer-dashboard/create-layout')}
-                  className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-8 py-4 rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 font-medium"
-                >
-                  <PlusIcon className="w-5 h-5 inline mr-2" />
-                  Tạo Layout Mới
-                </button>
-              )}
             </div>
-          ) : (
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-              <div className="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100">
-                <h3 className="text-xl font-bold text-slate-900">
-                  Danh sách Layout ({filteredRows.length})
-                </h3>
+
+            {/* Search and Filter */}
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-6 mb-8">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm layout hoặc terrarium..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300 bg-white/80"
+                  />
+                </div>
+                <div className="relative">
+                  <FunnelIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300 bg-white/80 min-w-[190px]"
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="draft">Bản nháp</option>
+                    <option value="pending">Đang chờ duyệt</option>
+                    <option value="approved">Đã duyệt</option>
+                    <option value="rejected">Bị từ chối</option>
+                    <option value="ordered">Đã đặt hàng</option>
+                  </select>
+                </div>
               </div>
+            </div>
+          </div>
 
-              <div className="divide-y divide-slate-100">
-                {filteredRows.map((layout, index) => {
-                  const isDraft = norm(layout.status) === 'draft';
-                  return (
-                    <div
-                      key={layout.layoutId}
-                      ref={(el) => { cardsRef.current[index] = el; }}
-                      className={`layout-row-${layout.layoutId} p-6 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 transition-all duration-300 group`}
-                    >
-                      <div className="flex items-center justify-between">
-                        {/* Layout Info */}
-                        <div className="flex items-center gap-6 flex-1">
-                          <div className="relative group-hover:scale-105 transition-transform duration-300">
-                            {layout.terrariumImage ? (
-                              <img
-                                src={layout.terrariumImage}
-                                alt={layout.terrariumName || 'Terrarium'}
-                                className="h-16 w-16 rounded-xl object-cover border-2 border-white shadow-lg cursor-pointer hover:shadow-xl transition-all duration-300"
-                                onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
-                              />
-                            ) : (
-                              <div
-                                className="h-16 w-16 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:shadow-xl transition-all duration-300"
-                                onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
-                                title="Xem terrarium"
-                              >
-                                <PhotoIcon className="w-8 h-8 text-slate-400" />
-                              </div>
-                            )}
-                          </div>
+          {/* Stats */}
+          <div ref={statsRef} className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Tổng layout</p>
+                  <p className="text-3xl font-bold mt-2">{stats.total}</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <ChartBarIcon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <h4 className="text-lg font-bold text-slate-900 group-hover:text-emerald-700 transition-colors duration-300">
-                                  {layout.layoutName}
-                                </h4>
-                                <button
+            <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-amber-100 text-sm font-medium uppercase tracking-wider">Đang chờ</p>
+                  <p className="text-3xl font-bold mt-2">{stats.pending}</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <ClockIcon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-emerald-100 text-sm font-medium uppercase tracking-wider">Đã duyệt</p>
+                  <p className="text-3xl font-bold mt-2">{stats.approved}</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <CheckCircleIcon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-100 text-sm font-medium uppercase tracking-wider">Bị từ chối</p>
+                  <p className="text-3xl font-bold mt-2">{stats.rejected}</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <XCircleIcon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div ref={tableRef}>
+            {filteredRows.length === 0 ? (
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-12 text-center">
+                <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <EyeIcon className="w-12 h-12 text-slate-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-4">
+                  {searchTerm || filterStatus !== 'all' ? 'Không tìm thấy layout nào' : 'Chưa có layout nào'}
+                </h3>
+                <p className="text-slate-500 text-lg mb-8 max-w-md mx-auto">
+                  {searchTerm || filterStatus !== 'all'
+                    ? 'Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc để xem kết quả khác'
+                    : 'Bạn chưa tạo layout terrarium nào. Hãy bắt đầu tạo layout đầu tiên của bạn!'
+                  }
+                </p>
+                {!searchTerm && filterStatus === 'all' && (
+                  <button
+                    onClick={() => navigate('/customer-dashboard/create-layout')}
+                    className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-8 py-4 rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 font-medium"
+                  >
+                    <PlusIcon className="w-5 h-5 inline mr-2" />
+                    Tạo Layout Mới
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
+                <div className="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100">
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Danh sách Layout ({filteredRows.length})
+                  </h3>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {filteredRows.map((layout, index) => {
+                    const isDraft = norm(layout.status) === 'draft';
+                    const isApproved = norm(layout.status) === 'approved';
+                    return (
+                      <div
+                        key={layout.layoutId}
+                        ref={(el) => { cardsRef.current[index] = el; }}
+                        className={`layout-row-${layout.layoutId} p-6 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 transition-all duration-300 group`}
+                      >
+                        <div className="flex items-center justify-between">
+                          {/* Layout Info */}
+                          <div className="flex items-center gap-6 flex-1">
+                            <div className="relative group-hover:scale-105 transition-transform duration-300">
+                              {layout.terrariumImage ? (
+                                <img
+                                  src={layout.terrariumImage}
+                                  alt={layout.terrariumName || 'Terrarium'}
+                                  className="h-16 w-16 rounded-xl object-cover border-2 border-white shadow-lg cursor-pointer hover:shadow-xl transition-all duration-300"
                                   onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
-                                  className="text-sm text-slate-600 hover:text-emerald-600 font-medium transition-colors duration-300"
-                                  title="Đi đến trang Terrarium"
+                                />
+                              ) : (
+                                <div
+                                  className="h-16 w-16 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:shadow-xl transition-all duration-300"
+                                  onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
+                                  title="Xem terrarium"
                                 >
-                                  {layout.terrariumName || `Terrarium #${layout.terrariumId}`}
-                                </button>
-                                <div className="text-xs text-slate-400 mt-1">ID: {layout.layoutId}</div>
-                              </div>
-
-                              {/* Status Badge */}
-                              <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border shadow-sm ${statusClass(layout.status)} group-hover:scale-105 transition-transform duration-300`}>
-                                {statusIcon(layout.status)}
-                                <span className="ml-2">{statusText(layout.status)}</span>
-                              </span>
+                                  <PhotoIcon className="w-8 h-8 text-slate-400" />
+                                </div>
+                              )}
                             </div>
 
-                            {/* Details Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                              <div className="flex items-center text-sm text-slate-600">
-                                <CurrencyDollarIcon className="w-4 h-4 mr-2 text-emerald-600" />
-                                <span className="font-medium">{money(layout.finalPrice ?? null)}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <h4 className="text-lg font-bold text-slate-900 group-hover:text-emerald-700 transition-colors duration-300">
+                                    {layout.layoutName}
+                                  </h4>
+                                  <button
+                                    onClick={() => navigate(`/terrarium/${layout.terrariumId}`)}
+                                    className="text-sm text-slate-600 hover:text-emerald-600 font-medium transition-colors duration-300"
+                                    title="Đi đến trang Terrarium"
+                                  >
+                                    {layout.terrariumName || `Terrarium #${layout.terrariumId}`}
+                                  </button>
+                                  <div className="text-xs text-slate-400 mt-1">ID: {layout.layoutId}</div>
+                                </div>
+
+                                {/* Status Badge */}
+                                <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border shadow-sm ${statusClass(layout.status)} group-hover:scale-105 transition-transform duration-300`}>
+                                  {statusIcon(layout.status)}
+                                  <span className="ml-2">{statusText(layout.status)}</span>
+                                </span>
                               </div>
-                              <div className="flex items-center text-sm text-slate-600">
-                                <CalendarIcon className="w-4 h-4 mr-2 text-blue-600" />
-                                <span>Tạo: {fmt(layout.createdDate)}</span>
-                              </div>
-                              <div className="flex items-center text-sm text-slate-600">
-                                <CalendarIcon className="w-4 h-4 mr-2 text-purple-600" />
-                                <span>Duyệt: {layout.reviewDate ? fmt(layout.reviewDate) : 'Chưa duyệt'}</span>
+
+                              {/* Details Grid */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                                <div className="flex items-center text-sm text-slate-600">
+                                  <CurrencyDollarIcon className="w-4 h-4 mr-2 text-emerald-600" />
+                                  <span className="font-medium">{money(layout.finalPrice ?? null)}</span>
+                                </div>
+                                <div className="flex items-center text-sm text-slate-600">
+                                  <CalendarIcon className="w-4 h-4 mr-2 text-blue-600" />
+                                  <span>Tạo: {fmt(layout.createdDate)}</span>
+                                </div>
+                                <div className="flex items-center text-sm text-slate-600">
+                                  <CalendarIcon className="w-4 h-4 mr-2 text-purple-600" />
+                                  <span>Duyệt: {layout.reviewDate ? fmt(layout.reviewDate) : 'Chưa duyệt'}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 ml-6">
-                          
-
-                          {/* Nút gửi yêu cầu định giá khi Draft */}
-                          {isDraft && (
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 ml-6">
+                            {/* Pre-order khi đã duyệt */}
                             <button
-                              onClick={() => handleSubmitPricing(layout.layoutId)}
-                              disabled={submittingId === layout.layoutId}
-                              className="p-3 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-xl transition-all duration-300 group-hover:scale-105 font-medium"
-                              title="Gửi yêu cầu định giá"
+                              onClick={() => handlePreorder(layout)}
+                              disabled={!isApproved || preorderingId === layout.layoutId}
+                              className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all duration-300
+                                ${isApproved
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                }`}
+                              title={isApproved ? 'Đặt trước (Pre-order)' : 'Chỉ khả dụng khi layout đã duyệt'}
                             >
-                              <PaperAirplaneIcon className={`w-5 h-5 ${submittingId === layout.layoutId ? 'animate-pulse' : ''}`} />
+                              {preorderingId === layout.layoutId ? 'Đang xử lý...' : 'Pre-order'}
                             </button>
-                          )}
 
-                          
-                          <button
-                            onClick={() => handleDelete(layout.layoutId)}
-                            className="p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-all duration-300 group-hover:scale-105"
-                            title="Xoá"
-                          >
-                            <TrashIcon className="w-5 h-5" />
-                          </button>
+                            {/* Nút gửi yêu cầu định giá khi Draft */}
+                            {isDraft && (
+                              <button
+                                onClick={() => handleSubmitPricing(layout.layoutId)}
+                                disabled={submittingId === layout.layoutId}
+                                className="p-3 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-xl transition-all duration-300 group-hover:scale-105 font-medium"
+                                title="Gửi yêu cầu định giá"
+                              >
+                                <PaperAirplaneIcon className={`w-5 h-5 ${submittingId === layout.layoutId ? 'animate-pulse' : ''}`} />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDelete(layout.layoutId)}
+                              className="p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-all duration-300 group-hover:scale-105"
+                              title="Xoá"
+                            >
+                              <TrashIcon className="w-5 h-5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Review Notes */}
-        {rows.some(l => !!l.reviewNotes) && (
-          <div className="mt-10">
-            <h3 className="text-2xl font-bold text-slate-900 mb-6 text-center">
-              Ghi chú từ người duyệt
-            </h3>
-            <div className="grid gap-6">
-              {rows.filter(l => !!l.reviewNotes).map(l => (
-                <div key={l.layoutId} className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 shadow-lg">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <ExclamationTriangleIcon className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="text-lg font-bold text-blue-900 mb-2">{l.layoutName}</h4>
-                      <p className="text-blue-800 mb-3 leading-relaxed">{l.reviewNotes}</p>
-                      <div className="flex items-center gap-4 text-sm text-blue-600">
-                        <span className="font-medium">Duyệt bởi: {l.reviewedBy || 'N/A'}</span>
-                        <span>•</span>
-                        <span>{l.reviewDate ? fmt(l.reviewDate) : 'N/A'}</span>
+          {/* Review Notes */}
+          {rows.some(l => !!l.reviewNotes) && (
+            <div className="mt-10">
+              <h3 className="text-2xl font-bold text-slate-900 mb-6 text-center">
+                Ghi chú từ người duyệt
+              </h3>
+              <div className="grid gap-6">
+                {rows.filter(l => !!l.reviewNotes).map(l => (
+                  <div key={l.layoutId} className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 shadow-lg">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <ExclamationTriangleIcon className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-lg font-bold text-blue-900 mb-2">{l.layoutName}</h4>
+                        <p className="text-blue-800 mb-3 leading-relaxed">{l.reviewNotes}</p>
+                        <div className="flex items-center gap-4 text-sm text-blue-600">
+                          <span className="font-medium">Duyệt bởi: {l.reviewedBy || 'N/A'}</span>
+                          <span>•</span>
+                          <span>{l.reviewDate ? fmt(l.reviewDate) : 'N/A'}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Create Button */}
-        <div className="mt-12 text-center">
-          <button
-            onClick={() => navigate('/customer-dashboard/create-layout')}
-            className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-10 py-4 rounded-2xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:scale-105 font-bold text-lg"
-          >
-            <PlusIcon className="w-6 h-6 inline mr-3" />
-            Tạo Layout Mới
-          </button>
+          {/* Create Button */}
+          <div className="mt-12 text-center">
+            <button
+              onClick={() => navigate('/customer-dashboard/create-layout')}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-10 py-4 rounded-2xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:scale-105 font-bold text-lg"
+            >
+              <PlusIcon className="w-6 h-6 inline mr-3" />
+              Tạo Layout Mới
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </MembershipGate>
   );
 };
 
