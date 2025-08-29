@@ -237,7 +237,7 @@ const ComboDetail: React.FC = () => {
                       <Star key={i} className="w-5 h-5 fill-yellow-300 text-yellow-300" />
                     ))}
                   </div>
-                  <span className="text-white/90 text-lg font-medium">(4.8 • 127 đánh giá)</span>
+                  <span className="text-white/90 text-lg font-medium">(0)</span>
                 </div>
 
                 {/* Pricing */}

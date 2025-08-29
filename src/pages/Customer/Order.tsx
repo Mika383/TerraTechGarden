@@ -17,6 +17,7 @@ import {
 } from '@/utils/orderStatus';
 
 import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
+import { requestRefund as apiRequestRefund } from '@/api/refund'; // ✅ NEW
 
 const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
 const PER_PAGE = 5;
@@ -151,10 +152,52 @@ const Order: React.FC = () => {
     }
   };
 
-  const requestRefund = (o: Order) => {
-    // chỗ này tùy flow của bạn (đi đến màn tạo yêu cầu hoàn, hoặc mở modal)
-    toast.info('Tính năng yêu cầu hoàn sẽ được bật cho đơn đã hoàn thành.');
-    // ví dụ: navigate(`/customer-dashboard/orders/${o.orderId}?tab=refund`);
+  // ✅ NEW: gửi yêu cầu hoàn tiền theo API mới
+  const handleRequestRefund = async (o: Order) => {
+    try {
+      if (!isCompleted(o.status)) {
+        toast.info('Chỉ có thể yêu cầu hoàn hàng/hoàn tiền cho đơn đã hoàn thành.');
+        return;
+      }
+
+      // Lý do (giữ UI: prompt)
+      const reason = window.prompt('Lý do hoàn hàng/hoàn tiền:', 'không còn nhu cầu sử dụng');
+      if (reason === null) return;
+      const trimmed = (reason || '').trim();
+      if (!trimmed) {
+        toast.info('Vui lòng nhập lý do.');
+        return;
+      }
+
+      // Ảnh minh chứng (Cloudinary URLs, optional) — vẫn dùng prompt
+      const imgStr = window.prompt(
+        'Dán URL ảnh (Cloudinary). Có thể để trống hoặc nhiều URL cách nhau bằng dấu phẩy:',
+        ''
+      );
+      const images = (imgStr || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      // Call API
+      const res = await apiRequestRefund({
+        orderId: o.orderId,
+        userId,
+        reason: trimmed,
+        images,
+      });
+
+      const msg = res?.message || 'Yêu cầu hoàn tiền đã được gửi thành công!';
+      toast.success(msg);
+      await load();
+    } catch (err: any) {
+      console.error('[Refund] error', err?.response?.status, err?.response?.data || err);
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data ||
+        'Gửi yêu cầu hoàn tiền thất bại.';
+      toast.error(String(msg));
+    }
   };
 
   const openReview = (o: Order) => {
@@ -324,7 +367,7 @@ const Order: React.FC = () => {
                         {/* Hoàn hàng/hoàn tiền – khi đã hoàn thành */}
                         {isCompleted(o.status) && (
                           <button
-                            onClick={() => requestRefund(o)}
+                            onClick={() => handleRequestRefund(o)} // ✅ NEW
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-purple-50 text-purple-700 border border-purple-200 rounded"
                           >
                             <RotateCcw size={16} />
