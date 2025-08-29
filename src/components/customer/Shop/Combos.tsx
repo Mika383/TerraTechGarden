@@ -280,7 +280,7 @@ const FeaturedCombos: React.FC = () => {
                         {[...Array(5)].map((_, i) => (
                           <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                         ))}
-                        <span className="text-sm text-gray-500 ml-2 font-medium">(4.8)</span>
+                        <span className="text-sm text-gray-500 ml-2 font-medium">(0)</span>
                       </div>
 
                       <h3 className="text-2xl font-bold text-gray-800 mb-3 group-hover:text-green-600 transition-colors line-clamp-2">

@@ -6,6 +6,7 @@ import TerrariumDetail from '@/components/customer/Terrarium/TerrariumDetail';
 import Loading from '@/components/common/Loading';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+import TerrariumFeedbackList from '@/components/customer/Terrarium/TerrariumFeedbackList';
 
 const IDEMPOTENCY_TTL_MS = 5000;
 
@@ -242,6 +243,13 @@ const Detail: React.FC = () => {
         onAddToCart={handleAddToCart}
         onBuyAccessories={handleBuyAsAccessories}
       />
+
+      {terrarium && (
+  <TerrariumFeedbackList
+    terrariumId={terrarium.terrariumId}
+    pageSize={5} // có thể đổi
+  />
+)}
     </div>
   );
 };

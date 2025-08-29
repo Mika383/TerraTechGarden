@@ -1,11 +1,9 @@
-// src/pages/Customer/OrderDetail.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Wallet, XCircle, RotateCcw, Star, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
+import { Wallet, XCircle, RotateCcw, Star } from 'lucide-react';
 
-import { getOrderById, createMoMoPayment, cancelOrder } from '@/api/order';
-import { requestRefund, uploadToCloudinary } from '@/api/refund';
+import { getOrderById, createMoMoPayment } from '@/api/order';
 import OrderItemsDisplay from '@/components/OrderItemsDisplay';
 
 import type { Order } from '@/types/order';
@@ -16,135 +14,44 @@ import {
   paymentStatusChip,
   isCompleted,
   isUnpaid,
-  isCancelled,
-  canPay,
-  money,
+  isPending,
+  isProcessing,
 } from '@/utils/orderStatus';
 
+import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
 
-// ---- Star rating (giữ) ----
-const StarRating: React.FC<{ value: number; onChange: (v: number) => void; size?: 'sm' | 'md' }> = ({ value, onChange, size = 'md' }) => {
-  const starSize = size === 'sm' ? 'text-lg' : 'text-2xl';
+const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
+
+/** Chọn sao 1–5 */
+const StarRating: React.FC<{
+  value: number;
+  onChange: (n: number) => void;
+  size?: 'sm' | 'md' | 'lg';
+}> = ({ value, onChange, size = 'md' }) => {
+  const [hover, setHover] = useState(0);
+  const starSize = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-lg' : 'text-2xl';
   return (
-    <div className="inline-flex items-center">
-      {[1,2,3,4,5].map(i => {
-        const active = i <= value;
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const n = i + 1;
+        const active = (hover || value) >= n;
         return (
-          <button key={i} onClick={() => onChange(i)} className="focus:outline-none" title={`${i} sao`}>
+          <button
+            key={n}
+            type="button"
+            aria-label={`${n} sao`}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            onFocus={() => setHover(n)}
+            onBlur={() => setHover(0)}
+            onClick={() => onChange(n)}
+            className="leading-none focus:outline-none"
+          >
             <span className={`${starSize} ${active ? 'text-amber-400' : 'text-gray-300'}`}>★</span>
           </button>
         );
       })}
       <span className="ml-2 text-sm text-gray-600">{value}/5</span>
-    </div>
-  );
-};
-
-// ---- Modal HỦY ĐƠN ----
-const CancelModal: React.FC<{
-  open: boolean; order?: Order | null; onClose: () => void;
-  onSubmit: (payload: { reason: string; note: string }) => Promise<void>;
-}> = ({ open, order, onClose, onSubmit }) => {
-  const [reason, setReason] = useState('Khách hàng yêu cầu hủy');
-  const [note, setNote] = useState('');
-  if (!open || !order) return null;
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
-        <div className="px-5 py-3 border-b font-semibold">Hủy đơn #{order.orderId}</div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Lý do hủy <span className="text-red-500">*</span></label>
-            <textarea className="w-full border rounded px-3 py-2 min-h-[90px]" value={reason} onChange={(e)=>setReason(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Ghi chú (tùy chọn)</label>
-            <input className="w-full border rounded px-3 py-2" value={note} onChange={(e)=>setNote(e.target.value)} />
-          </div>
-          <p className="text-xs text-gray-500">Được hủy khi đơn đang Chờ xử lý/Đang xử lý.</p>
-        </div>
-        <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded">Đóng</button>
-          <button
-            disabled={!reason.trim()}
-            onClick={() => onSubmit({ reason: reason.trim(), note: note.trim() })}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded inline-flex items-center gap-2"
-          >
-            <XCircle size={16} /> Xác nhận hủy
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ---- Modal HOÀN TIỀN ----
-const RefundModal: React.FC<{
-  open: boolean; order?: Order | null; onClose: () => void;
-  onSubmit: (payload: { reason: string; urls: string[] }) => Promise<void>;
-}> = ({ open, order, onClose, onSubmit }) => {
-  const [reason, setReason] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
-  const [busy, setBusy] = useState(false);
-  if (!open || !order) return null;
-
-  const onFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = Array.from(e.target.files || []);
-    if (f.length) setFiles((s) => [...s, ...f]);
-  };
-  const removeFile = (i: number) => setFiles((s) => s.filter((_, idx) => idx !== i));
-
-  const submit = async () => {
-    if (!reason.trim()) { toast.error('Vui lòng nhập lý do.'); return; }
-    try {
-      setBusy(true);
-      const urls: string[] = [];
-      for (const f of files) {
-        const url = await uploadToCloudinary(f);
-        urls.push(url);
-      }
-      await onSubmit({ reason: reason.trim(), urls });
-      setFiles([]); setReason('');
-    } catch (e) {
-      console.error(e); toast.error('Gửi yêu cầu hoàn thất bại.');
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-xl rounded-lg shadow-lg">
-        <div className="px-5 py-3 border-b font-semibold">Yêu cầu hoàn – Đơn #{order.orderId}</div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Lý do <span className="text-red-500">*</span></label>
-            <textarea className="w-full border rounded px-3 py-2 min-h-[100px]" value={reason} onChange={(e)=>setReason(e.target.value)} placeholder="Mô tả vấn đề..." />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-2">Ảnh minh chứng</label>
-            <label className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded cursor-pointer">
-              <ImageIcon size={16}/> Chọn ảnh
-              <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles}/>
-            </label>
-            {files.length>0 && (
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {files.map((f,i)=>(
-                  <div key={i} className="border rounded p-2 flex items-center justify-between text-xs">
-                    <span className="truncate max-w-[150px]">{f.name}</span>
-                    <button onClick={()=>removeFile(i)} className="text-red-600 hover:underline">bỏ</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {busy && <div className="text-xs text-gray-500 mt-2">Đang tải ảnh lên Cloudinary...</div>}
-          </div>
-        </div>
-        <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded">Đóng</button>
-          <button disabled={busy || !reason.trim()} onClick={submit} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded inline-flex items-center gap-2">
-            <CheckCircle2 size={16}/> Gửi yêu cầu
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -157,100 +64,192 @@ const OrderDetail: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // modals
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [refundOpen, setRefundOpen] = useState(false);
-
-  // review modal (giữ logic cũ nếu có)
+  // modal đánh giá
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewTarget, setReviewTarget] = useState<{ orderItemId?: number; rating: number; comment: string; file?: File | null; }>({ rating: 5, comment: '' });
-
-  const userId = Number(localStorage.getItem('userId') || 15);
+  const [reviewTarget, setReviewTarget] = useState<{
+    orderItemId?: number;
+    rating: number;
+    comment: string;
+    file?: File | null;
+  }>({ rating: 5, comment: '' });
 
   const load = async () => {
     if (!orderId) return;
     try {
       setLoading(true);
       const data = await getOrderById(orderId);
+      if (!data) {
+        toast.error('Không tìm thấy đơn hàng.');
+        return;
+      }
       setOrder(data);
     } catch (e) {
       console.error(e);
-      toast.error('Không tải được chi tiết đơn.');
+      toast.error('Lỗi khi tải chi tiết đơn hàng.');
     } finally {
       setLoading(false);
     }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [orderId]);
 
-  const pay = async () => {
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
+  // được hủy khi: Pending | Processing và paymentStatus = Unpaid (UI-only)
+  const canCancel = !!(
+    order &&
+    (isPending(order.status) || isProcessing(order.status)) &&
+    isUnpaid(order.paymentStatus)
+  );
+
+  const payNow = async () => {
     if (!order) return;
     try {
-      const { payUrl } = await createMoMoPayment({ orderId: order.orderId, orderInfo: `Order #${order.orderId}`, payAll: true });
+      const { payUrl } = await createMoMoPayment({
+        orderId: order.orderId,
+        orderInfo: `Đơn hàng #${order.orderId}`,
+        payAll: true,
+      });
       window.location.href = payUrl;
-    } catch (e) { console.error(e); toast.error('Không tạo được giao dịch.'); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Không tạo được giao dịch MoMo.');
+    }
   };
 
-  const submitCancel = async ({ reason, note }: { reason: string; note: string }) => {
-    if (!order) return;
-    try {
-      await cancelOrder(order.orderId, userId, { cancelReason: reason || 'Khách hàng yêu cầu hủy', additionalNotes: note || '' });
-      toast.success('Đã gửi yêu cầu hủy đơn.');
-      setCancelOpen(false);
-      await load();
-    } catch (e) { console.error(e); toast.error('Hủy đơn thất bại.'); }
+  const reorder = () => {
+    if (!order?.orderItems?.length) return;
+    
+    // Transform order items to checkout format
+    const payload = order.orderItems.map((it) => ({
+      id: `oid_${it.orderItemId}`,
+      name: `Order Item #${it.orderItemId}`, // Will be enriched by checkout
+      price: it.unitPrice || 0,
+      image: '/TerraTechLogo.png', // Will be enriched by checkout
+      quantity: it.quantity || 1,
+      selected: true,
+      accessoryId: it.accessoryId ?? undefined,
+      variantId: it.terrariumVariantId ?? undefined,
+      comboId: it.comboId ?? undefined,
+    }));
+    
+    localStorage.setItem('checkoutItems', JSON.stringify(payload));
+    toast.success('Đã đưa sản phẩm vào thanh toán.');
+    navigate('/checkout');
   };
 
-  const submitRefund = async ({ reason, urls }: { reason: string; urls: string[] }) => {
-    if (!order) return;
+  const openReview = (item: any) => {
+    setReviewTarget({
+      orderItemId: item.orderItemId,
+      rating: 5,
+      comment: '',
+      file: null,
+    });
+    setReviewOpen(true);
+  };
+
+  const submitReview = async () => {
     try {
-      await requestRefund({ orderId: order.orderId, userId, reason, images: urls });
-      toast.success('Đã gửi yêu cầu hoàn.');
-      setRefundOpen(false);
-      await load();
-    } catch (e) { console.error(e); toast.error('Gửi yêu cầu hoàn thất bại.'); }
+      if (!reviewTarget.orderItemId) return;
+
+      // 1) Tạo feedback trước
+      const fb = await createFeedback({
+        orderItemId: reviewTarget.orderItemId,
+        rating: reviewTarget.rating,
+        comment: reviewTarget.comment || '',
+      });
+      const fid: number =
+        fb?.feedbackId ?? fb?.data?.feedbackId ?? fb?.id ?? fb?.data?.id;
+
+      // 2) Chờ 1 nhịp rồi mới upload ảnh (tránh 500 do BE chưa kịp tạo id)
+      if (fid && reviewTarget.file) {
+        await new Promise((r) => setTimeout(r, 400));
+        await uploadFeedbackImage(fid, reviewTarget.file);
+      }
+
+      toast.success('Đã gửi đánh giá!');
+      setReviewOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('Gửi đánh giá thất bại.');
+    }
   };
 
   const header = useMemo(() => {
-    const o = order;
-    if (!o) return null;
+    if (!order) return null;
     return (
-      <div className="bg-white rounded-lg shadow border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="space-y-1">
-          <div className="font-semibold text-gray-800">Đơn hàng #{o.orderId}</div>
-          <div className="text-sm text-gray-500">Ngày đặt: {o.orderDate ? new Date(o.orderDate).toLocaleString('vi-VN') : 'N/A'}</div>
-          <div className="text-sm">Tổng tiền: <span className="font-semibold">{money(o.totalAmount)}</span></div>
-          <div className="flex flex-wrap items-center gap-2 mt-1">
-            <span className={orderStatusChip(o.status)}>{orderStatusToVi(o.status)}</span>
-            {o.paymentStatus && <span className={paymentStatusChip(o.paymentStatus)}>{paymentStatusToVi(o.paymentStatus)}</span>}
+      <div className="bg-white rounded-lg shadow p-4 border">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-gray-800">Đơn hàng #{order.orderId}</div>
+            <div className="text-sm text-gray-500">
+              Ngày đặt: {order.orderDate ? new Date(order.orderDate).toLocaleString('vi-VN') : 'N/A'}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span
+              className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(order.status)}`}
+              title={String(order.status)}
+            >
+              {orderStatusToVi(order.status)}
+            </span>
+            <span
+              className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(order.paymentStatus)}`}
+              title={String(order.paymentStatus)}
+            >
+              {paymentStatusToVi(order.paymentStatus)}
+            </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => navigate('/orders')} className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded">Danh sách</button>
-          {!isCancelled(o.status) && (String(o.status).toLowerCase().includes('pending') || String(o.status).toLowerCase().includes('processing')) && (
-            <button onClick={() => setCancelOpen(true)} className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded">
-              <XCircle size={16} /> Hủy đơn
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-sm">
+          <div>
+            <div>Tổng tiền: <b>{money(order.totalAmount)}</b></div>
+            <div>Đặt cọc: <b>{money(order.deposit)}</b></div>
+          </div>
+          <div>
+            <div>Mã giao dịch: {order.transactionId || 'N/A'}</div>
+            <div>Phương thức: {order.paymentMethod || 'MoMo'}</div>
+          </div>
+          <div className="flex gap-2 sm:justify-end">
+            <button
+              onClick={() => toast.info('Hủy đơn: BE chưa cung cấp API. Sẽ bổ sung sau.')}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded border ${
+                canCancel
+                  ? 'bg-red-50 text-red-700 border-red-200'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+              }`}
+              disabled={!canCancel}
+              title="Chỉ hủy khi Pending/Processing và chưa thanh toán"
+            >
+              <XCircle size={16} />
+              Hủy đơn
             </button>
-          )}
-          {isCompleted(o.status) && (
-            <>
-              <button onClick={() => setReviewOpen(true)} className="inline-flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded">
-                <Star size={16}/> Đánh giá
+
+            {isUnpaid(order.paymentStatus) && (
+              <button
+                onClick={payNow}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              >
+                <Wallet size={16} />
+                Thanh toán
               </button>
-              <button onClick={() => setRefundOpen(true)} className="inline-flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded">
-                <RotateCcw size={16}/> Yêu cầu hoàn
-              </button>
-            </>
-          )}
-          {canPay(o) && (
-            <button onClick={pay} className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded">
-              <Wallet size={16}/> Thanh toán
+            )}
+
+            <button
+              onClick={reorder}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded"
+            >
+              <RotateCcw size={16} />
+              Đặt lại
             </button>
-          )}
+          </div>
         </div>
       </div>
     );
-  }, [order, navigate]);
+  }, [order]); // eslint-disable-line
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -266,34 +265,69 @@ const OrderDetail: React.FC = () => {
             {header}
 
             <div className="bg-white rounded-lg shadow border p-4">
-              <OrderItemsDisplay order={order} />
+              <div className="font-semibold mb-3">Sản phẩm</div>
+              
+              {/* Sử dụng OrderItemsDisplay component mới */}
+               <OrderItemsDisplay
+                order={order}
+                showActions={isCompleted(order.status)}
+                onReviewItem={(it) => openReview(it)}
+              />
             </div>
           </>
         )}
       </div>
 
-      {/* Modals */}
-      <CancelModal open={cancelOpen} order={order} onClose={() => setCancelOpen(false)} onSubmit={submitCancel} />
-      <RefundModal open={refundOpen} order={order} onClose={() => setRefundOpen(false)} onSubmit={submitRefund} />
-
-      {/* Modal đánh giá (giữ nếu bạn đang dùng) */}
+      {/* Modal đánh giá – dùng StarRating & chờ 1 nhịp trước khi upload ảnh */}
       {reviewOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
             <div className="px-5 py-3 border-b font-semibold">Đánh giá sản phẩm</div>
             <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Điểm (1–5)</label>
-                <StarRating value={5} onChange={()=>{}} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Điểm (1–5)</label>
+                  <StarRating
+                    value={reviewTarget.rating}
+                    onChange={(n) => setReviewTarget((s) => ({ ...s, rating: n }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Ảnh (tùy chọn)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setReviewTarget((s) => ({ ...s, file: e.target.files?.[0] ?? null }))
+                    }
+                  />
+                </div>
               </div>
+
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Nhận xét</label>
-                <textarea className="w-full border rounded px-3 py-2 min-h-[100px]" placeholder="Cảm nhận của bạn..." />
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  rows={4}
+                  value={reviewTarget.comment}
+                  onChange={(e) => setReviewTarget((s) => ({ ...s, comment: e.target.value }))}
+                />
               </div>
             </div>
-            <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
-              <button onClick={()=>setReviewOpen(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded">Đóng</button>
-              <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded">Gửi đánh giá</button>
+
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setReviewOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={submitReview}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              >
+                Gửi đánh giá
+              </button>
             </div>
           </div>
         </div>
@@ -303,3 +337,4 @@ const OrderDetail: React.FC = () => {
 };
 
 export default OrderDetail;
+  

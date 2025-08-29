@@ -1,67 +1,46 @@
 // src/api/refund.ts
+import { RefundRequest, RefundResponse } from '@/types/refund';
 import axios from 'axios';
+
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authHeader = () => {
   const token = localStorage.getItem('authToken');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
+  return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-/**
- * Upload 1 ảnh lên Cloudinary và trả về secure_url
- * - Sử dụng preset & cloud name bạn cung cấp
- */
+/** Upload 1 ảnh lên Cloudinary */
 export const uploadToCloudinary = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('upload_preset', 'TerraTech'); // <- preset bạn đưa
+  formData.append('upload_preset', 'TerraTech');
 
   const res = await fetch('https://api.cloudinary.com/v1_1/dsp6pjeey/upload', {
     method: 'POST',
     body: formData,
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`CLOUDINARY_UPLOAD_FAILED: ${res.status} ${text}`);
-  }
-
+  if (!res.ok) throw new Error('CLOUDINARY_UPLOAD_FAILED');
   const data = await res.json();
-  const url: string | undefined = data?.secure_url || data?.url;
-  if (!url) {
-    throw new Error('CLOUDINARY_NO_URL');
-  }
-  return url;
+  return data?.secure_url || data?.url;
 };
 
-/**
- * Gửi yêu cầu hoàn tiền cho 1 đơn hàng
- * - API mới nhất: POST /Order/{id}/Refund?userId=...
- * - Body: { orderId, reason, images[] }
- */
-export const requestRefund = async ({
-  orderId, userId, reason, images = [],
-}: { orderId: number; userId: number; reason: string; images?: string[]; }) => {
-  // chỉ giữ lại những URL hợp lệ (Cloudinary)
-  const urls = (images || []).filter(u => /^https?:\/\/.*cloudinary\.com\//i.test(u));
+/** Gửi yêu cầu hoàn tiền */
+export const requestRefund = async (
+  req: RefundRequest
+): Promise<RefundResponse> => {
+  const { orderId, userId, reason, images = [] } = req;
+
+  // chỉ giữ URL hợp lệ
+  const urls = (images || []).filter((u) =>
+    /^https?:\/\/.*cloudinary\.com\//i.test(u)
+  );
+
   const body = { orderId, reason: reason.trim(), images: urls };
   const url = `${BASE_URL}/Order/${orderId}/Refund?userId=${userId}`;
 
-  // TRACE để debug 400
-  // eslint-disable-next-line no-console
   console.log('[Refund] POST', url, body);
-
-  try {
-    const res = await axios.post(url, body, authHeader());
-    return res.data;
-  } catch (err: any) {
-    // eslint-disable-next-line no-console
-    console.error('[Refund][400?] url/body/res', url, body, err?.response?.status, err?.response?.data);
-    throw err;
-  }
+  const res = await axios.post(url, body, authHeader());
+  return res.data;
 };

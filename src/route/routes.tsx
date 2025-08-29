@@ -128,7 +128,7 @@ const AppRoutes = () => {
         <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
         <Route path="verify-email" element={<Suspense fallback={<Loading />}><VerifyEmail /></Suspense>} />
         <Route path="combo/:id" element={<Suspense fallback={<Loading />}><ComboDetail /></Suspense>} />
-        <Route path="membership-success" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
+        <Route path="membership-success/payment-success" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
