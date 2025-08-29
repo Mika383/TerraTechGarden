@@ -34,6 +34,7 @@ import TerrariumRequestList from '@/components/staff/TerrariumRequestList';
 import TerrariumCustomizePage from '@/components/staff/TerrariumCustomizePage';
 import TerrariumRequestAll from '@/components/staff/TerrariumRequestAll';
 import VerifyEmail from '@/pages/Customer/VerifyEmail';
+import RefundRequestList from '@/components/staff/RefundRequestList';
 import ComboDetail from '@/pages/Customer/ComboDetail';
 import MembershipSuccess from '@/pages/Customer/MembershipSuccess';
 import WalletPage from '@/pages/Customer/WalletPage';
@@ -159,6 +160,7 @@ const AppRoutes = () => {
     <Route path="order/:id/detail" element={<Suspense fallback={<Loading />}><OrderDetailStaff /></Suspense>} />
     <Route path="support/messages" element={<Suspense fallback={<Loading />}><ChatWithCustomer /></Suspense>} />
     <Route path="support/requests" element={<Suspense fallback={<Loading />}><TerrariumRequestList /></Suspense>} />
+    <Route path="refund/requests" element={<Suspense fallback={<Loading />}><RefundRequestList /></Suspense>} />
     <Route path="terrarium-requests" element={<Suspense fallback={<Loading />}><TerrariumRequestAll /></Suspense>} />
     <Route path="terrarium-customize/:id" element={<Suspense fallback={<Loading />}><TerrariumCustomizePage /></Suspense>} />
   </Route>
@@ -196,10 +198,10 @@ const AppRoutes = () => {
       </Route>
       <Route path="admin" element={<PrivateRoute allowedRoles={['Admin']} />}>
         <Route element={<Suspense fallback={<Loading />}><AdminLayout /></Suspense>}>
-          <Route index element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
-          <Route path="dashboard" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route index element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
+          <Route path="dashboard" element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
           <Route path="shift-management" element={<Suspense fallback={<Loading />}><ShiftManagement /></Suspense>} />
-          <Route path="overview" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="overview" element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
           <Route path="/admin/accounts" element={<AccountManagement />} />
           <Route path="orders" element={<Suspense fallback={<Loading />}><OrderList /></Suspense>} />
           <Route path="orders/preparing" element={<Suspense fallback={<Loading />}><PreparingOrders /></Suspense>} />

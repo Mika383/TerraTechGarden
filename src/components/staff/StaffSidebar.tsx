@@ -62,6 +62,11 @@ const StaffSidebar: React.FC = () => {
           icon: MessageSquare,
           path: '/staff/support/requests',
         },
+        {
+          title: 'Yêu cầu Hoàn tiền',
+          icon: MessageSquare,
+          path: '/staff/refund/requests',
+        },
       ],
     },
   ];

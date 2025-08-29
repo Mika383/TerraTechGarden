@@ -95,21 +95,6 @@ const AdminSidebar: React.FC = () => {
         </li>
 
         
-       
-
-        <li
-          className={`flex items-center space-x-3 p-2 rounded-lg transition-colors cursor-pointer ${
-            isActive('/admin/statistics')
-              ? 'bg-blue-100 text-blue-600 font-semibold'
-              : 'text-gray-700 hover:text-blue-600 hover:bg-blue-100'
-          }`}
-          onClick={() => navigate('/admin/statistics')}
-        >
-          <ChartBarIcon className="h-6 w-6" />
-          <span>Báo cáo & Thống kê</span>
-        </li>
-
-        
 
         {/* Bài viết: vẫn dropdown như cũ */}
         <li
