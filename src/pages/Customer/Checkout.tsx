@@ -1,5 +1,6 @@
 // src/pages/Customer/Checkout.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import AddressSelector from '@/components/customer/Layout/AddressSelector';
@@ -17,9 +18,10 @@ import { getAccessoryById } from '@/api/accessory';
 import { getComboById } from '@/api/combo';
 import type { Voucher } from '@/types/order';
 import type { CartResponseNew, CartBundle, RawCartEntry } from '@/types/cart';
+import { useAuth } from '@/hooks/useAuth'; // ✅ dùng userId từ useAuth
 
 // ✅ placeholder logo nền trắng
-const FALLBACK_IMG = '/public/TerraTechLogo.png';
+const FALLBACK_IMG = '/TerraTechLogo.png';
 
 // ===== Helpers & currency =====
 const currency = (v: number) => (v || 0).toLocaleString('vi-VN') + ' VND';
@@ -29,28 +31,6 @@ const keyOfCombo = (e: RawCartEntry) => `combo_${e.cartItemId}`;
 const unitPriceOf = (e: RawCartEntry) => {
   const qty = e.totalCartQuantity || 0;
   return qty > 0 ? e.totalCartPrice / qty : 0;
-};
-
-// ===== Simple item for local fallback =====
-interface SimpleCartItem {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  quantity: number;
-  selected: boolean;
-  accessoryId?: number | null;
-  variantId?: number | null;
-  comboId?: number | null; // để hiển thị trong Summary khi user chọn combo từ Cart
-}
-
-// ===== Order payload item (API mới) =====
-type NewOrderItemPayload = {
-  itemType: 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
-  accessoryId: number;
-  terrariumVariantId: number;
-  accessoryQuantity: number;
-  terrariumVariantQuantity: number;
 };
 
 // ===== Small logger (gói gọn, dễ tắt/bật) =====
@@ -76,8 +56,45 @@ const log = {
   }
 };
 
+// ===== Thêm API wrapper gửi thông báo web (giữ ngay trong file theo yêu cầu nhanh gọn) =====
+const sendWebNotification = async (userId: number, title: string, description: string) => {
+  // API: https://terarium.shop/api/Notification/web/create
+  // Nếu bạn muốn tách ra /api/notification.ts mình có thể tách ở bước sau.
+  await axios.post('https://terarium.shop/api/Notification/web/create', {
+    userId,
+    title,
+    description,
+    broadcastToAll: false
+  });
+};
+
+// ===== Order payload item (API mới) =====
+// ✅ BỔ SUNG terrariumId để truyền cho BUNDLE_ACCESSORY
+type NewOrderItemPayload = {
+  itemType: 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
+  terrariumId?: number;             // <-- thêm
+  accessoryId: number;
+  terrariumVariantId: number;
+  accessoryQuantity: number;
+  terrariumVariantQuantity: number;
+};
+
+// ===== Simple item for local fallback =====
+interface SimpleCartItem {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  quantity: number;
+  selected: boolean;
+  accessoryId?: number | null;
+  variantId?: number | null;
+  comboId?: number | null; // để hiển thị trong Summary khi user chọn combo từ Cart
+}
+
 const Checkout: React.FC = () => {
   const navigate = useNavigate();
+  const { userId } = useAuth(); // ✅ lấy userId từ hook
 
   // --- State chính ---
   const [address, setAddress] = useState<Address | null>(null);
@@ -118,9 +135,6 @@ const Checkout: React.FC = () => {
   // Fallback local + Summary toggle
   const [localSimple, setLocalSimple] = useState<SimpleCartItem[]>([]);
   const [summaryItemsOpen, setSummaryItemsOpen] = useState(false); // ✅ mặc định đóng
-
-  // ✅ chỉ khai báo 1 lần (fix TS2451)
-  const userId = Number(localStorage.getItem('userId') || 0);
 
   // Load selected & cart
   useEffect(() => {
@@ -460,6 +474,7 @@ const Checkout: React.FC = () => {
   };
 
   // ===== Dựng items cho API Order MỚI, giữ semantics bundle/single (chưa gửi combo) =====
+  // ✅ BỔ SUNG terrariumId cho BUNDLE_ACCESSORY
   const buildOrderItems = (): NewOrderItemPayload[] => {
     const items: NewOrderItemPayload[] = [];
 
@@ -469,6 +484,7 @@ const Checkout: React.FC = () => {
         for (const e of b.bundleAccessories) {
           items.push({
             itemType: 'BUNDLE_ACCESSORY',
+            terrariumId: e.terrariumId ?? b.mainItem.terrariumId ?? 0, // ✅ thêm terrariumId
             accessoryId: e.accessoryId ?? 0,
             terrariumVariantId: 0,
             accessoryQuantity: e.totalCartQuantity ?? 0,
@@ -476,6 +492,7 @@ const Checkout: React.FC = () => {
           });
         }
       }
+
 
       // 2) Singles & main items
       for (const e of mergedSingles) {
@@ -624,6 +641,10 @@ const Checkout: React.FC = () => {
       toast.error('Giỏ hàng trống!');
       return;
     }
+    if (!userId) {
+      toast.error('Bạn cần đăng nhập để đặt hàng!');
+      return;
+    }
 
     try {
       // 1) Base items (không gồm combo)
@@ -673,6 +694,17 @@ const Checkout: React.FC = () => {
       if (!orderId) {
         toast.error('Tạo đơn hàng thất bại!');
         return;
+      }
+
+      // ✅ Gửi thông báo web sau khi tạo đơn thành công (KHÔNG chặn luồng nếu lỗi)
+      try {
+        await sendWebNotification(
+          userId,
+          `Đặt hàng thành công #${orderId}`,
+          `Đơn hàng #${orderId} đã được tạo. Tổng tiền: ${totalBeforeWallet.toLocaleString('vi-VN')} VND`
+        );
+      } catch (e) {
+        console.warn('[Checkout] Gửi thông báo web thất bại:', e);
       }
 
       // 4) Cleanup cart
@@ -847,7 +879,6 @@ const Checkout: React.FC = () => {
                         if (it.type === 'accessory' && it.accessoryId) {
                           navigate(`/accessory/${it.accessoryId}`);
                         } else if (it.type === 'terrarium') {
-                          // Trong Cart mình đã set id = terrariumId khi build meta
                           navigate(`/terrarium/${it.id ?? it.terrariumId ?? ''}`);
                         }
                       }}
@@ -1070,7 +1101,7 @@ const Checkout: React.FC = () => {
             {/* Sản phẩm — hiển thị giống Cart + COMBO */}
             {ProductSectionAPI}
 
-            <AddressSelector userId={userId} onSelect={(addr) => setAddress(addr)} />
+            <AddressSelector userId={userId || 0} onSelect={(addr) => setAddress(addr)} />
 
             {/* Loại thanh toán */}
             <div className="bg-white p-4 sm:p-5 rounded-lg shadow">

@@ -18,9 +18,18 @@ const currency = (v: number) => (v || 0).toLocaleString('vi-VN') + ' VND';
 const keyOfEntry = (e: RawCartEntry) => `ci_${e.cartItemId}`;
 const keyOfBundle = (b: CartBundle) => `b_${b.mainItem.terrariumId ?? 'x'}`;
 const keyOfCombo = (e: RawCartEntry) => `combo_${e.cartItemId}`;
+
+// 🔧 LẤY GIÁ THEO API: ưu tiên item[0].price (đơn giá do BE trả)
+// Fallback: totalCartPrice / totalCartQuantity
 const unitPriceOf = (e: RawCartEntry) => {
+  const explicit =
+    Array.isArray(e.item) && e.item[0] && typeof e.item[0].price === 'number'
+      ? e.item[0].price
+      : undefined;
+  if (typeof explicit === 'number') return explicit;
+
   const qty = e.totalCartQuantity || 0;
-  return qty > 0 ? e.totalCartPrice / qty : 0;
+  return qty > 0 ? (e.totalCartPrice || 0) / qty : 0;
 };
 
 const Cart: React.FC = () => {
@@ -507,9 +516,9 @@ const Cart: React.FC = () => {
     }
 
     return list;
-  }, [allEntries, selected, terrariumName, terrariumThumb, accessoryName, accessoryThumb, comboMeta, comboItems, mergedSingles, bundlesToShow, variantToTerrariumMap]);
+  }, [mergedSingles, bundlesToShow, comboItems, selected, terrariumName, terrariumThumb, accessoryName, accessoryThumb, comboMeta, variantToTerrariumMap]);
 
-  // Subtotal
+  // Subtotal (đúng theo API): cộng totalCartPrice của các dòng đã chọn; không cộng lại tổng bộ
   const subtotal = useMemo(() => {
     let total = 0;
     
@@ -528,7 +537,7 @@ const Cart: React.FC = () => {
     }
     
     return total;
-  }, [allEntries, selected, comboItems, mergedSingles, bundlesToShow]);
+  }, [mergedSingles, bundlesToShow, comboItems, selected]);
 
   const goCheckout = () => {
     if (!selectedItemsForCheckout.length) {
@@ -808,7 +817,9 @@ const Cart: React.FC = () => {
 
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-gray-800 truncate">{aName}</div>
-                            <div className="text-sm text-gray-600">{currency(unitPriceOf(e))}</div>
+                            <div className="text-sm text-gray-600">
+                              {currency(unitPriceOf(e))} × {e.totalCartQuantity ?? 1}
+                            </div>
                           </div>
 
                           {e.accessoryId && (

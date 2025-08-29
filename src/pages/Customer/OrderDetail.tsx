@@ -4,10 +4,9 @@ import { toast } from 'react-toastify';
 import { Wallet, XCircle, RotateCcw, Star } from 'lucide-react';
 
 import { getOrderById, createMoMoPayment } from '@/api/order';
-import { getAccessoryById } from '@/api/accessory';
-import { getTerrariumById, getTerrariumVariantById } from '@/api/terrarium';
+import OrderItemsDisplay from '@/components/OrderItemsDisplay';
 
-import type { Order, OrderItem } from '@/types/order';
+import type { Order } from '@/types/order';
 import {
   orderStatusToVi,
   paymentStatusToVi,
@@ -21,7 +20,6 @@ import {
 
 import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
 
-const FALLBACK_IMG = '/TerraTechLogo.png';
 const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
 
 /** Chọn sao 1–5 */
@@ -58,25 +56,12 @@ const StarRating: React.FC<{
   );
 };
 
-type EnrichedItem = {
-  orderItemId: number;
-  name: string;
-  image: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  accessoryId?: number | null;
-  terrariumVariantId?: number | null;
-  terrariumId?: number | null;
-};
-
 const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const orderId = Number(id);
   const navigate = useNavigate();
 
   const [order, setOrder] = useState<Order | null>(null);
-  const [items, setItems] = useState<EnrichedItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   // modal đánh giá
@@ -98,44 +83,6 @@ const OrderDetail: React.FC = () => {
         return;
       }
       setOrder(data);
-
-      const enriched: EnrichedItem[] = await Promise.all(
-        (data.orderItems || []).map(async (it: OrderItem) => {
-          let name = 'Sản phẩm';
-          let image = FALLBACK_IMG;
-          let terrariumId: number | null = null;
-
-          if (it.terrariumVariantId) {
-            const variant = await getTerrariumVariantById(Number(it.terrariumVariantId));
-            name = variant?.variantName || name;
-            image = (variant?.urlImage as string) || image;
-            terrariumId = variant?.terrariumId ?? null;
-
-            if (!variant?.urlImage && terrariumId) {
-              const t = await getTerrariumById(terrariumId);
-              image = t?.terrariumImages?.[0]?.imageUrl || image;
-            }
-          } else if (it.accessoryId) {
-            const acc = await getAccessoryById(Number(it.accessoryId));
-            name = acc?.name || name;
-            image = acc?.accessoryImages?.[0]?.imageUrl || image;
-          }
-
-          return {
-            orderItemId: it.orderItemId,
-            name,
-            image: image || FALLBACK_IMG,
-            quantity: it.quantity ?? 0,
-            unitPrice: it.unitPrice ?? 0,
-            totalPrice: it.totalPrice ?? (it.quantity ?? 0) * (it.unitPrice ?? 0),
-            accessoryId: it.accessoryId ?? null,
-            terrariumVariantId: it.terrariumVariantId ?? null,
-            terrariumId,
-          };
-        })
-      );
-
-      setItems(enriched);
     } catch (e) {
       console.error(e);
       toast.error('Lỗi khi tải chi tiết đơn hàng.');
@@ -172,25 +119,29 @@ const OrderDetail: React.FC = () => {
   };
 
   const reorder = () => {
-    if (!items.length) return;
-    const payload = items.map((it) => ({
+    if (!order?.orderItems?.length) return;
+    
+    // Transform order items to checkout format
+    const payload = order.orderItems.map((it) => ({
       id: `oid_${it.orderItemId}`,
-      name: it.name,
-      price: it.unitPrice,
-      image: it.image || FALLBACK_IMG,
-      quantity: it.quantity,
+      name: `Order Item #${it.orderItemId}`, // Will be enriched by checkout
+      price: it.unitPrice || 0,
+      image: '/TerraTechLogo.png', // Will be enriched by checkout
+      quantity: it.quantity || 1,
       selected: true,
       accessoryId: it.accessoryId ?? undefined,
       variantId: it.terrariumVariantId ?? undefined,
+      comboId: it.comboId ?? undefined,
     }));
+    
     localStorage.setItem('checkoutItems', JSON.stringify(payload));
     toast.success('Đã đưa sản phẩm vào thanh toán.');
     navigate('/checkout');
   };
 
-  const openReview = (it: EnrichedItem) => {
+  const openReview = (item: any) => {
     setReviewTarget({
-      orderItemId: it.orderItemId,
+      orderItemId: item.orderItemId,
       rating: 5,
       comment: '',
       file: null,
@@ -315,63 +266,13 @@ const OrderDetail: React.FC = () => {
 
             <div className="bg-white rounded-lg shadow border p-4">
               <div className="font-semibold mb-3">Sản phẩm</div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left">
-                      <th className="p-2 border w-10">#</th>
-                      <th className="p-2 border">Sản phẩm</th>
-                      <th className="p-2 border w-16">SL</th>
-                      <th className="p-2 border w-36">Đơn giá</th>
-                      <th className="p-2 border w-36">Thành tiền</th>
-                      <th className="p-2 border w-40">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((it, idx) => (
-                      <tr key={it.orderItemId} className="align-top">
-                        <td className="p-2 border">{idx + 1}</td>
-                        <td className="p-2 border">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={it.image || FALLBACK_IMG}
-                              alt={it.name}
-                              className="w-12 h-12 object-cover rounded border bg-white"
-                              onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                            />
-                            <button
-                              className="text-left hover:underline text-green-700"
-                              onClick={() =>
-                                it.accessoryId
-                                  ? navigate(`/accessory/${it.accessoryId}`)
-                                  : it.terrariumId
-                                  ? navigate(`/terrarium/${it.terrariumId}`)
-                                  : undefined
-                              }
-                            >
-                              {it.name}
-                            </button>
-                          </div>
-                        </td>
-                        <td className="p-2 border">{it.quantity}</td>
-                        <td className="p-2 border">{money(it.unitPrice)}</td>
-                        <td className="p-2 border">{money(it.totalPrice)}</td>
-                        <td className="p-2 border">
-                          {order && isCompleted(order.status) && (
-                            <button
-                              onClick={() => openReview(it)}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded"
-                            >
-                              <Star size={14} />
-                              Đánh giá
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              
+              {/* Sử dụng OrderItemsDisplay component mới */}
+               <OrderItemsDisplay
+                order={order}
+                showActions={isCompleted(order.status)}
+                onReviewItem={(it) => openReview(it)}
+              />
             </div>
           </>
         )}

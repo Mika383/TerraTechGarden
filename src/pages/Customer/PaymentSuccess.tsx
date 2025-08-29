@@ -4,10 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { getOrderById } from "@/api/order";
-import { getAccessoryById } from "@/api/accessory";
-import { getTerrariumVariantById, getTerrariumById } from "@/api/terrarium";
+import OrderItemsDisplay from "@/components/OrderItemsDisplay";
 
-const FALLBACK_IMG = "/TerraTechLogo.png"; // ✅ logo nền trắng
+const FALLBACK_IMG = "/TerraTechLogo.png";
 
 // ---- MoMo query params ----
 interface MoMoParams {
@@ -22,16 +21,6 @@ interface MoMoParams {
   resultCode?: string;   // "0" => thành công
   responseTime?: string; // timestamp ms
 }
-
-// Dữ liệu hiển thị sau khi "enrich" từng item
-type EnrichedItem = {
-  orderItemId: number;
-  name: string;
-  image: string;   // luôn string
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-};
 
 // ---- Helpers ----
 const money = (n?: number) => (n ?? 0).toLocaleString("vi-VN") + " VND";
@@ -73,7 +62,7 @@ const extractNumericId = (raw: string | undefined): number | null => {
 const PaymentInfoMoMo: React.FC<{ params: MoMoParams }> = ({ params }) => {
   const success = isMoMoSuccess(params);
   const amount = params.amount ? Number(params.amount) : 0;
-  const showResultCode = !success && !!params.resultCode; // ❗ chỉ hiện khi KHÔNG thành công
+  const showResultCode = !success && !!params.resultCode; // ● chỉ hiện khi KHÔNG thành công
   const rawId = rawOrderIdFromParams(params as any);
   const displayOrderId = rawId || (extractNumericId(rawId) ?? "N/A");
 
@@ -108,44 +97,7 @@ const PaymentInfoMoMo: React.FC<{ params: MoMoParams }> = ({ params }) => {
   );
 };
 
-const OrderTable: React.FC<{ items: EnrichedItem[] }> = ({ items }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full text-sm border">
-      <thead className="bg-gray-50">
-        <tr className="text-left">
-          <th className="p-2 border w-10">#</th>
-          <th className="p-2 border">Sản phẩm</th>
-          <th className="p-2 border w-16">SL</th>
-          <th className="p-2 border w-40">Đơn giá</th>
-          <th className="p-2 border w-40">Thành tiền</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((it, idx) => (
-          <tr key={it.orderItemId}>
-            <td className="p-2 border">{idx + 1}</td>
-            <td className="p-2 border">
-              <div className="flex items-center gap-3">
-                <img
-                  src={it.image || FALLBACK_IMG}
-                  alt={it.name}
-                  className="w-10 h-10 object-cover rounded border bg-white"
-                  onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                />
-                <span className="font-medium">{it.name}</span>
-              </div>
-            </td>
-            <td className="p-2 border">{it.quantity}</td>
-            <td className="p-2 border">{money(it.unitPrice)}</td>
-            <td className="p-2 border">{money(it.totalPrice)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
-
-const OrderDetails: React.FC<{ order: any; enriched: EnrichedItem[] }> = ({ order, enriched }) => (
+const OrderDetails: React.FC<{ order: any }> = ({ order }) => (
   <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
     <h2 className="text-xl font-semibold mb-4 text-gray-800">Chi tiết đơn hàng</h2>
 
@@ -164,7 +116,9 @@ const OrderDetails: React.FC<{ order: any; enriched: EnrichedItem[] }> = ({ orde
     </div>
 
     <p className="font-semibold mb-2">Sản phẩm:</p>
-    <OrderTable items={enriched} />
+    
+    {/* Sử dụng OrderItemsDisplay component mới */}
+    <OrderItemsDisplay order={order} showActions={false} />
   </div>
 );
 
@@ -175,7 +129,6 @@ const PaymentSuccess: React.FC = () => {
 
   const [params, setParams] = useState<MoMoParams>({});
   const [order, setOrder] = useState<any>(null);
-  const [enrichedItems, setEnrichedItems] = useState<EnrichedItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
@@ -203,7 +156,7 @@ const PaymentSuccess: React.FC = () => {
     setParams(p as MoMoParams);
   }, [location.search]);
 
-  // lấy đơn hàng & enrich item khi thanh toán thành công
+  // lấy đơn hàng khi thanh toán thành công
   useEffect(() => {
     const fetchOrder = async () => {
       const rawId = rawOrderIdFromParams(params as any);
@@ -221,42 +174,6 @@ const PaymentSuccess: React.FC = () => {
           return;
         }
         setOrder(od);
-
-        const items: EnrichedItem[] = await Promise.all(
-          (od.orderItems || []).map(async (it: any): Promise<EnrichedItem> => {
-            let name = "Sản phẩm";
-            let image = FALLBACK_IMG;
-
-            if (it.terrariumVariantId) {
-              const variant = await getTerrariumVariantById(it.terrariumVariantId);
-              if (variant) {
-                name = variant.variantName || name;
-                image = (variant.urlImage as string) || image;
-                if (!variant.urlImage && variant.terrariumId) {
-                  const t = await getTerrariumById(variant.terrariumId);
-                  image = t?.terrariumImages?.[0]?.imageUrl || image;
-                }
-              }
-            } else if (it.accessoryId) {
-              const acc = await getAccessoryById(it.accessoryId);
-              if (acc) {
-                name = acc.name || name;
-                image = acc.accessoryImages?.[0]?.imageUrl || image;
-              }
-            }
-
-            return {
-              orderItemId: it.orderItemId,
-              name,
-              image: image || FALLBACK_IMG,
-              quantity: it.quantity ?? 0,
-              unitPrice: it.unitPrice ?? 0,
-              totalPrice: it.totalPrice ?? (it.quantity ?? 0) * (it.unitPrice ?? 0),
-            };
-          })
-        );
-
-        setEnrichedItems(items);
       } catch (e) {
         setOrderError("Lỗi khi lấy thông tin đơn hàng!");
         toast.error("Lỗi khi lấy thông tin đơn hàng!");
@@ -272,7 +189,7 @@ const PaymentSuccess: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl w-full space-y-8 bg-white p-8 rounded-xl shadow-2xl border-4 border-gray-300">
+      <div className="max-w-4xl w-full space-y-8 bg-white p-8 rounded-xl shadow-2xl border-4 border-gray-300">
         <div className="text-center">
           <div className="flex justify-center mb-4">
             {success ? (
@@ -298,7 +215,9 @@ const PaymentSuccess: React.FC = () => {
         ) : (
           <>
             <PaymentInfoMoMo params={params} />
-            {order && <OrderDetails order={order} enriched={enrichedItems} />}
+            {order && (
+              <OrderItemsDisplay order={order} />
+            )}
             {orderError && (
               <p className="text-center text-red-500 font-semibold">{orderError}</p>
             )}

@@ -1,5 +1,4 @@
 // src/pages/admin/MembershipManagement.tsx
-// ... giữ nguyên các import ở bản trước của mình
 import React, { useEffect, useState } from 'react';
 import { Button, Modal, Form, Input, InputNumber, Switch, Row, Col, message, DatePicker } from 'antd';
 import dayjs from 'dayjs';
@@ -19,10 +18,12 @@ const MembershipManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const [openCU, setOpenCU] = useState(false);
+  const [submittingCU, setSubmittingCU] = useState(false);
   const [editing, setEditing] = useState<MembershipPackage | null>(null);
   const [form] = Form.useForm<CreateMembershipPackageRequest & UpdateMembershipPackageRequest>();
 
   const [openGrant, setOpenGrant] = useState(false);
+  const [grantSubmitting, setGrantSubmitting] = useState(false);
   const [grantForm] = Form.useForm<{ userId: number; startDate: any; price?: number; durationDays: number }>();
   const [grantTarget, setGrantTarget] = useState<MembershipPackage | null>(null);
 
@@ -37,13 +38,15 @@ const MembershipManagement: React.FC = () => {
       if (e?.response?.status === 401) {
         message.error('Hết phiên. Vui lòng đăng nhập lại.');
         navigate('/login');
-      } else message.error('Không tải được danh sách gói.');
+      } else message.error(e?.message || 'Không tải được danh sách gói.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    fetchAll();
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -52,7 +55,7 @@ const MembershipManagement: React.FC = () => {
     form.setFieldsValue({
       type: '1Month',
       durationDays: 30,
-      price: 0,
+      price: 100000, // nên > 0 để tránh 400
       description: '',
       isActive: true,
     });
@@ -73,23 +76,53 @@ const MembershipManagement: React.FC = () => {
   const submitCU = async () => {
     try {
       const values = await form.validateFields();
+      // validate nhẹ phía FE để tránh round-trip lỗi nhanh
+      if ((values.durationDays ?? 0) < 1) return message.error('Số ngày phải >= 1');
+      if ((values.price ?? 0) < 1) return message.error('Giá phải > 0');
+
+      setSubmittingCU(true);
+
       if (editing) {
+        // Optimistic update
+        const prev = [...list];
+        const idx = prev.findIndex((x) => x.id === editing.id);
+        if (idx !== -1) {
+          prev[idx] = { ...prev[idx], ...values } as MembershipPackage;
+          setList(prev);
+        }
+
         await updateMembershipPackage(editing.id, values as UpdateMembershipPackageRequest);
         message.success('Đã cập nhật gói.');
       } else {
-        await createMembershipPackage(values as CreateMembershipPackageRequest);
+        // Tạo mới
+        const created = await createMembershipPackage(values as CreateMembershipPackageRequest);
         message.success('Đã tạo gói mới.');
+        // Optimistic insert nếu API trả object; fallback nếu không có id
+        if (created && typeof created === 'object') {
+          setList((prev) => [created as MembershipPackage, ...prev]);
+        } else {
+          // nếu BE không trả object mới, vẫn refetch dưới
+        }
       }
+
+      // Đóng modal NGAY để phản hồi UI rõ ràng
       setOpenCU(false);
       setEditing(null);
-      fetchAll();
+      form.resetFields();
+
+      // Đồng bộ lại list từ server (đợi xong để chắc chắn)
+      await fetchAll();
     } catch (e: any) {
       if (e?.response?.status === 401) {
         message.error('Cần đăng nhập.');
         navigate('/login');
-      } else if (!e?.errorFields) {
-        message.error('Thao tác thất bại.');
+      } else if (e?.errorFields) {
+        // lỗi form validation antd — antd tự highlight field
+      } else {
+        message.error(e?.message || 'Thao tác thất bại.');
       }
+    } finally {
+      setSubmittingCU(false);
     }
   };
 
@@ -97,12 +130,14 @@ const MembershipManagement: React.FC = () => {
     try {
       await deleteMembershipPackage(p.id);
       message.success('Đã xoá gói.');
-      fetchAll();
+      // Optimistic remove
+      setList((prev) => prev.filter((x) => x.id !== p.id));
+      await fetchAll();
     } catch (e: any) {
       if (e?.response?.status === 401) {
         message.error('Cần đăng nhập.');
         navigate('/login');
-      } else message.error('Xoá thất bại.');
+      } else message.error(e?.message || 'Xoá thất bại.');
     }
   };
 
@@ -121,6 +156,7 @@ const MembershipManagement: React.FC = () => {
     try {
       const v = await grantForm.validateFields();
       if (!grantTarget) return;
+      setGrantSubmitting(true);
       await grantMembershipToUser({
         userId: Number(v.userId),
         packageId: grantTarget.id,
@@ -132,13 +168,18 @@ const MembershipManagement: React.FC = () => {
       message.success('Đã cấp gói cho người dùng.');
       setOpenGrant(false);
       setGrantTarget(null);
+      grantForm.resetFields();
+      // không bắt buộc refetch list gói khi grant, nhưng vẫn gọi cho chắc
+      await fetchAll();
     } catch (e: any) {
       if (e?.response?.status === 401) {
         message.error('Cần đăng nhập.');
         navigate('/login');
       } else if (!e?.errorFields) {
-        message.error('Cấp gói thất bại.');
+        message.error(e?.message || 'Cấp gói thất bại.');
       }
+    } finally {
+      setGrantSubmitting(false);
     }
   };
 
@@ -159,7 +200,7 @@ const MembershipManagement: React.FC = () => {
               pack={p}
               onEdit={openEdit}
               onGrant={openGrantModal}
-              onDelete={onDelete}     // ✅ Xoá nằm trong card, không còn nút thứ 2
+              onDelete={onDelete}
             />
           </Col>
         ))}
@@ -173,6 +214,8 @@ const MembershipManagement: React.FC = () => {
         onCancel={() => { setOpenCU(false); setEditing(null); }}
         okText={editing ? 'Lưu thay đổi' : 'Tạo mới'}
         destroyOnClose
+        confirmLoading={submittingCU}                 // ✅ loading nút OK
+        afterClose={() => form.resetFields()}         // ✅ sạch form sau khi đóng
       >
         <Form form={form} layout="vertical">
           <Form.Item name="type" label="Loại gói" rules={[{ required: true, message: 'Nhập loại gói' }]}>
@@ -183,7 +226,7 @@ const MembershipManagement: React.FC = () => {
               <InputNumber min={1} className="w-full" />
             </Form.Item>
             <Form.Item name="price" label="Giá (VND)" rules={[{ required: true }]}>
-              <InputNumber min={0} className="w-full" />
+              <InputNumber min={1} className="w-full" />
             </Form.Item>
           </div>
           <Form.Item name="description" label="Mô tả">
@@ -203,6 +246,8 @@ const MembershipManagement: React.FC = () => {
         onCancel={() => { setOpenGrant(false); setGrantTarget(null); }}
         okText="Cấp gói"
         destroyOnClose
+        confirmLoading={grantSubmitting}              // ✅ loading nút OK
+        afterClose={() => grantForm.resetFields()}    // ✅ sạch form sau khi đóng
       >
         <Form form={grantForm} layout="vertical">
           <Form.Item name="userId" label="User ID" rules={[{ required: true, message: 'Nhập User ID' }]}>
