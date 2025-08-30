@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Button, Dropdown, MenuProps } from 'antd';
+import { Button, Dropdown, MenuProps, Badge } from 'antd';
 import {
   HomeOutlined,
   ShopOutlined,
   TeamOutlined,
   ReadOutlined,
   InfoCircleOutlined,
-  SearchOutlined,
+  BellOutlined,
   ShoppingCartOutlined,
   UserOutlined,
+  WalletOutlined,
   LogoutOutlined,
   MenuOutlined,
 } from '@ant-design/icons';
@@ -19,6 +20,29 @@ import logo from '../../../assets/Logo.png';
 import { getRoleFromToken } from '../../../utils/jwt';
 
 gsap.registerPlugin(ScrollTrigger);
+
+const BASE_URL = 'https://terarium.shop/api';
+
+interface CartSummary {
+  totalItems: number;
+  totalQuantity: number;
+  totalAmount: number;
+  itemTypes: {
+    comboItems: number;
+    singleItems: number;
+    bundleItems: number;
+    bundleAccessories: number;
+  };
+  lastUpdated: string;
+}
+
+interface Notification {
+  notificationId: number;
+  title: string;
+  message: string;
+  createdAt: string;
+  isRead: boolean;
+}
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
@@ -30,9 +54,112 @@ const Navbar: React.FC = () => {
   const menuRef = useRef<HTMLDivElement>(null);
   const gsapContext = useRef<gsap.Context | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Cart state
+  const [cartCount, setCartCount] = useState(0);
+  
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  
+  // Wallet state
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  
   const userRole = getRoleFromToken ? getRoleFromToken() : null;
   const isAuthenticated = !!userRole;
+  const userId = Number(localStorage.getItem('userId') || 0);
 
+  // Auth headers helper
+  const getAuthHeaders = (): HeadersInit => {
+    const token = localStorage.getItem('authToken');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  // Fetch cart summary
+  const fetchCartSummary = async () => {
+    if (!isAuthenticated || !userId) {
+      setCartCount(0);
+      return;
+    }
+    try {
+      const response = await fetch(`${BASE_URL}/Cart/summary`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCartCount(data.data?.totalItems || 0);
+      } else if (response.status === 401) {
+        setCartCount(0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch cart summary:', error);
+      setCartCount(0);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!userId) return;
+    try {
+      const response = await fetch(`${BASE_URL}/Notification/user/${userId}`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data.slice(0, 5)); // Only get latest 5
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  };
+
+  // Fetch wallet balance
+  const fetchWalletBalance = async () => {
+    if (!userId) return;
+    try {
+      const response = await fetch(`${BASE_URL}/Wallet/balance?userId=${userId}`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          const balance = typeof data === 'number' ? data : (data.data || data.balance || 0);
+          setWalletBalance(balance);
+        } else {
+          const text = await response.text();
+          const balance = Number(text.replace(/[^\d.-]/g, ''));
+          setWalletBalance(isNaN(balance) ? 0 : balance);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch wallet balance:', error);
+    }
+  };
+
+  // Real-time polling
+  useEffect(() => {
+    if (isAuthenticated && userId) {
+      fetchCartSummary();
+      fetchNotifications();
+      fetchWalletBalance();
+      
+      // Poll every 30 seconds for real-time updates
+      const interval = setInterval(() => {
+        fetchCartSummary();
+        fetchNotifications();
+        fetchWalletBalance();
+      }, 30000);
+      
+      return () => clearInterval(interval);
+    } else {
+      // Reset states when not authenticated
+      setCartCount(0);
+      setNotifications([]);
+      setWalletBalance(null);
+    }
+  }, [isAuthenticated, userId]);
+
+  // GSAP animations
   useEffect(() => {
     gsapContext.current = gsap.context(() => {
       gsap.fromTo(
@@ -85,6 +212,15 @@ const Navbar: React.FC = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
+  const formatCurrency = (amount: number) => {
+    return (amount || 0).toLocaleString('vi-VN') + ' VND';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('vi-VN');
+  };
+
+  // User dropdown items
   const dropdownItems: MenuProps['items'] = [
     ...(userRole === 'User' ||userRole === 'Staff' || userRole === 'Manager' || userRole === 'Admin'
       ? [
@@ -132,6 +268,54 @@ const Navbar: React.FC = () => {
       onClick: handleLogout,
     },
   ];
+
+  // Notifications dropdown items
+  const notificationItems: MenuProps['items'] = [
+    ...notifications.map((notification) => ({
+      key: notification.notificationId.toString(),
+      label: (
+        <div className="p-2 max-w-xs">
+          <div className={`font-medium ${!notification.isRead ? 'text-blue-600' : 'text-gray-700'}`}>
+            {notification.title}
+          </div>
+          <div className="text-sm text-gray-500 mt-1">
+            {notification.message.length > 50 ? 
+              notification.message.substring(0, 50) + '...' : 
+              notification.message
+            }
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            {formatDate(notification.createdAt)}
+          </div>
+        </div>
+      ),
+    })),
+    ...(notifications.length > 0 ? [
+      {
+        type: 'divider' as const,
+      },
+      {
+        key: 'view-all',
+        label: (
+          <div className="text-center text-blue-600 font-medium">
+            Xem tất cả thông báo
+          </div>
+        ),
+        onClick: () => handleNavigate('/customer-dashboard/notifications'),
+      },
+    ] : [
+      {
+        key: 'no-notifications',
+        label: (
+          <div className="text-center text-gray-500 p-2">
+            Không có thông báo mới
+          </div>
+        ),
+      },
+    ]),
+  ];
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
     <nav
@@ -229,18 +413,56 @@ const Navbar: React.FC = () => {
 
         {/* Actions */}
         <div className="hidden md:flex items-center space-x-2 sm:space-x-3">
+          {/* Notifications */}
+          {isAuthenticated && (
+            <Dropdown 
+              menu={{ items: notificationItems }} 
+              trigger={['click']}
+              placement="bottomRight"
+            >
+              <Button className="!text-teal-700 hover:!text-teal-500 transition-colors p-1 sm:p-2">
+                <Badge count={unreadCount} size="small">
+                  <BellOutlined />
+                </Badge>
+              </Button>
+            </Dropdown>
+          )}
+
+          {/* Cart with badge */}
           <Button
-            icon={<SearchOutlined />}
-            className="!text-teal-700 hover:!text-teal-500 transition-colors p-1 sm:p-2"
-            onClick={() => handleNavigate('/search')}
-          />
-          <Button
-            icon={<ShoppingCartOutlined />}
             onClick={() => handleNavigate('/cart')}
             className={`!text-teal-700 ${
               isActive('/cart') ? 'bg-green-100 !text-green-600' : ''
             } hover:!text-teal-500 transition-colors p-1 sm:p-2`}
-          />
+          >
+            <Badge count={cartCount} size="small">
+              <ShoppingCartOutlined />
+            </Badge>
+          </Button>
+
+          {/* Wallet */}
+          {isAuthenticated && (
+            <Button
+              onClick={() => handleNavigate('/customer-dashboard/wallet')}
+              className="!text-teal-700 hover:!text-teal-500 transition-colors p-1 sm:p-2 flex items-center gap-1"
+              title={walletBalance !== null ? formatCurrency(walletBalance) : 'Đang tải...'}
+            >
+              <WalletOutlined />
+              <span className="text-xs hidden lg:inline">
+                {walletBalance !== null ? 
+                  (walletBalance > 999999 ? 
+                    Math.round(walletBalance / 1000000) + 'M' : 
+                    walletBalance > 999 ? 
+                      Math.round(walletBalance / 1000) + 'K' : 
+                      walletBalance.toLocaleString()
+                  ) + 'đ' 
+                  : '...'
+                }
+              </span>
+            </Button>
+          )}
+
+          {/* User */}
           {isAuthenticated ? (
             <Dropdown menu={{ items: dropdownItems }} trigger={['click']}>
               <Button
@@ -266,6 +488,12 @@ const Navbar: React.FC = () => {
         }
         .will-change-transform-opacity {
           will-change: transform, opacity;
+        }
+        .ant-badge-count {
+          font-size: 10px !important;
+          height: 16px !important;
+          min-width: 16px !important;
+          line-height: 14px !important;
         }
       `}</style>
     </nav>
