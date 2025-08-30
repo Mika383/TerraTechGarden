@@ -1,8 +1,8 @@
 // src/pages/Customer/Order.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight, RotateCcw, RefreshCw } from 'lucide-react';
 
 import { createMoMoPayment, getOrdersByUser, cancelOrder } from '@/api/order';
 import type { Order, OrderItem } from '@/types/order';
@@ -17,7 +17,7 @@ import {
 } from '@/utils/orderStatus';
 
 import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
-import { requestRefund as apiRequestRefund } from '@/api/refund'; // ✅ NEW
+import { requestRefund as apiRequestRefund } from '@/api/refund';
 
 const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
 const PER_PAGE = 5;
@@ -76,6 +76,8 @@ const Order: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // pagination
   const [page, setPage] = useState(1);
@@ -92,13 +94,15 @@ const Order: React.FC = () => {
 
   const userId = useMemo(() => Number(localStorage.getItem('userId') || 0), []);
 
-  const load = async () => {
+  const load = async (showLoading = true) => {
     if (!userId) {
       toast.info('Bạn cần đăng nhập để xem đơn hàng.');
       return;
     }
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
+      setIsRefreshing(true);
+      
       const data = await getOrdersByUser(userId);
       const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => {
         const ta = new Date(a.orderDate ?? '').getTime();
@@ -106,18 +110,36 @@ const Order: React.FC = () => {
         return tb - ta;
       });
       setOrders(sorted);
-      setPage(1);
+      if (showLoading) setPage(1);
     } catch {
       toast.error('Không tải được danh sách đơn.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
+  // Setup real-time polling
   useEffect(() => {
     load();
+    
+    // Poll every 30 seconds for real-time updates
+    intervalRef.current = setInterval(() => {
+      load(false); // Don't show loading spinner for background updates
+    }, 10000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [userId]);
+
+  // Manual refresh
+  const handleManualRefresh = () => {
+    load(false);
+  };
 
   // ——— ACTIONS ———
   const payWithMoMo = async (o: Order) => {
@@ -145,7 +167,7 @@ const Order: React.FC = () => {
         additionalNotes: '',
       });
       toast.success(`Đã gửi yêu cầu hủy đơn #${o.orderId}`);
-      await load();
+      await load(false);
     } catch (e: any) {
       console.error(e);
       toast.error('Hủy đơn thất bại.');
@@ -189,7 +211,7 @@ const Order: React.FC = () => {
 
       const msg = res?.message || 'Yêu cầu hoàn tiền đã được gửi thành công!';
       toast.success(msg);
-      await load();
+      await load(false);
     } catch (err: any) {
       console.error('[Refund] error', err?.response?.status, err?.response?.data || err);
       const msg =
@@ -285,9 +307,26 @@ const Order: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-green-700 mb-4">
-          Đơn hàng của tôi
-        </h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl md:text-3xl font-bold text-green-700">
+            Đơn hàng của tôi
+          </h1>
+          <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            title="Làm mới danh sách"
+          >
+            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            Làm mới
+          </button>
+        </div>
+
+        {/* Real-time indicator */}
+        <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+          <div className={`w-2 h-2 rounded-full ${isRefreshing ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+          {isRefreshing ? 'Đang cập nhật...' : 'Tự động cập nhật mỗi 10 giây'}
+        </div>
 
         {loading ? (
           <div className="text-center text-gray-600">Đang tải...</div>
@@ -367,7 +406,7 @@ const Order: React.FC = () => {
                         {/* Hoàn hàng/hoàn tiền – khi đã hoàn thành */}
                         {isCompleted(o.status) && (
                           <button
-                            onClick={() => handleRequestRefund(o)} // ✅ NEW
+                            onClick={() => handleRequestRefund(o)}
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-purple-50 text-purple-700 border border-purple-200 rounded"
                           >
                             <RotateCcw size={16} />
@@ -402,7 +441,7 @@ const Order: React.FC = () => {
                 </div>
               ))}
 
-              {/* giữ layout cao như 5 thẻ để thanh phân trang không “nhảy” */}
+              {/* giữ layout cao như 5 thẻ để thanh phân trang không "nhảy" */}
               {Array.from({ length: placeholderCount }).map((_, i) => (
                 <div
                   key={`ph-${i}`}
