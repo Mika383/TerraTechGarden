@@ -39,6 +39,15 @@ function normalizeNotiResponse(res: unknown): Noti[] {
   }));
 }
 
+// PUT đúng endpoint, không body
+async function putMarkAsReadExact(id: number): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/Notification/mark-as-read/${id}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+  });
+  return res.ok || res.status === 204;
+}
+
 const Notifications: React.FC = () => {
   const navigate = useNavigate();
   const userId = Number(localStorage.getItem("userId") || 0);
@@ -81,18 +90,16 @@ const Notifications: React.FC = () => {
     setReadingIds((m) => ({ ...m, [id]: true }));
     setData((prev) => prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n)));
     try {
-      const res = await fetch(`${BASE_URL}/Notification/mark-as-read/${id}`, {
-        method: "POST",
-        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-      });
-      if (!res.ok) {
+      const ok = await putMarkAsReadExact(id);
+      if (ok) {
+        // Báo Navbar cập nhật badge ngay (Navbar lắng nghe 'notification:received' -> gọi unread-count)
+        window.dispatchEvent(new CustomEvent("notification:received"));
+      } else {
         // revert nếu lỗi
         setData((prev) =>
           prev.map((n) => (n.notificationId === id ? { ...n, isRead: false } : n))
         );
-      } else {
-        // Báo Navbar cập nhật badge ngay
-        window.dispatchEvent(new CustomEvent("notification:received"));
+        console.error("PUT mark-as-read failed:", id);
       }
     } catch (e) {
       setData((prev) =>
@@ -107,7 +114,7 @@ const Notifications: React.FC = () => {
     }
   };
 
-  // ---- Đã đọc tất cả (batch FE: tuần tự/parallel từng id chưa đọc) ----
+  // ---- Đã đọc tất cả (batch PUT) ----
   const markAll = async () => {
     const ids = data.filter((n) => !n.isRead).map((n) => n.notificationId);
     if (ids.length === 0) return;
@@ -115,18 +122,19 @@ const Notifications: React.FC = () => {
     // Optimistic update
     setData((prev) => prev.map((n) => (n.isRead ? n : { ...n, isRead: true })));
     try {
-      await Promise.all(
-        ids.map((id) =>
-          fetch(`${BASE_URL}/Notification/mark-as-read/${id}`, {
-            method: "POST",
-            headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-          }).catch(() => null)
-        )
-      );
-      window.dispatchEvent(new CustomEvent("notification:received"));
+      const results = await Promise.all(ids.map((id) => putMarkAsReadExact(id)));
+      if (results.every(Boolean)) {
+        window.dispatchEvent(new CustomEvent("notification:received"));
+      } else {
+        console.warn("Some mark-as-read PUT failed");
+        // Tuỳ chọn: refetch để đồng bộ tuyệt đối
+        try {
+          const res = await getNotificationsByUser(userId);
+          setData(normalizeNotiResponse(res));
+        } catch {}
+      }
     } catch (e) {
       console.error("mark-all error:", e);
-      // Fallback: refetch lại cho an toàn
       try {
         const res = await getNotificationsByUser(userId);
         setData(normalizeNotiResponse(res));
