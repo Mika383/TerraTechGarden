@@ -433,7 +433,7 @@ const Checkout: React.FC = () => {
   );
 
   const subtotal = apiCart ? subtotalFromAPI : subtotalLocal;
-  const shippingFee = 30000;
+  const shippingFee = 0;
   const discountFromVoucher = voucher ? voucher.discountAmount : 0;
   const discountFromFull = paymentOption === 'full' ? (subtotal - discountFromVoucher) * 0.1 : 0;
   const totalBeforeWallet = Math.max(
