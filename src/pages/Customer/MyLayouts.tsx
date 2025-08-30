@@ -1,3 +1,4 @@
+// src/pages/Customer/MyLayouts.tsx
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -15,7 +16,9 @@ import {
   ChartBarIcon,
   FunnelIcon,
   MagnifyingGlassIcon,
-  PaperAirplaneIcon
+  PaperAirplaneIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolid,
@@ -28,9 +31,10 @@ import type { LayoutSummary } from '@/types/layout';
 import { getTerrariumById, getVariantsByTerrariumId } from '@/api/terrarium';
 import type { TerrariumVariant } from '@/types/terrarium';
 import api from '@/lib/axios/axiosInstance';
-
-// ✅ Thêm MembershipGate
 import MembershipGate from '@/components/common/MembershipGate';
+
+// 🔄 FE-only smart polling hook
+import useAutoRefetch from '@/hooks/useAutoRefetch';
 
 // ===== Helpers =====
 type LayoutRow = LayoutSummary & {
@@ -95,7 +99,11 @@ const MyLayoutsPage: React.FC = () => {
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [preorderingId, setPreorderingId] = useState<number | null>(null);
 
-  // ✅ Gán kiểu rõ ràng cho các ref để tránh 'never'
+  // 🔄 Pagination state (5/trang)
+  const PAGE_SIZE = 5;
+  const [page, setPage] = useState(1);
+
+  // ✅ Refs cho animation
   const headerRef = useRef<HTMLDivElement | null>(null);
   const statsRef  = useRef<HTMLDivElement | null>(null);
   const tableRef  = useRef<HTMLDivElement | null>(null);
@@ -149,7 +157,19 @@ const MyLayoutsPage: React.FC = () => {
     }
   };
 
+  // ▶️ Load lần đầu
   useEffect(() => { load(); }, []); // eslint-disable-line
+
+  // 🔔 FE-only auto refetch mỗi 10s, pause khi tab ẩn, refetch khi focus/online
+  useAutoRefetch(load, {
+    interval: 10000,
+    onFocus: true,
+    onReconnect: true,
+    whenHidden: 'pause'
+  });
+
+  // Khi search/filter đổi → quay về trang 1
+  useEffect(() => { setPage(1); }, [searchTerm, filterStatus]);
 
   // GSAP Animations
   useEffect(() => {
@@ -195,6 +215,17 @@ const MyLayoutsPage: React.FC = () => {
     });
   }, [rows, searchTerm, filterStatus]);
 
+  // ✅ Pagination data
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, currentPage]);
+
+  // Nếu xóa item cuối trang → lùi trang
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
+
   const stats = useMemo(() => ({
     total: rows.length,
     pending: rows.filter(x => norm(x.status) === 'pending').length,
@@ -208,9 +239,7 @@ const MyLayoutsPage: React.FC = () => {
       await deleteLayout(id);
       setRows(prev => prev.filter(x => x.layoutId !== id));
       const gsap: any = (window as any).gsap;
-      if (gsap) {
-        gsap.to(`.layout-row-${id}`, { opacity: 0, x: -100, duration: 0.5, ease: 'power2.in' });
-      }
+      if (gsap) gsap.to(`.layout-row-${id}`, { opacity: 0, x: -100, duration: 0.5, ease: 'power2.in' });
       alert('Đã xóa layout thành công!');
     } catch (e: any) {
       console.error(e);
@@ -220,18 +249,14 @@ const MyLayoutsPage: React.FC = () => {
 
   // ===== Gửi yêu cầu định giá (Draft -> Pending) =====
   const handleSubmitPricing = async (layoutId: number) => {
-    if (!userId) {
-      alert('Bạn chưa đăng nhập.');
-      return;
-    }
+    const userId = Number(localStorage.getItem('userId') || 0);
+    if (!userId) { alert('Bạn chưa đăng nhập.'); return; }
     if (!confirm('Gửi yêu cầu định giá cho layout này?')) return;
 
     try {
       setSubmittingId(layoutId);
       await api.put(`/TerrariumLayout/${layoutId}/submit`, null, { params: { userId } });
-      setRows(prev =>
-        prev.map(r => (r.layoutId === layoutId ? { ...r, status: 'Pending' } : r))
-      );
+      setRows(prev => prev.map(r => (r.layoutId === layoutId ? { ...r, status: 'Pending' } : r)));
       alert('Đã gửi yêu cầu định giá. Layout chuyển sang trạng thái "Đang chờ duyệt".');
     } catch (e: any) {
       console.error(e);
@@ -241,9 +266,8 @@ const MyLayoutsPage: React.FC = () => {
     }
   };
 
-  // ===== PRE-ORDER (logic mới) =====
+  // ===== PRE-ORDER =====
   const handlePreorder = async (layout: LayoutRow) => {
-    // Chỉ cho phép khi Approved
     if (norm(layout.status) !== 'approved') {
       alert('Layout chưa được duyệt để đặt trước.');
       return;
@@ -252,23 +276,18 @@ const MyLayoutsPage: React.FC = () => {
     try {
       setPreorderingId(layout.layoutId);
 
-      // Lấy danh sách variant của terrarium
       const variants: TerrariumVariant[] = await getVariantsByTerrariumId(layout.terrariumId);
-
       if (!variants || variants.length === 0) {
         alert('Terrarium này chưa có phân loại sản phẩm.');
         navigate(`/terrarium/${layout.terrariumId}`);
         return;
       }
-
       if (variants.length > 1) {
-        // Có nhiều variant → chuyển qua trang terrarium để người dùng chọn
         alert('Terrarium có nhiều phân loại. Vui lòng chọn phân loại trước khi đặt.');
         navigate(`/terrarium/${layout.terrariumId}`);
         return;
       }
 
-      // ✅ Chỉ có 1 variant → tạo "checkoutItems" và chuyển tới /checkout
       const v = variants[0];
       const name = layout.terrariumName || `Terrarium #${layout.terrariumId}`;
       const image = layout.terrariumImage || v.urlImage || '';
@@ -286,7 +305,6 @@ const MyLayoutsPage: React.FC = () => {
         comboId: null
       };
 
-      // Xoá dữ liệu cũ để tránh cộng dồn
       localStorage.removeItem('cartItems');
       localStorage.setItem('checkoutItems', JSON.stringify([item]));
 
@@ -332,7 +350,6 @@ const MyLayoutsPage: React.FC = () => {
     );
   }
 
-  // ✅ Bọc UI chính bên trong MembershipGate
   return (
     <MembershipGate message="Bạn cần là thành viên để xem và quản lý Layout của mình.">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -346,6 +363,7 @@ const MyLayoutsPage: React.FC = () => {
               <p className="text-slate-600 text-lg max-w-2xl mx-auto">
                 Quản lý và theo dõi các layout terrarium bạn đã tạo với giao diện hiện đại
               </p>
+              <p className="text-xs text-slate-400 mt-2">Trang tự động cập nhật mỗi 10 giây (FE-only)</p>
             </div>
 
             {/* Search and Filter */}
@@ -382,11 +400,11 @@ const MyLayoutsPage: React.FC = () => {
 
           {/* Stats */}
           <div ref={statsRef} className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Tổng layout</p>
-                  <p className="text-3xl font-bold mt-2">{stats.total}</p>
+                  <p className="text-3xl font-bold mt-2">{rows.length}</p>
                 </div>
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                   <ChartBarIcon className="w-6 h-6 text-white" />
@@ -394,11 +412,11 @@ const MyLayoutsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+            <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-amber-100 text-sm font-medium uppercase tracking-wider">Đang chờ</p>
-                  <p className="text-3xl font-bold mt-2">{stats.pending}</p>
+                  <p className="text-3xl font-bold mt-2">{rows.filter(x => norm(x.status) === 'pending').length}</p>
                 </div>
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                   <ClockIcon className="w-6 h-6 text-white" />
@@ -406,11 +424,11 @@ const MyLayoutsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+            <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-emerald-100 text-sm font-medium uppercase tracking-wider">Đã duyệt</p>
-                  <p className="text-3xl font-bold mt-2">{stats.approved}</p>
+                  <p className="text-3xl font-bold mt-2">{rows.filter(x => norm(x.status) === 'approved').length}</p>
                 </div>
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                   <CheckCircleIcon className="w-6 h-6 text-white" />
@@ -418,11 +436,11 @@ const MyLayoutsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-300">
+            <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-red-100 text-sm font-medium uppercase tracking-wider">Bị từ chối</p>
-                  <p className="text-3xl font-bold mt-2">{stats.rejected}</p>
+                  <p className="text-3xl font-bold mt-2">{rows.filter(x => norm(x.status) === 'rejected').length}</p>
                 </div>
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                   <XCircleIcon className="w-6 h-6 text-white" />
@@ -433,7 +451,7 @@ const MyLayoutsPage: React.FC = () => {
 
           {/* Main Content */}
           <div ref={tableRef}>
-            {filteredRows.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-12 text-center">
                 <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
                   <EyeIcon className="w-12 h-12 text-slate-400" />
@@ -466,7 +484,7 @@ const MyLayoutsPage: React.FC = () => {
                 </div>
 
                 <div className="divide-y divide-slate-100">
-                  {filteredRows.map((layout, index) => {
+                  {pagedRows.map((layout, index) => {
                     const isDraft = norm(layout.status) === 'draft';
                     const isApproved = norm(layout.status) === 'approved';
                     return (
@@ -555,7 +573,7 @@ const MyLayoutsPage: React.FC = () => {
                             </button>
 
                             {/* Nút gửi yêu cầu định giá khi Draft */}
-                            {isDraft && (
+                            {norm(layout.status) === 'draft' && (
                               <button
                                 onClick={() => handleSubmitPricing(layout.layoutId)}
                                 disabled={submittingId === layout.layoutId}
@@ -578,6 +596,29 @@ const MyLayoutsPage: React.FC = () => {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Pagination controls */}
+                <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-between">
+                  <span className="text-sm text-slate-600">
+                    Trang <b>{currentPage}</b> / {totalPages} — Hiển thị <b>{pagedRows.length}</b> / {filteredRows.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                      className="px-3 py-2 rounded-lg border bg-gray-50 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <ChevronLeftIcon className="w-4 h-4" /> Trước
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                      className="px-3 py-2 rounded-lg border bg-gray-50 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      Sau <ChevronRightIcon className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
