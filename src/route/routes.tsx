@@ -38,6 +38,7 @@ import RefundRequestList from '@/components/staff/RefundRequestList';
 import ComboDetail from '@/pages/Customer/ComboDetail';
 import MembershipSuccess from '@/pages/Customer/MembershipSuccess';
 import WalletPage from '@/pages/Customer/WalletPage';
+import PaymentFail from '@/pages/Customer/PaymentFail';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -124,11 +125,12 @@ const AppRoutes = () => {
         <Route path="terrarium/:id" element={<Suspense fallback={<Loading />}><Detail /></Suspense>} />
         <Route path="accessory/:id" element={<Suspense fallback={<Loading />}><AccessoryDetail /></Suspense>} />
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
-        
+        <Route path="payment-fail" element={<Suspense fallback={<Loading />}><PaymentFail /></Suspense>} />
         <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
         <Route path="verify-email" element={<Suspense fallback={<Loading />}><VerifyEmail /></Suspense>} />
         <Route path="combo/:id" element={<Suspense fallback={<Loading />}><ComboDetail /></Suspense>} />
         <Route path="membership-success/payment-success" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
+        <Route path="membership-fail/payment-fail" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
