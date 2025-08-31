@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
   Environment,
   TankMethod,
+  Shape,
   Terrarium,
   TerrariumImage,
   TerrariumVariant,
@@ -70,9 +71,10 @@ export const getVariantsByTerrariumId = async (terrariumId: number): Promise<Ter
 };
 
 export const getEnvironmentById = async (environmentId: number): Promise<Environment | null> => {
-  const res = await axios.get(`${BASE_URL}/Environment/${environmentId}`);
-  return pickObject<Environment>(res);
+  const res = await axios.get(`${BASE_URL}/Environment/get/${environmentId}`);
+  return res?.data?.data ?? null;
 };
+
 
 export const getAllEnvironments = async (): Promise<Environment[]> => {
   const res = await axios.get(`${BASE_URL}/Environment/get-all`);
@@ -90,12 +92,6 @@ export const getTerrariumVariantById = async (variantId: number): Promise<Terrar
 };
 
 /** ========== CÁC API MỚI (CHO HOME SECTIONS) ========== */
-/**
- * LƯU Ý:
- * Các endpoint mới trả về dạng:
- * { status, message, data: [...] }
- * -> dùng pickArray để lấy đúng mảng trong data.
- */
 
 export const getFeaturedTerrariums = async (top = 3): Promise<Partial<Terrarium>[]> => {
   const res = await axios.get(`${BASE_URL}/Terrarium/featured`, { params: { top } });
@@ -115,4 +111,47 @@ export const getTopRatedTerrariums = async (top = 3): Promise<Partial<Terrarium>
 export const getNewestTerrariums = async (top = 12): Promise<Partial<Terrarium>[]> => {
   const res = await axios.get(`${BASE_URL}/Terrarium/newest`, { params: { top } });
   return pickArray<Partial<Terrarium>>(res);
+};
+
+/** ========== BỔ SUNG CHO HIỂN THỊ THEO TÊN (KHÔNG CHỈ ID) ========== */
+/** Shape */
+export const getShapeById = async (shapeId: number): Promise<Shape | null> => {
+  const res = await axios.get(`${BASE_URL}/Shape/get/${shapeId}`);
+  return pickObject<Shape>(res);
+};
+
+export const getAllShapes = async (): Promise<Shape[]> => {
+  const res = await axios.get(`${BASE_URL}/Shape/get-all`);
+  return pickArray<Shape>(res);
+};
+
+/** TankMethod (lấy 1 item theo id) */
+export const getTankMethodById = async (tankMethodId: number): Promise<TankMethod | null> => {
+  const res = await axios.get(`${BASE_URL}/TankMethod/get/${tankMethodId}`);
+  return pickObject<TankMethod>(res);
+};
+
+/**
+ * Convenience API: lấy 1 Terrarium và "enrich" bằng tên
+ * - environment: Environment
+ * - shape: Shape
+ * - tankMethod: TankMethod
+ * Ghi chú: KHÔNG thay đổi getTerrariumById — đây là hàm mới.
+ */
+export const getTerrariumEnrichedById = async (id: number): Promise<Terrarium | null> => {
+  const base = await getTerrariumById(id);
+  if (!base) return null;
+
+  const [env, shape, tank] = await Promise.all([
+    getEnvironmentById(base.environmentId),
+    getShapeById(base.shapeId),
+    getTankMethodById(base.tankMethodId),
+  ]);
+
+  return {
+    ...base,
+    environment: env ?? undefined,
+    shape: shape ?? undefined,
+    tankMethod: tank ?? undefined,
+  };
 };
