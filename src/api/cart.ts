@@ -5,7 +5,7 @@ import {
   UpdateCartItemRequest,
   AddAccessoryToCartPayload,
   AddVariantToCartPayload,
-  AddBundleAccessoriesPayload,
+  AddBundleAccessoriesPayload, // NOTE: đã đổi sang terrariumVarientId theo BE mới
   AddComboPayload,
 } from '@/types/cart';
 
@@ -32,10 +32,13 @@ export const getCart = async (): Promise<CartResponseNew> => {
 };
 
 /**
- * ADD BUNDLE ACCESSORIES (mua nhiều phụ kiện theo bể)
+ * ADD BUNDLE ACCESSORIES (mua nhiều phụ kiện theo "biến thể bể")
  * POST /Cart/add-items/multiple
+ * ⚠️ BE mới yêu cầu key: terrariumVarientId
  */
-export const addBundleAccessories = async (items: AddBundleAccessoriesPayload[]) => {
+export const addBundleAccessories = async (
+  items: AddBundleAccessoriesPayload[]
+) => {
   const res = await axios.post(
     `${BASE_URL}/Cart/add-items/multiple`,
     items,

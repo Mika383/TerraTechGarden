@@ -1,11 +1,23 @@
 // src/components/customer/TerrariumDetail.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Terrarium, TerrariumVariant } from '@/types/terrarium';
-import { ChevronDown, ChevronUp, Star, StarHalf, StarOff, ShoppingCart, Package2, Heart, Eye, TrendingUp, Info, Image as ImageIcon } from 'lucide-react';
+import { Terrarium, TerrariumVariant, TerrariumVariantAccessory } from '@/types/terrarium';
+import {
+  ChevronDown,
+  ChevronUp,
+  Star,
+  StarHalf,
+  StarOff,
+  ShoppingCart,
+  Package2,
+  Heart,
+  Eye,
+  TrendingUp,
+  Info,
+  Image as ImageIcon
+} from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import FavoriteButton from '@/components/common/FavoriteButton';
-
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import 'swiper/css/effect-fade';
@@ -18,6 +30,7 @@ import {
   getShapeById,
   getTankMethodById,
 } from '@/api/terrarium';
+import { getAccessoryById } from '@/api/accessory';
 
 // Register GSAP plugins
 gsap.registerPlugin(ScrollTrigger);
@@ -27,10 +40,9 @@ interface Props {
   variants: TerrariumVariant[];
   selectedVariant: TerrariumVariant | null;
   onSelectVariant: (variant: TerrariumVariant) => void;
-  /** Backward compatible: cho phép không truyền qty */
   onAddToCart: (qty?: number) => void;
-  /** Backward compatible: nhận danh sách id hoặc {id, qty} */
-  onBuyAccessories: (selected: number[] | { id: number; qty: number }[]) => void;
+  // Backend mới: mua phụ kiện theo {id, qty}[]
+  onBuyAccessories: (selected: { id: number; qty: number }[]) => void;
 }
 
 const FALLBACK_IMG = '/TerraTechLogo.png';
@@ -114,8 +126,21 @@ const TerrariumDetail: React.FC<Props> = ({
   onBuyAccessories,
 }) => {
   const [showAccessories, setShowAccessories] = React.useState(false);
-  const [selectedAccessories, setSelectedAccessories] = React.useState<number[]>([]);
+
+  // === STATE mới: quản lý phụ kiện theo Variant ===
+  const [selectedAccessories, setSelectedAccessories] = useState<number[]>([]);
   const [accessoryQuantities, setAccessoryQuantities] = useState<Record<number, number>>({});
+  const [accessoryDetails, setAccessoryDetails] = useState<
+    Array<{
+      accessoryId: number;
+      name: string;
+      price: number;
+      description?: string;
+      accessoryImages?: { imageUrl: string }[];
+      quantityDefault?: number;
+    }>
+  >([]);
+
   const [variantQty, setVariantQty] = useState<number>(1);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -136,17 +161,15 @@ const TerrariumDetail: React.FC<Props> = ({
     if (!containerRef.current) return;
 
     const ctx = gsap.context(() => {
-      // Hero section animation
       const tl = gsap.timeline();
-      
-      // Image animation with scale effect
+
       if (imageRef.current) {
-        gsap.set(imageRef.current, { 
-          opacity: 0, 
+        gsap.set(imageRef.current, {
+          opacity: 0,
           scale: 0.8,
           rotationY: -15
         });
-        
+
         tl.to(imageRef.current, {
           opacity: 1,
           scale: 1,
@@ -157,14 +180,13 @@ const TerrariumDetail: React.FC<Props> = ({
         });
       }
 
-      // Info section stagger animation
       if (infoRef.current) {
-        gsap.set(infoRef.current.children, { 
-          opacity: 0, 
-          x: 50, 
-          y: 20 
+        gsap.set(infoRef.current.children, {
+          opacity: 0,
+          x: 50,
+          y: 20
         });
-        
+
         tl.to(infoRef.current.children, {
           opacity: 1,
           x: 0,
@@ -175,11 +197,10 @@ const TerrariumDetail: React.FC<Props> = ({
         }, "-=0.8");
       }
 
-      // Details section scroll-triggered animation
       if (detailsRef.current) {
-        gsap.fromTo(detailsRef.current, 
-          { 
-            opacity: 0, 
+        gsap.fromTo(detailsRef.current,
+          {
+            opacity: 0,
             y: 60,
             scale: 0.95
           },
@@ -198,7 +219,6 @@ const TerrariumDetail: React.FC<Props> = ({
         );
       }
 
-      // Floating animation for stats
       gsap.to(".stat-card", {
         y: -5,
         duration: 2,
@@ -217,40 +237,26 @@ const TerrariumDetail: React.FC<Props> = ({
   useEffect(() => {
     if (showAccessories && accessoriesRef.current) {
       const items = accessoriesRef.current.children;
-      
-      gsap.fromTo(items, 
-        { 
-          opacity: 0, 
+
+      gsap.fromTo(items,
+        {
+          opacity: 0,
           y: 30,
           scale: 0.9
         },
-        { 
-          opacity: 1, 
+        {
+          opacity: 1,
           y: 0,
           scale: 1,
-          duration: 0.6, 
-          stagger: 0.1, 
+          duration: 0.6,
+          stagger: 0.1,
           ease: 'back.out(1.7)'
         }
       );
     }
   }, [showAccessories]);
 
-  useEffect(() => {
-    if (terrarium?.accessories) {
-      const ids = terrarium.accessories.map((a) => a.accessoryId);
-      setSelectedAccessories(ids);
-      setAccessoryQuantities((prev) => {
-        const next = { ...prev };
-        ids.forEach((id) => {
-          if (!next[id] || next[id] < 1) next[id] = 1;
-        });
-        return next;
-      });
-    }
-  }, [terrarium]);
-
-  // enrich name theo id nếu thiếu
+  // === ENRICH info theo id (giữ nguyên logic cũ) ===
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -290,6 +296,60 @@ const TerrariumDetail: React.FC<Props> = ({
     };
   }, [terrarium]);
 
+  // === FETCH chi tiết phụ kiện theo selectedVariant (điểm thay đổi chính) ===
+  useEffect(() => {
+  let alive = true;
+
+  const run = async () => {
+    if (!selectedVariant?.terrariumVariantAccessories?.length) {
+      if (alive) {
+        setAccessoryDetails([]);
+        setSelectedAccessories([]);
+        setAccessoryQuantities({});
+      }
+      return;
+    }
+
+    const list = selectedVariant.terrariumVariantAccessories as TerrariumVariantAccessory[];
+
+    // Không văng lỗi toàn mảng nếu 1 API fail
+    const settled = await Promise.allSettled(
+      list.map(va => getAccessoryById(va.accessoryId))
+    );
+    if (!alive) return;
+
+    // Lọc kết quả thành công và có dữ liệu
+    const okResults = settled
+      .map((r, idx) => (r.status === 'fulfilled' ? { acc: r.value, idx } : null))
+      .filter((x): x is { acc: any; idx: number } => !!x && !!x.acc);
+
+    // Map sang AccessoryDetail, bỏ hẳn item lỗi (không tạo id=0)
+    const enriched = okResults.map(({ acc, idx }) => ({
+      accessoryId: acc.accessoryId,
+      name: acc.name,
+      price: acc.price ?? 0,
+      description: acc.description,
+      accessoryImages: acc.accessoryImages || [],
+      quantityDefault: list[idx]?.quantity ?? 1,
+    }));
+
+    setAccessoryDetails(enriched);
+
+    // Chọn mặc định các phụ kiện hợp lệ
+    const defaultSelected = enriched.map(a => a.accessoryId);
+    const defaultQty = Object.fromEntries(
+      enriched.map(a => [a.accessoryId, Math.max(0, Math.trunc(a.quantityDefault || 1))])
+    );
+
+    setSelectedAccessories(defaultSelected);
+    setAccessoryQuantities(defaultQty);
+  };
+
+  run();
+  return () => { alive = false; };
+}, [selectedVariant]);
+
+
   if (!terrarium) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-cyan-50">
@@ -304,14 +364,16 @@ const TerrariumDetail: React.FC<Props> = ({
   const fallbackImage = terrarium.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG;
   const mainImage = selectedVariant?.urlImage || fallbackImage;
 
-  const clampQty = (n: number, min = 1, max = 99) => Math.max(min, Math.min(max, Math.trunc(n || 0)));
+  const clampQty = (n: number, min = 0, max = 99) => Math.max(min, Math.min(max, Math.trunc(n || 0)));
 
+  // === Helpers cho phụ kiện (giữ UI, đổi data) ===
   const setAccQty = (id: number, qty: number) => {
-    setAccessoryQuantities((prev) => ({ ...prev, [id]: clampQty(qty) }));
-    if (!selectedAccessories.includes(id) && qty > 0) {
+    const q = clampQty(qty, 0, 99);
+    setAccessoryQuantities((prev) => ({ ...prev, [id]: q }));
+    if (!selectedAccessories.includes(id) && q > 0) {
       setSelectedAccessories((p) => [...p, id]);
     }
-    if (qty <= 0) {
+    if (q <= 0) {
       setSelectedAccessories((p) => p.filter((x) => x !== id));
     }
   };
@@ -319,6 +381,7 @@ const TerrariumDetail: React.FC<Props> = ({
   const toggleAccessory = (id: number) => {
     setSelectedAccessories((prev) => {
       if (prev.includes(id)) return prev.filter((aid) => aid !== id);
+      // nếu chưa có qty thì set = 1
       setAccessoryQuantities((q) => ({ ...q, [id]: q[id] && q[id] > 0 ? q[id] : 1 }));
       return [...prev, id];
     });
@@ -326,10 +389,10 @@ const TerrariumDetail: React.FC<Props> = ({
 
   const variantPrice = selectedVariant?.price ?? terrarium.minPrice ?? 0;
 
-  const totalSelectedPrice = (terrarium?.accessories || [])
+  const totalSelectedPrice = accessoryDetails
     .filter((acc) => selectedAccessories.includes(acc.accessoryId))
     .reduce((sum, acc) => {
-      const qty = accessoryQuantities[acc.accessoryId] || 1;
+      const qty = accessoryQuantities[acc.accessoryId] || 0;
       return sum + (acc.price ?? 0) * qty;
     }, 0);
 
@@ -342,18 +405,18 @@ const TerrariumDetail: React.FC<Props> = ({
   );
 
   const details: { label: string; value: string; icon: React.ReactNode }[] = [
-    { 
-      label: 'Môi trường', 
+    {
+      label: 'Môi trường',
       value: envName || `#${terrarium.environmentId}`,
       icon: <div className="w-4 h-4 bg-green-400 rounded-full"></div>
     },
-    { 
-      label: 'Hình dạng', 
+    {
+      label: 'Hình dạng',
       value: shapeName || `#${terrarium.shapeId}`,
       icon: <div className="w-4 h-4 bg-blue-400 rounded-sm"></div>
     },
-    { 
-      label: 'Phân loại bể', 
+    {
+      label: 'Phân loại bể',
       value: tankMethodType || `#${terrarium.tankMethodId}`,
       icon: <div className="w-4 h-4 bg-purple-400 rounded-full"></div>
     },
@@ -401,15 +464,13 @@ const TerrariumDetail: React.FC<Props> = ({
                   className="w-full h-96 object-cover rounded-2xl transition-transform duration-500 hover:scale-105"
                   onLoad={() => setImageLoaded(true)}
                   onError={(e) => {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.src = FALLBACK_IMG;
+                    (e.currentTarget as HTMLImageElement).onerror = null;
+                    (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                   }}
                 />
-                {/* Overlay gradient */}
                 <div className="absolute inset-2 bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-2xl pointer-events-none"></div>
               </div>
 
-              {/* Floating badges */}
               <div className="absolute -top-4 -right-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-lg text-sm font-semibold">
                 ⭐ Bán chạy
               </div>
@@ -417,7 +478,6 @@ const TerrariumDetail: React.FC<Props> = ({
 
             {/* Info Section */}
             <div ref={infoRef} className="space-y-6">
-              {/* Title and Favorite */}
               <div className="flex items-start justify-between gap-4">
                 <h1 className="text-4xl font-bold text-gray-800 leading-tight">
                   {terrarium.terrariumName}
@@ -425,7 +485,6 @@ const TerrariumDetail: React.FC<Props> = ({
                 <FavoriteButton type="terrarium" productId={terrarium.terrariumId} size="middle" />
               </div>
 
-              {/* Stats Grid */}
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="stat-card">
                   <StatCard
@@ -450,7 +509,6 @@ const TerrariumDetail: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Rating */}
               <div className="flex items-center gap-4 p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200">
                 <RatingStars rating={terrarium.averageRating ?? 0} />
                 <span className="text-lg font-semibold text-gray-700">
@@ -458,7 +516,6 @@ const TerrariumDetail: React.FC<Props> = ({
                 </span>
               </div>
 
-              {/* Description */}
               {terrarium.description && (
                 <div className="p-6 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200">
                   <p className="text-gray-700 leading-relaxed">{terrarium.description}</p>
@@ -521,8 +578,8 @@ const TerrariumDetail: React.FC<Props> = ({
                                 alt={variant.variantName}
                                 className="w-12 h-12 rounded-lg object-cover"
                                 onError={(e) => {
-                                  e.currentTarget.onerror = null;
-                                  e.currentTarget.src = FALLBACK_IMG;
+                                  (e.currentTarget as HTMLImageElement).onerror = null;
+                                  (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                                 }}
                               />
                               {isSelected && (
@@ -562,8 +619,8 @@ const TerrariumDetail: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Accessories Section */}
-      {Array.isArray(terrarium?.accessories) && terrarium.accessories.length > 0 && (
+      {/* Accessories Section (ĐÃ CẬP NHẬT: lấy theo selectedVariant) */}
+      {Array.isArray(accessoryDetails) && accessoryDetails.length > 0 && (
         <div className="max-w-7xl mx-auto px-6 py-12">
           <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
             <div className="p-8">
@@ -572,7 +629,7 @@ const TerrariumDetail: React.FC<Props> = ({
                   <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
                     <Package2 className="w-6 h-6 text-white" />
                   </div>
-                  Phụ kiện đi kèm
+                  Phụ kiện của biến thể
                 </h2>
                 <button
                   onClick={() => setShowAccessories(!showAccessories)}
@@ -586,7 +643,7 @@ const TerrariumDetail: React.FC<Props> = ({
                   ) : (
                     <>
                       <ChevronDown className="w-5 h-5" />
-                      Xem chi tiết ({terrarium.accessories.length} phụ kiện)
+                      Xem chi tiết ({accessoryDetails.length} phụ kiện)
                     </>
                   )}
                 </button>
@@ -603,7 +660,7 @@ const TerrariumDetail: React.FC<Props> = ({
                       {totalSelectedPrice.toLocaleString('vi-VN')} VND
                     </p>
                     <p className="text-blue-600 text-sm mt-1">
-                      {selectedAccessories.length} / {terrarium.accessories.length} phụ kiện đã chọn
+                      {selectedAccessories.length} / {accessoryDetails.length} phụ kiện đã chọn
                     </p>
                   </div>
                   <button
@@ -618,15 +675,14 @@ const TerrariumDetail: React.FC<Props> = ({
               {/* Accessories Grid */}
               {showAccessories && (
                 <div ref={accessoriesRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {terrarium.accessories.map((acc) => {
+                  {accessoryDetails.map((acc) => {
                     const id = acc.accessoryId;
-                    const qty = accessoryQuantities[id] || 1;
+                    const qty = accessoryQuantities[id] ?? (acc.quantityDefault ?? 1);
                     const isChecked = selectedAccessories.includes(id);
 
                     const accImage =
-                      Array.isArray((acc as any).accessoryImages) &&
-                      (acc as any).accessoryImages.length > 0
-                        ? (acc as any).accessoryImages[0].imageUrl
+                      Array.isArray(acc.accessoryImages) && acc.accessoryImages.length > 0
+                        ? acc.accessoryImages[0].imageUrl
                         : undefined;
 
                     return (
@@ -657,7 +713,7 @@ const TerrariumDetail: React.FC<Props> = ({
                               src={accImage}
                               alt={acc.name}
                               className="w-full h-32 object-cover rounded-xl"
-                              onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
+                              onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
                             />
                           </div>
                         )}
@@ -688,7 +744,7 @@ const TerrariumDetail: React.FC<Props> = ({
                                 className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setAccQty(id, qty - 1);
+                                  setAccQty(id, (qty || 0) - 1);
                                 }}
                               >
                                 −
@@ -710,7 +766,7 @@ const TerrariumDetail: React.FC<Props> = ({
                                 className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setAccQty(id, qty + 1);
+                                  setAccQty(id, (qty || 0) + 1);
                                 }}
                               >
                                 +
@@ -756,7 +812,7 @@ const TerrariumDetail: React.FC<Props> = ({
                   <ImageIcon className="w-6 h-6 text-emerald-600" />
                   Thư viện ảnh
                 </h3>
-                
+
                 {extraImages.length > 0 ? (
                   <div className="relative">
                     <Swiper
@@ -768,12 +824,12 @@ const TerrariumDetail: React.FC<Props> = ({
                         nextEl: '.swiper-button-next-custom',
                         prevEl: '.swiper-button-prev-custom',
                       }}
-                      pagination={{ 
+                      pagination={{
                         clickable: true,
                         bulletClass: 'swiper-pagination-bullet-custom',
                         bulletActiveClass: 'swiper-pagination-bullet-custom-active'
                       }}
-                      autoplay={{ 
+                      autoplay={{
                         delay: 4000,
                         disableOnInteraction: false
                       }}
@@ -789,8 +845,8 @@ const TerrariumDetail: React.FC<Props> = ({
                               className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
                               loading="lazy"
                               onError={(e) => {
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.src = FALLBACK_IMG;
+                                (e.currentTarget as HTMLImageElement).onerror = null;
+                                (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                               }}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"></div>
@@ -838,7 +894,7 @@ const TerrariumDetail: React.FC<Props> = ({
               {/* Specifications */}
               <div className="space-y-6">
                 <h3 className="text-2xl font-semibold text-gray-800">Thông tin bể</h3>
-                
+
                 <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-200">
                   <div className="space-y-4">
                     {details.map((detail, idx) => (
@@ -860,7 +916,6 @@ const TerrariumDetail: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Additional Info Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-6 rounded-2xl border border-emerald-200">
                     <div className="flex items-center gap-3 mb-2">
@@ -889,14 +944,13 @@ const TerrariumDetail: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Detailed Description */}
             {terrarium.bodyHTML && (
               <div className="mt-12 pt-8 border-t border-gray-200">
                 <h3 className="text-2xl font-semibold text-gray-800 mb-6">Mô tả chi tiết</h3>
                 <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-8 border border-gray-200">
-                  <div 
-                    className="prose prose-lg max-w-none prose-headings:text-gray-800 prose-p:text-gray-700 prose-a:text-emerald-600 hover:prose-a:text-emerald-700 prose-strong:text-gray-800 prose-ul:text-gray-700 prose-ol:text-gray-700" 
-                    dangerouslySetInnerHTML={{ __html: terrarium.bodyHTML }} 
+                  <div
+                    className="prose prose-lg max-w-none prose-headings:text-gray-800 prose-p:text-gray-700 prose-a:text-emerald-600 hover:prose-a:text-emerald-700 prose-strong:text-gray-800 prose-ul:text-gray-700 prose-ol:text-gray-700"
+                    dangerouslySetInnerHTML={{ __html: terrarium.bodyHTML }}
                   />
                 </div>
               </div>
@@ -904,8 +958,6 @@ const TerrariumDetail: React.FC<Props> = ({
           </div>
         </div>
       </div>
-
-      
     </div>
   );
 };

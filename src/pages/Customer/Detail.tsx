@@ -8,11 +8,18 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import TerrariumFeedbackList from '@/components/customer/Terrarium/TerrariumFeedbackList';
 
+/**
+ * Idempotency window để tránh double-submit.
+ */
 const IDEMPOTENCY_TTL_MS = 5000;
 
-function buildBundleKey(terrariumId: number, ids: number[]) {
+/**
+ * ⚠️ Đổi khoá idempotency theo "variantId" (KHÔNG còn theo terrariumId)
+ * vì mua dưới dạng linh kiện bây giờ phụ thuộc vào biến thể đang chọn.
+ */
+function buildBundleKey(variantId: number, ids: number[]) {
   const sorted = [...ids].sort((a, b) => a - b);
-  return `bundle:${terrariumId}:${sorted.join(',')}`;
+  return `bundle:v${variantId}:${sorted.join(',')}`;
 }
 function setLock(key: string) { sessionStorage.setItem(key, String(Date.now())); }
 function hasValidLock(key: string) {
@@ -46,6 +53,7 @@ const Detail: React.FC = () => {
       }
       setLoading(true);
       try {
+        // 1) Lấy chi tiết Terrarium
         const apiData = await getTerrariumById(terrariumId);
         if (!apiData || typeof apiData.terrariumId !== 'number') {
           toast.error('Không tìm thấy dữ liệu bể!');
@@ -61,8 +69,13 @@ const Detail: React.FC = () => {
         };
         setTerrarium(formattedTerrarium);
 
+        // 2) Lấy danh sách variants & CHỌN MẶC ĐỊNH biến thể đầu tiên
         const fetchedVariants = await getVariantsByTerrariumId(terrariumId);
-        setVariants(Array.isArray(fetchedVariants) ? fetchedVariants : []);
+        const list = Array.isArray(fetchedVariants) ? fetchedVariants : [];
+        setVariants(list);
+        if (list.length > 0) {
+          setSelectedVariant(list[0]); // ✅ MẶC ĐỊNH CHỌN VARIANT ĐẦU TIÊN
+        }
       } catch (err) {
         console.error('Lỗi khi tải chi tiết Terrarium:', err);
         toast.error('Đã xảy ra lỗi khi tải chi tiết!');
@@ -78,7 +91,7 @@ const Detail: React.FC = () => {
     toast.info(`Đã chọn: ${variant.variantName}`);
   };
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (qty: number = 1) => {
     if (!selectedVariant) {
       toast.error('Vui lòng chọn phân loại trước khi thêm vào giỏ hàng!');
       return;
@@ -91,7 +104,7 @@ const Detail: React.FC = () => {
         await addTerrariumVariantToCart(
           terrariumId,
           selectedVariant.terrariumVariantId,
-          1
+          qty
         );
         toast.success('Đã thêm variant vào giỏ hàng!');
       } catch (error) {
@@ -99,6 +112,7 @@ const Detail: React.FC = () => {
         toast.error('Lỗi khi thêm vào giỏ hàng!');
       }
     } else {
+      // Fallback local
       const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
       cartItems.push({
         id: `variant-${selectedVariant.terrariumVariantId}`,
@@ -106,7 +120,7 @@ const Detail: React.FC = () => {
         name: `${terrarium.name} - ${selectedVariant.variantName}`,
         price: selectedVariant.price,
         image: selectedVariant.urlImage || terrarium.image,
-        quantity: 1,
+        quantity: qty,
         selected: false,
         createdAt: new Date().toISOString(),
       });
@@ -115,112 +129,114 @@ const Detail: React.FC = () => {
     }
   };
 
-  // 🧪 LOG JSON gửi khi "Mua dưới dạng linh kiện"
+  /**
+   * MUA DƯỚI DẠNG LINH KIỆN
+   * - Dựa trên "selectedVariant"
+   * - Payload theo BE mới: [{ terrariumVarientId, totalPrice, bundleAccessories: [{ accessoryId, quantity }] }]
+   */
   const handleBuyAsAccessories = useCallback(
-  async (selected: number[] | { id: number; qty: number }[]) => {
-    if (!selected?.length) {
-      toast.info('Bạn chưa chọn phụ kiện nào.');
-      return;
-    }
-    const terrariumId = Number(id);
-    const isLoggedIn = !!localStorage.getItem('authToken');
+    async (selected: number[] | { id: number; qty: number }[]) => {
+      if (!selectedVariant) {
+        toast.error('Vui lòng chọn phân loại trước khi mua linh kiện!');
+        return;
+      }
+      if (!selected?.length) {
+        toast.info('Bạn chưa chọn phụ kiện nào.');
+        return;
+      }
 
-    // Chuẩn hoá thành object {id, qty}
-    const normalized =
-      typeof selected[0] === 'number'
-        ? (selected as number[]).map((id) => ({ id, qty: 1 }))
-        : (selected as { id: number; qty: number }[]);
+      const isLoggedIn = !!localStorage.getItem('authToken');
 
-    const uniqueIds = Array.from(new Set(normalized.map((x) => x.id)));
-    const lockKey = buildBundleKey(terrariumId, uniqueIds);
+      // Chuẩn hoá thành object {id, qty}
+      const normalized =
+        typeof selected[0] === 'number'
+          ? (selected as number[]).map((id) => ({ id, qty: 1 }))
+          : (selected as { id: number; qty: number }[]);
 
-    if (buyingRef.current || hasValidLock(lockKey)) {
-      console.warn('⏭️ Bỏ qua request trùng (đang chạy/đã khoá):', lockKey);
-      return;
-    }
+      const uniqueIds = Array.from(new Set(normalized.map((x) => x.id)));
+      const lockKey = buildBundleKey(selectedVariant.terrariumVariantId, uniqueIds);
 
-    // Payload chuẩn theo API
-    const payload = [
-      {
-        terrariumId,
-        totalPrice: 0,
-        bundleAccessories: normalized.map((item) => ({
-          accessoryId: item.id,
-          quantity: item.qty,
-        })),
-      },
-    ];
+      if (buyingRef.current || hasValidLock(lockKey)) {
+        console.warn('⏭️ Bỏ qua request trùng (đang chạy/đã khoá):', lockKey);
+        return;
+      }
 
-    const idemKey = `${lockKey}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      'X-Idempotency-Key': idemKey,
-      Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`,
-    };
-    const url = `${import.meta.env.VITE_API_BASE_URL}/Cart/add-items/multiple`;
+      // ✅ Payload mới theo BE: terrariumVarientId (chính tả như BE cung cấp)
+      const payload = [
+        {
+          terrariumVarientId: selectedVariant.terrariumVariantId,
+          totalPrice: 0,
+          bundleAccessories: normalized.map((item) => ({
+            accessoryId: item.id,
+            quantity: item.qty,
+          })),
+        },
+      ];
 
-    console.groupCollapsed('%c[MUA LINH KIỆN] Payload gửi đi', 'color:#0ea5e9;font-weight:bold;');
-    console.log('➡️ POST', url);
-    console.log('📦 Body JSON:', JSON.stringify(payload, null, 2));
-    console.log('🧾 Headers:', headers);
-    console.log('👤 Logged in:', isLoggedIn);
-    console.groupEnd();
+      const idemKey = `${lockKey}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': idemKey,
+        Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`,
+      };
+      const url = `${import.meta.env.VITE_API_BASE_URL}/Cart/add-items/multiple`;
 
-    (window as any).__DEBUG_BUNDLE__ = { url, headers, payload };
+      console.groupCollapsed('%c[MUA LINH KIỆN THEO VARIANT] Payload', 'color:#0ea5e9;font-weight:bold;');
+      console.log('➡️ POST', url);
+      console.log('📦 Body JSON:', JSON.stringify(payload, null, 2));
+      console.log('🧾 Headers:', headers);
+      console.log('🧩 selectedVariant:', selectedVariant);
+      console.groupEnd();
 
-    setLock(lockKey);
-    setBuying(true);
+      (window as any).__DEBUG_BUNDLE__ = { url, headers, payload };
 
-    try {
-      if (isLoggedIn) {
-        const res = await axios.post(url, payload, { headers });
-        console.groupCollapsed('%c[MUA LINH KIỆN] Response', 'color:#22c55e;font-weight:bold;');
-        console.log('✅ Status:', res.status);
-        console.log('✅ Data:', res.data);
-        console.groupEnd();
-        toast.success('Đã thêm các phụ kiện vào giỏ hàng!');
-      } else {
-        // Fallback local
-        const storedCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
-        const selectedAcc = (terrarium?.accessories || []).filter((acc: any) =>
-          uniqueIds.includes(acc.accessoryId)
-        );
+      setLock(lockKey);
+      setBuying(true);
 
-        selectedAcc.forEach((acc: any) => {
-          const qty = normalized.find((n) => n.id === acc.accessoryId)?.qty ?? 1;
+      try {
+        if (isLoggedIn) {
+          const res = await axios.post(url, payload, { headers });
+          console.groupCollapsed('%c[MUA LINH KIỆN THEO VARIANT] Response', 'color:#22c55e;font-weight:bold;');
+          console.log('✅ Status:', res.status);
+          console.log('✅ Data:', res.data);
+          console.groupEnd();
+          toast.success('Đã thêm các phụ kiện vào giỏ hàng!');
+        } else {
+          // Fallback local — không còn dữ liệu accessories từ terrarium.
+          // Lưu "một item bundle" tối giản theo variantId + danh sách accessoryId/qty để client khác (giỏ) xử lý tiếp.
+          const storedCart = JSON.parse(localStorage.getItem('cartItems') || '[]');
           storedCart.push({
-            id: `acc-${acc.accessoryId}`,
-            accessoryId: acc.accessoryId,
-            name: acc.name,
-            price: acc.price,
-            image:
-              (Array.isArray(acc.accessoryImages) && acc.accessoryImages[0]?.imageUrl) ||
-              '/TerraTechLogo.png',
-            quantity: qty,
+            id: `bundle-v${selectedVariant.terrariumVariantId}-${uniqueIds.join('-')}`,
+            variantId: selectedVariant.terrariumVariantId,
+            name: `Bundle phụ kiện cho: ${terrarium?.name || 'Terrarium'}`,
+            price: 0, // không tính ở đây
+            image: selectedVariant.urlImage || terrarium?.image || '/TerraTechLogo.png',
+            quantity: 1,
             selected: false,
             createdAt: new Date().toISOString(),
+            meta: {
+              accessories: normalized, // [{id, qty}]
+            },
           });
-        });
-
-        localStorage.setItem('cartItems', JSON.stringify(storedCart));
-        toast.success('Đã thêm các phụ kiện vào giỏ hàng (local)!');
+          localStorage.setItem('cartItems', JSON.stringify(storedCart));
+          toast.success('Đã thêm bundle phụ kiện (local)!');
+        }
+      } catch (error: any) {
+        console.groupCollapsed('%c[MUA LINH KIỆN THEO VARIANT] ERROR', 'color:#ef4444;font-weight:bold;');
+        console.error(error);
+        if (error?.response) {
+          console.log('❌ Status:', error.response.status);
+          console.log('❌ Data:', error.response.data);
+        }
+        console.groupEnd();
+        toast.error('Không thể thêm phụ kiện vào giỏ hàng!');
+        clearLock(lockKey);
+      } finally {
+        setBuying(false);
       }
-    } catch (error: any) {
-      console.groupCollapsed('%c[MUA LINH KIỆN] ERROR', 'color:#ef4444;font-weight:bold;');
-      console.error(error);
-      if (error?.response) {
-        console.log('❌ Status:', error.response.status);
-        console.log('❌ Data:', error.response.data);
-      }
-      console.groupEnd();
-      toast.error('Không thể thêm phụ kiện vào giỏ hàng!');
-      clearLock(lockKey);
-    } finally {
-      setBuying(false);
-    }
-  },
-  [id, terrarium]
-);
+    },
+    [selectedVariant, terrarium]
+  );
 
   if (loading) return <Loading />;
 
@@ -238,11 +254,11 @@ const Detail: React.FC = () => {
       />
 
       {terrarium && (
-  <TerrariumFeedbackList
-    terrariumId={terrarium.terrariumId}
-    pageSize={5} // có thể đổi
-  />
-)}
+        <TerrariumFeedbackList
+          terrariumId={terrarium.terrariumId}
+          pageSize={5}
+        />
+      )}
     </div>
   );
 };
