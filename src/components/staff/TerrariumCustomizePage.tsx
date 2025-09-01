@@ -60,6 +60,12 @@ interface Accessory {
   accessoryImages: any[];
 }
 
+interface SelectedAccessory {
+  accessoryId: number;
+  quantity: number;
+  accessory: Accessory;
+}
+
 interface ApiResponse<T> {
   status: number;
   message: string;
@@ -69,6 +75,7 @@ interface ApiResponse<T> {
 interface VariantFormData {
   variantName: string;
   notes: string;
+  laborCost: number;
 }
 
 const TerrariumCustomizePage: React.FC = () => {
@@ -78,11 +85,10 @@ const TerrariumCustomizePage: React.FC = () => {
   
   const [request] = useState<TerrariumRequest | null>(location.state?.request || null);
   const [terrariumDetail, setTerrariumDetail] = useState<TerrariumDetail | null>(null);
-  const [selectedAccessories, setSelectedAccessories] = useState<Accessory[]>([]);
+  const [selectedAccessories, setSelectedAccessories] = useState<SelectedAccessory[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState<'accessories' | 'variant' | 'complete'>('accessories');
-  const [markupPercentage, setMarkupPercentage] = useState<number>(0);
   
   // Ant Design Modal states
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -129,53 +135,14 @@ const TerrariumCustomizePage: React.FC = () => {
     }
   };
 
-  // New function to update terrarium accessories
-  const updateTerrariumAccessories = async () => {
-    try {
-      if (!terrariumDetail || !request) {
-        throw new Error('Missing terrarium detail or request');
-      }
-
-      const token = localStorage.getItem('authToken');
-      const accessoryNames = selectedAccessories.map(acc => acc.name);
-
-      const response = await fetch(`https://terarium.shop/api/Terrarium/update-terrarium/${request.terrariumId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({
-          terrariumId: request.terrariumId,
-          environmentId: terrariumDetail.environmentId,
-          shapeId: terrariumDetail.shapeId,
-          tankMethodId: terrariumDetail.tankMethodId,
-          accessoryNames: accessoryNames,
-          terrariumName: terrariumDetail.terrariumName,
-          description: terrariumDetail.description,
-          status: terrariumDetail.status,
-          bodyHTML: terrariumDetail.bodyHTML
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
-    } catch (error) {
-      console.error('Error updating terrarium accessories:', error);
-      toast.error('Không thể cập nhật danh sách phụ kiện');
-      throw error;
-    }
+  const calculateAccessoriesTotal = () => {
+    return selectedAccessories.reduce((sum, acc) => sum + (acc.accessory.price * acc.quantity), 0);
   };
 
-  const calculateTotalPrice = () => {
+  const calculateTotalPrice = (laborCost: number = 0) => {
     const basePrice = terrariumDetail?.minPrice || 0;
-    const accessoriesPrice = selectedAccessories.reduce((sum, acc) => sum + acc.price, 0);
-    const markupAmount = (accessoriesPrice * markupPercentage) / 100;
-    return basePrice + accessoriesPrice + markupAmount;
+    const accessoriesPrice = calculateAccessoriesTotal();
+    return basePrice + accessoriesPrice + laborCost;
   };
 
   const validateTerrariumExists = async (terrariumId: number): Promise<boolean> => {
@@ -201,7 +168,7 @@ const TerrariumCustomizePage: React.FC = () => {
     }
   };
 
-  const createTerrariumVariant = async (price: number, variantName: string) => {
+  const createTerrariumVariant = async (price: number, variantName: string, laborCost: number) => {
     try {
       const token = localStorage.getItem('authToken');
       
@@ -215,22 +182,31 @@ const TerrariumCustomizePage: React.FC = () => {
         throw new Error('Terrarium not found in the database');
       }
 
-      // Prepare form data for multipart/form-data request
-      const formData = new FormData();
-      formData.append('TerrariumId', request.terrariumId.toString());
-      formData.append('VariantName', variantName);
-      formData.append('Price', price.toString());
-      formData.append('StockQuantity', '1');
-      formData.append('CreatedAt', new Date().toISOString());
-      formData.append('UpdatedAt', new Date().toISOString());
+      // Get first terrarium image for variant
+      const imageUrl = terrariumDetail?.terrariumImages?.[0]?.imageUrl || '';
+
+      // Prepare request body
+      const requestBody = {
+        terrariumId: request.terrariumId,
+        variantName: variantName,
+        price: price,
+        urlImage: imageUrl,
+        stockQuantity: 1, // Default to 1 for custom variants
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        accessories: selectedAccessories.map(acc => ({
+          accessoryId: acc.accessoryId,
+          quantity: acc.quantity
+        }))
+      };
 
       const response = await fetch('https://terarium.shop/api/TerrariumVariant/create-terrariumVariant', {
         method: 'POST',
         headers: {
-          'accept': 'text/plain',
+          'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : '',
         },
-        body: formData,
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -302,30 +278,27 @@ const TerrariumCustomizePage: React.FC = () => {
     }
   };
 
-  const handleAccessoriesNext = async () => {
-    try {
-      setProcessing(true);
-      await updateTerrariumAccessories();
-      setCurrentStep('variant');
-      toast.success('Đã cập nhật danh sách phụ kiện thành công');
-    } catch (error) {
-      console.error('Error in handleAccessoriesNext:', error);
-      toast.error('Có lỗi khi cập nhật phụ kiện');
-    } finally {
-      setProcessing(false);
-    }
+  const handleAccessoriesNext = () => {
+    setCurrentStep('variant');
+    toast.success('Đã chọn phụ kiện thành công');
   };
 
   const handleAccessoriesPrev = () => {
     navigate('/staff/support/requests');
   };
 
-  // Show modal to get variant name and notes
+  // Convert SelectedAccessory[] to the format expected by Step4Accessories
+  const handleAccessoriesChange = (accessories: SelectedAccessory[]) => {
+    setSelectedAccessories(accessories);
+  };
+
+  // Show modal to get variant name, labor cost, and notes
   const showCreateVariantModal = () => {
     // Set default values
     form.setFieldsValue({
       variantName: `${request?.layoutName} - Custom`,
-      notes: 'Terrarium đã được duyệt và tạo variant thành công'
+      notes: 'Terrarium đã được duyệt và tạo variant thành công',
+      laborCost: 0
     });
     setIsModalVisible(true);
   };
@@ -334,7 +307,7 @@ const TerrariumCustomizePage: React.FC = () => {
     try {
       const values = await form.validateFields();
       setIsModalVisible(false);
-      await executeCreateVariantAndApprove(values.variantName, values.notes);
+      await executeCreateVariantAndApprove(values.variantName, values.notes, values.laborCost);
     } catch (error) {
       console.error('Validation failed:', error);
     }
@@ -344,8 +317,8 @@ const TerrariumCustomizePage: React.FC = () => {
     setIsModalVisible(false);
   };
 
-  const executeCreateVariantAndApprove = async (variantName: string, notes: string) => {
-    const totalPrice = calculateTotalPrice();
+  const executeCreateVariantAndApprove = async (variantName: string, notes: string, laborCost: number) => {
+    const totalPrice = calculateTotalPrice(laborCost);
 
     try {
       setProcessing(true);
@@ -353,7 +326,7 @@ const TerrariumCustomizePage: React.FC = () => {
       // Step 1: Create terrarium variant
       console.log('Creating terrarium variant...');
       message.loading({ content: 'Đang tạo variant terrarium...', key: 'variant' });
-      await createTerrariumVariant(totalPrice, variantName);
+      await createTerrariumVariant(totalPrice, variantName, laborCost);
       message.success({ content: 'Tạo variant thành công!', key: 'variant', duration: 2 });
 
       // Step 2: Approve the request
@@ -528,7 +501,7 @@ const TerrariumCustomizePage: React.FC = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <Step4Accessories
             selectedAccessories={selectedAccessories}
-            onSelectionChange={setSelectedAccessories}
+            onSelectionChange={handleAccessoriesChange}
             onNext={handleAccessoriesNext}
             onPrev={handleAccessoriesPrev}
           />
@@ -538,42 +511,6 @@ const TerrariumCustomizePage: React.FC = () => {
       {currentStep === 'variant' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Xác nhận và tạo Variant</h2>
-          
-          {/* Markup Percentage Input */}
-          <div className="bg-blue-50 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-2 mb-3">
-              <Calculator className="w-5 h-5 text-blue-600" />
-              <h3 className="font-medium text-blue-900">Tính toán giá bán</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phần trăm công thêm trên phụ kiện (%)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={markupPercentage}
-                  onChange={(e) => setMarkupPercentage(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nhập phần trăm (VD: 10 cho 10%)"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Số phần trăm sẽ được tính trên tổng giá phụ kiện
-                </p>
-              </div>
-              <div className="flex items-end">
-                <div className="w-full">
-                  <div className="text-sm text-gray-700 mb-2">Tổng giá cuối cùng:</div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatPrice(calculateTotalPrice())}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
           
           {/* Summary */}
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
@@ -588,31 +525,23 @@ const TerrariumCustomizePage: React.FC = () => {
                   <div className="text-sm text-gray-600 mt-3 mb-2">Phụ kiện đã chọn:</div>
                   {selectedAccessories.map((accessory) => (
                     <div key={accessory.accessoryId} className="flex justify-between text-sm">
-                      <span>• {accessory.name}</span>
-                      <span>{formatPrice(accessory.price)}</span>
+                      <span>• {accessory.accessory.name} x{accessory.quantity}</span>
+                      <span>{formatPrice(accessory.accessory.price * accessory.quantity)}</span>
                     </div>
                   ))}
                   <div className="flex justify-between text-sm">
                     <span>Tổng phụ kiện:</span>
                     <span className="font-medium">
-                      {formatPrice(selectedAccessories.reduce((sum, acc) => sum + acc.price, 0))}
+                      {formatPrice(calculateAccessoriesTotal())}
                     </span>
                   </div>
-                  {markupPercentage > 0 && (
-                    <div className="flex justify-between text-sm text-blue-600">
-                      <span>Công thêm ({markupPercentage}%):</span>
-                      <span className="font-medium">
-                        {formatPrice((selectedAccessories.reduce((sum, acc) => sum + acc.price, 0) * markupPercentage) / 100)}
-                      </span>
-                    </div>
-                  )}
                 </>
               )}
               <div className="border-t pt-2 mt-3">
                 <div className="flex justify-between font-semibold text-lg">
-                  <span>Tổng cộng:</span>
+                  <span>Tạm tính (chưa bao gồm tiền công):</span>
                   <span className="text-green-600">
-                    {formatPrice(calculateTotalPrice())}
+                    {formatPrice(calculateTotalPrice(0))}
                   </span>
                 </div>
               </div>
@@ -657,9 +586,6 @@ const TerrariumCustomizePage: React.FC = () => {
             Đã tạo variant terrarium và phê duyệt yêu cầu thành công.
             Khách hàng sẽ nhận được thông báo qua hệ thống.
           </p>
-          <div className="text-sm text-gray-600 mb-4">
-            Giá cuối cùng: <span className="font-semibold text-green-600">{formatPrice(calculateTotalPrice())}</span>
-          </div>
           <button
             onClick={() => navigate('/staff/support/requests')}
             className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -687,7 +613,7 @@ const TerrariumCustomizePage: React.FC = () => {
             <div className="text-sm space-y-1">
               <div>• Terrarium: {terrariumDetail?.terrariumName}</div>
               <div>• Phụ kiện: {selectedAccessories.length} item(s)</div>
-              <div>• Giá cuối cùng: <span className="font-semibold text-green-600">{formatPrice(calculateTotalPrice())}</span></div>
+              <div>• Giá cơ bản + phụ kiện: <span className="font-semibold text-green-600">{formatPrice(calculateTotalPrice(0))}</span></div>
             </div>
           </div>
           
@@ -710,6 +636,27 @@ const TerrariumCustomizePage: React.FC = () => {
                 showCount
               />
             </Form.Item>
+
+            <Form.Item
+              name="laborCost"
+              label="Tiền công (VNĐ)"
+              rules={[
+                { required: true, message: 'Vui lòng nhập tiền công!' },
+                { type: 'number', min: 0, message: 'Tiền công không được âm!' }
+              ]}
+            >
+              <Input
+                type="number"
+                placeholder="Nhập tiền công gia công, lắp đặt"
+                min={0}
+                step={1000}
+                style={{ width: '100%' }}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value) || 0;
+                  form.setFieldValue('laborCost', value);
+                }}
+              />
+            </Form.Item>
             
             <Form.Item
               name="notes"
@@ -727,6 +674,18 @@ const TerrariumCustomizePage: React.FC = () => {
               />
             </Form.Item>
           </Form>
+
+          {/* Real-time price preview */}
+          <div className="bg-green-50 p-3 rounded-lg">
+            <div className="text-sm text-green-700">
+              <div>Tổng giá cuối cùng sẽ bao gồm:</div>
+              <div>• Giá cơ bản + phụ kiện: {formatPrice(calculateTotalPrice(0))}</div>
+              <div>• Tiền công: {formatPrice(form.getFieldValue('laborCost') || 0)}</div>
+              <div className="font-semibold mt-1">
+                Tổng cộng: {formatPrice(calculateTotalPrice(form.getFieldValue('laborCost') || 0))}
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
     </div>

@@ -2,15 +2,15 @@ import { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import Loading from '../components/common/Loading';
-import TankMethodList from '../components/manager/TankMethodList';
-import TankMethodCreate from '../components/manager/TankMethodCreate';
-import TankMethodEdit from '../components/manager/TankMethodEdit';
+import TankMethodList from '../components/manager/tankmethod/TankMethodList';
+import TankMethodCreate from '../components/manager/tankmethod/TankMethodCreate';
+import TankMethodEdit from '../components/manager/tankmethod/TankMethodEdit';
 import AccountManagement from '../pages/Admin/AccountManagement';
 import BlogCategoryManagement from '../pages/Admin/BlogCategoryManagement';
 import BlogManagement from '../pages/Admin/BlogManagement';
-import CategoryList from '../components/manager/CategoryList';
-import CategoryCreate from '../components/manager/CategoryCreate';
-import CategoryEdit from '../components/manager/CategoryEdit';
+import CategoryList from '../components/manager/accessory/CategoryList';
+import CategoryCreate from '../components/manager/accessory/CategoryCreate';
+import CategoryEdit from '../components/manager/accessory/CategoryEdit';
 import TerrariumVariants from '../components/manager/TerrariumVariants';
 import OrderList from '@/components/staff/OrderList';
 import ChatWithCustomer from '@/components/staff/ChatWithCustomer';
@@ -21,12 +21,12 @@ import EditTerrariumVariant from '@/components/manager/TerrariumVariantEdit';
 import VoucherManagement from '@/pages/Admin/VoucherManagement';
 import MembershipManagement from '@/pages/Admin/MembershipManagement';
 import OrderDetail from '@/pages/Customer/OrderDetail';
-import ComboCategoryList from '@/components/manager/ComboCategoryList';
-import ComboCategoryCreate from '@/components/manager/ComboCategoryCreate';
-import ComboCategoryEdit from '@/components/manager/ComboCategoryEdit';
-import ComboList from '@/components/manager/ComboList';
-import ComboCreate from '@/components/manager/ComboCreate';
-import ComboEdit from '@/components/manager/ComboEdit';
+import ComboCategoryList from '@/components/manager/combo/ComboCategoryList';
+import ComboCategoryCreate from '@/components/manager/combo/ComboCategoryCreate';
+import ComboCategoryEdit from '@/components/manager/combo/ComboCategoryEdit';
+import ComboList from '@/components/manager/combo/ComboList';
+import ComboCreate from '@/components/manager/combo/ComboCreate';
+import ComboEdit from '@/components/manager/combo/ComboEdit';
 import TerrariumChatbox from '@/pages/Customer/TerrariumChatbox';
 import MyLayoutsPage from '@/pages/Customer/MyLayouts';
 import OrderDetailStaff from '@/components/staff/OrderDetailStaff';
@@ -39,6 +39,8 @@ import ComboDetail from '@/pages/Customer/ComboDetail';
 import MembershipSuccess from '@/pages/Customer/MembershipSuccess';
 import WalletPage from '@/pages/Customer/WalletPage';
 import PaymentFail from '@/pages/Customer/PaymentFail';
+import CreateVariantPage from '@/components/manager/CreateVariantPage';
+import EditVariantPage from '@/components/manager/EditVariantPage';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -47,15 +49,15 @@ const ManagerLayout = lazy(() => import('../components/manager/ManagerLayout'));
 const TerrariumList = lazy(() => import('../components/manager/TerrariumList'));
 const TerrariumCreate = lazy(() => import('../components/manager/TerrariumCreate'));
 const TerrariumEdit = lazy(() => import('../components/manager/TerrariumEdit'));
-const AccessoryList = lazy(() => import('../components/manager/AccessoryList'));
-const AccessoryCreate = lazy(() => import('../components/manager/AccessoryCreate'));
-const AccessoryEdit = lazy(() => import('../components/manager/AccessoryEdit'));
-const ShapeList = lazy(() => import('../components/manager/ShapeList'));
-const ShapeCreate = lazy(() => import('../components/manager/ShapeCreate'));
-const ShapeEdit = lazy(() => import('../components/manager/ShapeEdit'));
-const ThemeList = lazy(() => import('../components/manager/ThemeList'));
-const ThemeCreate = lazy(() => import('../components/manager/ThemeCreate'));
-const ThemeEdit = lazy(() => import('../components/manager/ThemeEdit'));
+const AccessoryList = lazy(() => import('../components/manager/accessory/AccessoryList'));
+const AccessoryCreate = lazy(() => import('../components/manager/accessory/AccessoryCreate'));
+const AccessoryEdit = lazy(() => import('../components/manager/accessory/AccessoryEdit'));
+const ShapeList = lazy(() => import('../components/manager/shape/ShapeList'));
+const ShapeCreate = lazy(() => import('../components/manager/shape/ShapeCreate'));
+const ShapeEdit = lazy(() => import('../components/manager/shape/ShapeEdit'));
+const ThemeList = lazy(() => import('../components/manager/theme/ThemeList'));
+const ThemeCreate = lazy(() => import('../components/manager/theme/ThemeCreate'));
+const ThemeEdit = lazy(() => import('../components/manager/theme/ThemeEdit'));
 const Home = lazy(() => import('../pages/Customer/Home'));
 const Shop = lazy(() => import('../pages/Customer/Shop'));
 const Membership = lazy(() => import('../pages/Customer/MemberShip'));
@@ -196,6 +198,8 @@ const AppRoutes = () => {
           <Route path="combo/list" element={<Suspense fallback={<Loading />}><ComboList /></Suspense>} />
           <Route path="combo/create" element={<Suspense fallback={<Loading />}><ComboCreate /></Suspense>} />
           <Route path="combo/edit/:id" element={<Suspense fallback={<Loading />}><ComboEdit /></Suspense>} />
+          <Route path="terrarium/:id/variants/create" element={<Suspense fallback={<Loading />}><CreateVariantPage /></Suspense>} />
+          <Route path="terrarium/:id/variants/edit/:variantId" element={<Suspense fallback={<Loading />}><EditVariantPage /></Suspense>} />
         </Route>
       </Route>
       <Route path="admin" element={<PrivateRoute allowedRoles={['Admin']} />}>

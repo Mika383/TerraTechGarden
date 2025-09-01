@@ -15,6 +15,7 @@ interface Accessory {
   updatedAt: string;
   status: string;
   size: string;
+  quantitative: string;
   accessoryImages: { accessoryImageId: number; accessoryId: number; imageUrl: string }[];
 }
 
@@ -51,7 +52,6 @@ const apiClient = axios.create({
 // Add request interceptor to include auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // Get token from localStorage, sessionStorage, or your auth context
     const token = localStorage.getItem('authToken') || 
                   sessionStorage.getItem('authToken') || 
                   localStorage.getItem('token') ||
@@ -73,15 +73,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
       notification.error({
         message: 'Lỗi xác thực',
         description: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
         placement: 'topRight',
       });
-      
-      // Optionally redirect to login
-      // window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -95,26 +91,19 @@ const AccessoryList: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
-  
-  // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [totalPages, setTotalPages] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
-
-  // Image management states
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
   const [selectedAccessory, setSelectedAccessory] = useState<Accessory | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-
-  // Search and filter states
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [isFilterMode, setIsFilterMode] = useState(false);
 
   const fetchAccessories = async (page: number = currentPage, size: number = pageSize) => {
     try {
       setLoading(true);
-      
       const accessoryResponse = await apiClient.get<ApiResponse<AccessoryApiResponse>>(
         `/Accessory/get-all?Pagination.PageNumber=${page}&Pagination.PageSize=${size}&IncludeProperties=AccessoryImages`
       );
@@ -146,7 +135,6 @@ const AccessoryList: React.FC = () => {
 
   const searchAccessories = async (searchName: string) => {
     if (!searchName.trim()) {
-      // If search term is empty, fetch all accessories
       setIsSearchMode(false);
       await fetchAccessories(1, pageSize);
       return;
@@ -155,7 +143,6 @@ const AccessoryList: React.FC = () => {
     try {
       setSearchLoading(true);
       setIsSearchMode(true);
-      
       const response = await apiClient.get<ApiResponse<Accessory[]>>(
         `/Accessory/get-by-name/${encodeURIComponent(searchName.trim())}`
       );
@@ -163,7 +150,6 @@ const AccessoryList: React.FC = () => {
       if (response.data.status === 200) {
         const searchResults = response.data.data;
         setAccessories(searchResults);
-        // For search results, we don't have pagination info from API
         setTotalPages(1);
         setTotalRecords(searchResults.length);
         setCurrentPage(1);
@@ -185,7 +171,6 @@ const AccessoryList: React.FC = () => {
         description: error.response?.data?.message || 'Có lỗi xảy ra khi tìm kiếm phụ kiện',
         placement: 'topRight',
       });
-      // On error, fallback to showing all accessories
       setIsSearchMode(false);
       await fetchAccessories();
     } finally {
@@ -195,7 +180,6 @@ const AccessoryList: React.FC = () => {
 
   const filterAccessoriesByCategory = async (categoryId: string) => {
     if (categoryId === 'all') {
-      // If "all" is selected, fetch all accessories
       setIsFilterMode(false);
       await fetchAccessories(1, pageSize);
       return;
@@ -204,7 +188,6 @@ const AccessoryList: React.FC = () => {
     try {
       setLoading(true);
       setIsFilterMode(true);
-      
       const response = await apiClient.get<ApiResponse<Accessory[]>>(
         `/Accessory/filter-by-category/${categoryId}`
       );
@@ -212,7 +195,6 @@ const AccessoryList: React.FC = () => {
       if (response.data.status === 200) {
         const filteredResults = response.data.data;
         setAccessories(filteredResults);
-        // For filtered results, we don't have pagination info from API
         setTotalPages(1);
         setTotalRecords(filteredResults.length);
         setCurrentPage(1);
@@ -234,7 +216,6 @@ const AccessoryList: React.FC = () => {
         description: error.response?.data?.message || 'Có lỗi xảy ra khi lọc phụ kiện theo danh mục',
         placement: 'topRight',
       });
-      // On error, fallback to showing all accessories
       setIsFilterMode(false);
       await fetchAccessories();
     } finally {
@@ -244,14 +225,11 @@ const AccessoryList: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      // Try the correct endpoint first
       let categoryResponse;
-      
       try {
         categoryResponse = await apiClient.get<ApiResponse<Category[]>>('/Category/get-all');
       } catch (error: any) {
         if (error.response?.status === 404) {
-          // If get-all doesn't exist, try the base endpoint
           categoryResponse = await apiClient.get<ApiResponse<Category[]>>('/Category');
         } else {
           throw error;
@@ -269,7 +247,6 @@ const AccessoryList: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error fetching categories:', error);
-      
       if (error.response?.status === 401) {
         notification.error({
           message: 'Lỗi xác thực',
@@ -294,33 +271,27 @@ const AccessoryList: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Only fetch with pagination when not in search or filter mode
     if (!isSearchMode && !isFilterMode) {
       fetchAccessories(currentPage, pageSize);
     }
   }, [currentPage, pageSize]);
 
-  // Handle search input with debounce
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       if (searchTerm.trim()) {
         searchAccessories(searchTerm);
       } else if (isSearchMode) {
-        // Clear search mode when search term is empty
         setIsSearchMode(false);
         fetchAccessories(1, pageSize);
       }
-    }, 500); // 500ms debounce
-
+    }, 500);
     return () => clearTimeout(debounceTimer);
   }, [searchTerm]);
 
-  // Handle category filter
   useEffect(() => {
     filterAccessoriesByCategory(filterCategory);
   }, [filterCategory]);
 
-  // Apply status filter to current data (client-side filtering)
   const filteredAccessories = accessories.filter((accessory) => {
     const matchesStatus = filterStatus === 'all' || accessory.status === filterStatus;
     return matchesStatus;
@@ -331,18 +302,13 @@ const AccessoryList: React.FC = () => {
       try {
         setLoading(true);
         const response = await apiClient.delete(`/Accessory/delete-accessory/${id}`);
-
-        // Check for successful deletion (status 200, 204, or successful response)
         if (response.status === 200 || response.status === 204 || 
             (response.data && (response.data.status === 200 || response.data.status === 204))) {
-          
           notification.success({
             message: 'Thành công',
             description: 'Phụ kiện đã được xóa thành công!',
             placement: 'topRight',
           });
-
-          // Refresh current data based on current mode
           if (isSearchMode && searchTerm.trim()) {
             await searchAccessories(searchTerm);
           } else if (isFilterMode && filterCategory !== 'all') {
@@ -350,14 +316,11 @@ const AccessoryList: React.FC = () => {
           } else {
             await fetchAccessories(currentPage, pageSize);
           }
-          
         } else {
           throw new Error(response.data?.message || 'Không thể xóa phụ kiện');
         }
       } catch (error: any) {
         console.error('Error deleting accessory:', error);
-        
-        // Show detailed error message
         let errorMessage = 'Không thể xóa phụ kiện';
         if (error.response?.data?.message) {
           errorMessage = error.response.data.message;
@@ -366,12 +329,11 @@ const AccessoryList: React.FC = () => {
         } else if (error.message) {
           errorMessage = error.message;
         }
-        
         notification.error({
           message: 'Lỗi xóa phụ kiện',
           description: errorMessage,
           placement: 'topRight',
-          duration: 5, // Show for 5 seconds
+          duration: 5,
         });
       } finally {
         setLoading(false);
@@ -381,11 +343,9 @@ const AccessoryList: React.FC = () => {
 
   const handleImageUpload = async (file: File) => {
     if (!selectedAccessory) return;
-
     const formData = new FormData();
     formData.append('AccessoryId', selectedAccessory.accessoryId.toString());
     formData.append('ImageFile', file);
-
     try {
       setUploadingImage(true);
       const response = await apiClient.post('/AccessoryImage/add-accessoryimage', formData, {
@@ -393,15 +353,12 @@ const AccessoryList: React.FC = () => {
           'Content-Type': 'multipart/form-data',
         },
       });
-
       if (response.data.status === 201 || response.status === 200) {
         notification.success({
           message: 'Thành công',
           description: 'Tải ảnh lên thành công!',
           placement: 'topRight',
         });
-
-        // Refresh data based on current mode
         if (isSearchMode && searchTerm.trim()) {
           await searchAccessories(searchTerm);
         } else if (isFilterMode && filterCategory !== 'all') {
@@ -409,13 +366,10 @@ const AccessoryList: React.FC = () => {
         } else {
           await fetchAccessories(currentPage, pageSize);
         }
-        
-        // Update selected accessory with fresh data
         const updatedAccessory = accessories.find(a => a.accessoryId === selectedAccessory.accessoryId);
         if (updatedAccessory) {
           setSelectedAccessory(updatedAccessory);
         }
-
       } else {
         throw new Error(response.data?.message || 'Không thể tải ảnh lên');
       }
@@ -433,19 +387,15 @@ const AccessoryList: React.FC = () => {
 
   const handleImageDelete = async (imageId: number) => {
     if (!selectedAccessory) return;
-
     if (window.confirm('Bạn có chắc chắn muốn xóa ảnh này?')) {
       try {
         const response = await apiClient.delete(`/AccessoryImage/delete-accessoryimage/${imageId}`);
-
         if (response.data.status === 200 || response.status === 204) {
           notification.success({
             message: 'Thành công',
             description: 'Xóa ảnh thành công!',
             placement: 'topRight',
           });
-
-          // Refresh data based on current mode
           if (isSearchMode && searchTerm.trim()) {
             await searchAccessories(searchTerm);
           } else if (isFilterMode && filterCategory !== 'all') {
@@ -453,13 +403,10 @@ const AccessoryList: React.FC = () => {
           } else {
             await fetchAccessories(currentPage, pageSize);
           }
-          
-          // Update selected accessory with fresh data
           const updatedAccessory = accessories.find(a => a.accessoryId === selectedAccessory.accessoryId);
           if (updatedAccessory) {
             setSelectedAccessory(updatedAccessory);
           }
-
         } else {
           throw new Error(response.data?.message || 'Không thể xóa ảnh');
         }
@@ -483,7 +430,7 @@ const AccessoryList: React.FC = () => {
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize);
     if (!isSearchMode && !isFilterMode) {
-      setCurrentPage(1); // Reset to first page when changing page size
+      setCurrentPage(1);
     }
   };
 
@@ -531,7 +478,6 @@ const AccessoryList: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Quản lý Phụ kiện</h1>
@@ -545,8 +491,6 @@ const AccessoryList: React.FC = () => {
           <span>Thêm Phụ kiện</span>
         </Link>
       </div>
-
-      {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
@@ -614,8 +558,6 @@ const AccessoryList: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -626,6 +568,7 @@ const AccessoryList: React.FC = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Kích thước</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700">Định lượng</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Hình ảnh</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Trạng thái</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
@@ -656,6 +599,9 @@ const AccessoryList: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-gray-600">
                     {accessory.size}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {accessory.quantitative}
                   </td>
                   <td className="py-3 px-4">
                     <button
@@ -702,15 +648,12 @@ const AccessoryList: React.FC = () => {
             </tbody>
           </table>
         </div>
-
         {filteredAccessories.length === 0 && (
           <div className="text-center py-8 text-gray-500">
             Không tìm thấy phụ kiện nào phù hợp với tiêu chí tìm kiếm
           </div>
         )}
       </div>
-
-      {/* Pagination - Only show when not in search/filter mode */}
       {totalPages > 1 && !isSearchMode && !isFilterMode && (
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
@@ -725,7 +668,6 @@ const AccessoryList: React.FC = () => {
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 let pageNum;
                 if (totalPages <= 5) {
@@ -737,7 +679,6 @@ const AccessoryList: React.FC = () => {
                 } else {
                   pageNum = currentPage - 2 + i;
                 }
-                
                 return (
                   <button
                     key={pageNum}
@@ -752,7 +693,6 @@ const AccessoryList: React.FC = () => {
                   </button>
                 );
               })}
-              
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
@@ -764,8 +704,6 @@ const AccessoryList: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Image Management Modal */}
       <Modal
         title={`Quản lý ảnh - ${selectedAccessory?.name}`}
         open={isImageModalVisible}
@@ -775,7 +713,6 @@ const AccessoryList: React.FC = () => {
       >
         {selectedAccessory && (
           <div className="space-y-4">
-            {/* Upload Section */}
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
               <div className="text-center">
                 <Upload className="mx-auto h-12 w-12 text-gray-400" />
@@ -810,8 +747,6 @@ const AccessoryList: React.FC = () => {
                 )}
               </div>
             </div>
-
-            {/* Images Grid */}
             <div className="grid grid-cols-3 gap-4">
               {selectedAccessory.accessoryImages.map((image) => (
                 <div key={image.accessoryImageId} className="relative group">
@@ -830,7 +765,6 @@ const AccessoryList: React.FC = () => {
                 </div>
               ))}
             </div>
-
             {selectedAccessory.accessoryImages.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 Chưa có ảnh nào cho phụ kiện này

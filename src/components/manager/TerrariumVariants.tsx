@@ -1,7 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, Plus, Package, DollarSign, Box, Calendar, Image as ImageIcon, X, Upload } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Plus, Package, DollarSign, Box, Calendar, Image as ImageIcon } from 'lucide-react';
 import { notification } from 'antd';
+
+interface Accessory {
+  accessoryId: number;
+  name: string;
+  size: string;
+  description: string;
+  price: number;
+  stockQuantity: number;
+  categoryId: number;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
+  accessoryImages: any[];
+}
+
+interface TerrariumVariantAccessory {
+  terrariumVariantAccessoryId: number;
+  terrariumVariantId: number;
+  accessoryId: number;
+  quantity: number;
+}
 
 interface TerrariumVariant {
   terrariumVariantId: number;
@@ -16,20 +37,13 @@ interface TerrariumVariant {
   orderItems: any[];
   promotionTerrariumVariants: any[];
   terrarium: any;
+  terrariumVariantAccessories: TerrariumVariantAccessory[];
 }
 
 interface ApiResponse {
   status: number;
   message: string;
   data: TerrariumVariant[] | null;
-}
-
-interface CreateVariantData {
-  terrariumId: number;
-  variantName: string;
-  price: number;
-  stockQuantity: number;
-  imageFile: File | null;
 }
 
 const TerrariumVariants: React.FC = () => {
@@ -39,47 +53,19 @@ const TerrariumVariants: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [terrariumName, setTerrariumName] = useState<string>('');
-  const [showModal, setShowModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
-  
-  // Form states
-  const [formData, setFormData] = useState<CreateVariantData>({
-    terrariumId: parseInt(id || '0'),
-    variantName: '',
-    price: 0,
-    stockQuantity: 0,
-    imageFile: null
-  });
+  const [availableAccessories, setAvailableAccessories] = useState<Accessory[]>([]);
+  const [loadingAccessories, setLoadingAccessories] = useState(false);
 
-  const [editFormData, setEditFormData] = useState<CreateVariantData>({
-    terrariumId: parseInt(id || '0'),
-    variantName: '',
-    price: 0,
-    stockQuantity: 0,
-    imageFile: null
-  });
-
-  // Add state for image preview
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
-
-  // Helper function to get auth token - FIXED VERSION
+  // Helper function to get auth token
   const getAuthToken = (): string | null => {
-    // Try different possible keys in localStorage
-    const token = localStorage.getItem('authToken') || 
-                  localStorage.getItem('token') || 
-                  localStorage.getItem('accessToken') || 
-                  localStorage.getItem('access_token');
-    
-    return token;
+    return localStorage.getItem('authToken') || 
+           localStorage.getItem('token') || 
+           localStorage.getItem('accessToken') || 
+           localStorage.getItem('access_token');
   };
 
   // Helper function to handle authentication errors
   const handleAuthError = () => {
-    // Clear any stored tokens
     localStorage.removeItem('authToken');
     localStorage.removeItem('token');
     localStorage.removeItem('accessToken');
@@ -91,7 +77,6 @@ const TerrariumVariants: React.FC = () => {
       placement: 'topRight',
     });
 
-    // Redirect to login page after a short delay
     setTimeout(() => {
       navigate('/login');
     }, 2000);
@@ -113,9 +98,22 @@ const TerrariumVariants: React.FC = () => {
   };
 
   useEffect(() => {
-    if (id && checkAuth()) {
+    // FIX: Early validation for param to prevent invalid fetches
+    if (!id || id === 'undefined' || isNaN(parseInt(id))) {
+      setError('ID terrarium không hợp lệ. Đang chuyển hướng...');
+      setLoading(false);
+      notification.error({
+        message: 'Lỗi',
+        description: 'ID terrarium không hợp lệ.',
+        placement: 'topRight',
+      });
+      navigate('/manager/terrarium/list');
+      return;
+    }
+
+    if (checkAuth()) {
       fetchVariants(id);
-      setFormData(prev => ({ ...prev, terrariumId: parseInt(id) }));
+      fetchAvailableAccessories();
     }
   }, [id]);
 
@@ -135,7 +133,6 @@ const TerrariumVariants: React.FC = () => {
       if (result.status === 200 && result.data) {
         setVariants(result.data);
       } else if (result.status === -1 && result.data === null) {
-        // Handle case where no variants are found - this is normal, not an error
         setVariants([]);
         console.log('No variants found for this terrarium');
       } else {
@@ -154,191 +151,32 @@ const TerrariumVariants: React.FC = () => {
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        notification.error({
-          message: 'Lỗi',
-          description: 'Vui lòng chọn file hình ảnh',
-          placement: 'topRight',
-        });
-        return;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        notification.error({
-          message: 'Lỗi',
-          description: 'Kích thước file không được vượt quá 5MB',
-          placement: 'topRight',
-        });
-        return;
-      }
-
-      setFormData({ ...formData, imageFile: file });
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        notification.error({
-          message: 'Lỗi',
-          description: 'Vui lòng chọn file hình ảnh',
-          placement: 'topRight',
-        });
-        return;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        notification.error({
-          message: 'Lỗi',
-          description: 'Kích thước file không được vượt quá 5MB',
-          placement: 'topRight',
-        });
-        return;
-      }
-
-      setEditFormData({ ...editFormData, imageFile: file });
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setEditImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleCreateVariant = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!checkAuth()) return;
-
-    // Validation
-    if (!formData.variantName.trim()) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Vui lòng nhập tên variant',
-        placement: 'topRight',
-      });
-      return;
-    }
-
-    if (formData.price <= 0) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Giá phải lớn hơn 0',
-        placement: 'topRight',
-      });
-      return;
-    }
-
-    if (formData.stockQuantity < 0) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Số lượng tồn kho không được âm',
-        placement: 'topRight',
-      });
-      return;
-    }
-
+  const fetchAvailableAccessories = async () => {
     try {
-      setCreating(true);
+      setLoadingAccessories(true);
+      const response = await fetch('https://terarium.shop/api/Accessory/get-all');
       
-      const token = getAuthToken();
-      if (!token) {
-        handleAuthError();
-        return;
-      }
-
-      // Create FormData for multipart/form-data
-      const formDataToSend = new FormData();
-      
-      // Add fields according to API specification
-      formDataToSend.append('TerrariumId', formData.terrariumId.toString());
-      formDataToSend.append('VariantName', formData.variantName);
-      formDataToSend.append('Price', formData.price.toString());
-      formDataToSend.append('StockQuantity', formData.stockQuantity.toString());
-      
-      // Add image file if selected
-      if (formData.imageFile) {
-        formDataToSend.append('ImageFile', formData.imageFile);
-      }
-      
-      // Add timestamps (current time)
-      const now = new Date().toISOString();
-      formDataToSend.append('CreatedAt', now);
-      formDataToSend.append('UpdatedAt', now);
-
-      const response = await fetch('https://terarium.shop/api/TerrariumVariant/create-terrariumVariant', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formDataToSend,
-      });
-
       if (!response.ok) {
-        if (response.status === 401) {
-          handleAuthError();
-          return;
-        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+      
       const result = await response.json();
       
-      if (result.status === 201 || result.status === 200) {
-        notification.success({
-          message: 'Thành công',
-          description: 'Variant đã được tạo thành công!',
-          placement: 'topRight',
-        });
-        
-        // Reset form
-        setFormData({
-          terrariumId: parseInt(id || '0'),
-          variantName: '',
-          price: 0,
-          stockQuantity: 0,
-          imageFile: null
-        });
-        
-        // Clear image preview
-        setImagePreview(null);
-        
-        // Close modal
-        setShowModal(false);
-        
-        // Refresh variants list
-        if (id) {
-          fetchVariants(id);
-        }
+      if (result.status === 200 && result.data) {
+        // Filter only active accessories
+        const activeAccessories = result.data.filter((acc: Accessory) => 
+          acc.status === 'ACTIVE' || acc.status === 'Active'
+        );
+        setAvailableAccessories(activeAccessories);
       } else {
-        throw new Error(result.message || 'Failed to create variant');
+        console.log('No accessories found');
+        setAvailableAccessories([]);
       }
     } catch (error) {
-      console.error('Error creating variant:', error);
-      notification.error({
-        message: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tạo variant',
-        placement: 'topRight',
-      });
+      console.error('Error fetching accessories:', error);
+      setAvailableAccessories([]);
     } finally {
-      setCreating(false);
+      setLoadingAccessories(false);
     }
   };
 
@@ -385,187 +223,6 @@ const TerrariumVariants: React.FC = () => {
     }
   };
 
-  const fetchVariantForEdit = async (variantId: number) => {
-    if (!checkAuth()) return;
-
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        handleAuthError();
-        return;
-      }
-
-      const response = await fetch(`https://terarium.shop/api/TerrariumVariant/get-terrariumVariant/${variantId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          handleAuthError();
-          return;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.status === 200 && result.data) {
-        const variant = result.data;
-        setEditFormData({
-          terrariumId: variant.terrariumId,
-          variantName: variant.variantName,
-          price: variant.price,
-          stockQuantity: variant.stockQuantity,
-          imageFile: null
-        });
-        
-        // Set existing image as preview if available
-        if (variant.urlImage) {
-          setEditImagePreview(variant.urlImage);
-        }
-        
-        setEditingVariantId(variantId);
-        setShowEditModal(true);
-      } else {
-        throw new Error(result.message || 'Failed to fetch variant data');
-      }
-    } catch (error) {
-      console.error('Error fetching variant for edit:', error);
-      notification.error({
-        message: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải dữ liệu variant',
-        placement: 'topRight',
-      });
-    }
-  };
-
-  const handleUpdateVariant = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!checkAuth()) return;
-
-    if (!editingVariantId) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Không tìm thấy ID của variant',
-        placement: 'topRight',
-      });
-      return;
-    }
-
-    // Validation
-    if (!editFormData.variantName.trim()) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Vui lòng nhập tên variant',
-        placement: 'topRight',
-      });
-      return;
-    }
-
-    if (editFormData.price <= 0) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Giá phải lớn hơn 0',
-        placement: 'topRight',
-      });
-      return;
-    }
-
-    if (editFormData.stockQuantity < 0) {
-      notification.error({
-        message: 'Lỗi',
-        description: 'Số lượng tồn kho không được âm',
-        placement: 'topRight',
-      });
-      return;
-    }
-
-    try {
-      setUpdating(true);
-
-      const token = getAuthToken();
-      if (!token) {
-        handleAuthError();
-        return;
-      }
-
-      // Create FormData for multipart/form-data
-      const formDataToSend = new FormData();
-      formDataToSend.append('TerrariumVariantId', editingVariantId.toString());
-      formDataToSend.append('TerrariumId', editFormData.terrariumId.toString());
-      formDataToSend.append('VariantName', editFormData.variantName);
-      formDataToSend.append('Price', editFormData.price.toString());
-      formDataToSend.append('StockQuantity', editFormData.stockQuantity.toString());
-
-      // Add image file if selected
-      if (editFormData.imageFile) {
-        formDataToSend.append('ImageFile', editFormData.imageFile);
-      }
-
-      // Add timestamps
-      const now = new Date().toISOString();
-      formDataToSend.append('UpdatedAt', now);
-
-      const response = await fetch(
-        `https://terarium.shop/api/TerrariumVariant/update-terrariumVariant/${editingVariantId}`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formDataToSend,
-        }
-      );
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          handleAuthError();
-          return;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Handle empty response for 204 status
-      let result;
-      if (response.status !== 204) {
-        result = await response.json();
-      } else {
-        result = { status: 204 };
-      }
-
-      if (result.status === 200 || result.status === 204) {
-        notification.success({
-          message: 'Thành công',
-          description: 'Variant đã được cập nhật thành công!',
-          placement: 'topRight',
-        });
-
-        // Close modal and refresh variants list
-        handleCloseEditModal();
-        if (id) {
-          await fetchVariants(id);
-        }
-      } else {
-        throw new Error(result.message || 'Không thể cập nhật variant');
-      }
-    } catch (error) {
-      console.error('Error updating variant:', error);
-      notification.error({
-        message: 'Lỗi',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Có lỗi xảy ra khi cập nhật variant',
-        placement: 'topRight',
-      });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -594,30 +251,17 @@ const TerrariumVariants: React.FC = () => {
     return totalPrice / variants.length;
   };
 
-  // Reset modal when closing
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setFormData({
-      terrariumId: parseInt(id || '0'),
-      variantName: '',
-      price: 0,
-      stockQuantity: 0,
-      imageFile: null
-    });
-    setImagePreview(null);
+  const getVariantAccessoryCount = (variant: TerrariumVariant) => {
+    if (!variant.terrariumVariantAccessories) return 0;
+    return variant.terrariumVariantAccessories.reduce((sum, acc) => sum + acc.quantity, 0);
   };
 
-  const handleCloseEditModal = () => {
-    setShowEditModal(false);
-    setEditingVariantId(null);
-    setEditFormData({
-      terrariumId: parseInt(id || '0'),
-      variantName: '',
-      price: 0,
-      stockQuantity: 0,
-      imageFile: null
-    });
-    setEditImagePreview(null);
+  const getVariantAccessoryPrice = (variant: TerrariumVariant) => {
+    if (!variant.terrariumVariantAccessories) return 0;
+    return variant.terrariumVariantAccessories.reduce((sum, variantAcc) => {
+      const accessory = availableAccessories.find(acc => acc.accessoryId === variantAcc.accessoryId);
+      return sum + (accessory ? accessory.price * variantAcc.quantity : 0);
+    }, 0);
   };
 
   // Show auth error if no token is available
@@ -662,7 +306,7 @@ const TerrariumVariants: React.FC = () => {
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center space-x-2">
-            <div className="text-red-500">❌</div>
+            <div className="text-red-500">⚠</div>
             <div>
               <h3 className="text-red-800 font-medium">Có lỗi xảy ra</h3>
               <p className="text-red-600">{error}</p>
@@ -692,13 +336,13 @@ const TerrariumVariants: React.FC = () => {
             <p className="text-gray-600">Quản lý các biến thể của terrarium</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
+        <Link
+          to={`/manager/terrarium/${id}/variants/create`}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
           <span>Thêm Variant</span>
-        </button>
+        </Link>
       </div>
 
       {/* Stats */}
@@ -756,76 +400,100 @@ const TerrariumVariants: React.FC = () => {
                   <th className="text-left py-3 px-4 font-medium text-gray-700">Tên Variant</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-700">Giá</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-700">Tồn kho</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-700">Phụ kiện</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-700">Ngày tạo</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-700">Cập nhật</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-700">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {variants.map((variant) => (
-                  <tr key={variant.terrariumVariantId} className="hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium text-gray-900">
-                      {variant.terrariumVariantId}
-                    </td>
-                    <td className="py-3 px-4">
-                      {variant.urlImage ? (
-                        <img
-                          src={variant.urlImage}
-                          alt={variant.variantName}
-                          className="w-12 h-12 object-cover rounded-lg"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-gray-400" />
+                {variants.map((variant) => {
+                  const accessoryCount = getVariantAccessoryCount(variant);
+                  const accessoryPrice = getVariantAccessoryPrice(variant);
+                  
+                  return (
+                    <tr key={variant.terrariumVariantId} className="hover:bg-gray-50">
+                      <td className="py-3 px-4 font-medium text-gray-900">
+                        {variant.terrariumVariantId}
+                      </td>
+                      <td className="py-3 px-4">
+                        {variant.urlImage ? (
+                          <img
+                            src={variant.urlImage}
+                            alt={variant.variantName}
+                            className="w-12 h-12 object-cover rounded-lg"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                            <ImageIcon className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-900">
+                        {variant.variantName}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-900">
+                        <div className="space-y-1">
+                          <div>{formatPrice(variant.price)}</div>
+                          {accessoryPrice > 0 && (
+                            <div className="text-xs text-gray-500">
+                              +{formatPrice(accessoryPrice)} phụ kiện
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-gray-900">
-                      {variant.variantName}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-gray-900">
-                      {formatPrice(variant.price)}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        variant.stockQuantity > 10 
-                          ? 'text-green-600 bg-green-50'
-                          : variant.stockQuantity > 0 
-                          ? 'text-yellow-600 bg-yellow-50'
-                          : 'text-red-600 bg-red-50'
-                      }`}>
-                        {variant.stockQuantity}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600 text-sm">
-                      {formatDate(variant.createdAt)}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600 text-sm">
-                      {formatDate(variant.updatedAt)}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center space-x-2">
-                        <button
-                          onClick={() => fetchVariantForEdit(variant.terrariumVariantId)}
-                          className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
-                          title="Chỉnh sửa"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteVariant(variant.terrariumVariantId)}
-                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          variant.stockQuantity > 10 
+                            ? 'text-green-600 bg-green-50'
+                            : variant.stockQuantity > 0 
+                            ? 'text-yellow-600 bg-yellow-50'
+                            : 'text-red-600 bg-red-50'
+                        }`}>
+                          {variant.stockQuantity}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {accessoryCount > 0 ? (
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                              {accessoryCount} phụ kiện
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-sm">Không có</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-gray-600 text-sm">
+                        {formatDate(variant.createdAt)}
+                      </td>
+                      <td className="py-3 px-4 text-gray-600 text-sm">
+                        {formatDate(variant.updatedAt)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-center space-x-2">
+                          <Link
+                            to={`/manager/terrarium/${id}/variants/edit/${variant.terrariumVariantId}`}
+                            className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
+                            title="Chỉnh sửa"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteVariant(variant.terrariumVariantId)}
+                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -834,13 +502,13 @@ const TerrariumVariants: React.FC = () => {
             <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <p className="text-xl font-medium text-gray-900 mb-2">Chưa có biến thể nào</p>
             <p className="text-gray-500 mb-6">Terrarium này chưa có variant nào. Tạo variant đầu tiên để bắt đầu bán hàng.</p>
-            <button
-              onClick={() => setShowModal(true)}
+            <Link
+              to={`/manager/terrarium/${id}/variants/create`}
               className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="w-5 h-5 mr-2" />
               Thêm Variant Đầu Tiên
-            </button>
+            </Link>
           </div>
         )}
       </div>
@@ -857,324 +525,21 @@ const TerrariumVariants: React.FC = () => {
                 <li>• Tổng số lượng tồn kho: {getTotalStock()} sản phẩm</li>
                 <li>• Giá cao nhất: {formatPrice(Math.max(...variants.map(v => v.price)))}</li>
                 <li>• Giá thấp nhất: {formatPrice(Math.min(...variants.map(v => v.price)))}</li>
+                {availableAccessories.length > 0 && (
+                  <li>• Có {availableAccessories.length} phụ kiện có sẵn để thêm vào variants</li>
+                )}
               </ul>
             </div>
           </div>
         </div>
       )}
 
-      {/* Create Variant Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Thêm Variant Mới</h2>
-              <button
-                onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateVariant} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Terrarium ID
-                </label>
-                <input
-                  type="number"
-                  value={formData.terrariumId}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tên Variant <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.variantName}
-                  onChange={(e) => setFormData({ ...formData, variantName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Nhập tên variant..."
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Giá (VND) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                  min="0"
-                  step="1000"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Số lượng tồn kho <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={formData.stockQuantity}
-                  onChange={(e) => setFormData({ ...formData, stockQuantity: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hình ảnh
-                </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-gray-400 transition-colors">
-                  <div className="space-y-1 text-center">
-                    {imagePreview ? (
-                      <div className="relative">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="mx-auto h-32 w-32 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData({ ...formData, imageFile: null });
-                            setImagePreview(null);
-                          }}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs hover:bg-red-600"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                        <div className="flex text-sm text-gray-600">
-                          <label
-                            htmlFor="image-upload"
-                            className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                          >
-                            <span>Tải lên file</span>
-                            <input
-                              id="image-upload"
-                              name="image-upload"
-                              type="file"
-                              accept="image/*"
-                              className="sr-only"
-                              onChange={handleImageChange}
-                            />
-                          </label>
-                          <p className="pl-1">hoặc kéo thả</p>
-                        </div>
-                        <p className="text-xs text-gray-500">PNG, JPG, GIF tối đa 5MB</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                  disabled={creating}
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                >
-                  {creating ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Đang tạo...
-                    </>
-                  ) : (
-                    'Tạo Variant'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Variant Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Chỉnh Sửa Variant</h2>
-              <button
-                onClick={handleCloseEditModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateVariant} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Variant ID
-                </label>
-                <input
-                  type="number"
-                  value={editingVariantId || ''}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Terrarium ID
-                </label>
-                <input
-                  type="number"
-                  value={editFormData.terrariumId}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tên Variant <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editFormData.variantName}
-                  onChange={(e) => setEditFormData({ ...editFormData, variantName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Nhập tên variant..."
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Giá (VND) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={editFormData.price}
-                  onChange={(e) => setEditFormData({ ...editFormData, price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                  min="0"
-                  step="1000"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Số lượng tồn kho <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={editFormData.stockQuantity}
-                  onChange={(e) => setEditFormData({ ...editFormData, stockQuantity: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hình ảnh
-                </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-gray-400 transition-colors">
-                  <div className="space-y-1 text-center">
-                    {editImagePreview ? (
-                      <div className="relative">
-                        <img
-                          src={editImagePreview}
-                          alt="Preview"
-                          className="mx-auto h-32 w-32 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditFormData({ ...editFormData, imageFile: null });
-                            setEditImagePreview(null);
-                          }}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs hover:bg-red-600"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                        <div className="flex text-sm text-gray-600">
-                          <label
-                            htmlFor="edit-image-upload"
-                            className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                          >
-                            <span>Tải lên file</span>
-                            <input
-                              id="edit-image-upload"
-                              name="edit-image-upload"
-                              type="file"
-                              accept="image/*"
-                              className="sr-only"
-                              onChange={handleEditImageChange}
-                            />
-                          </label>
-                          <p className="pl-1">hoặc kéo thả</p>
-                        </div>
-                        <p className="text-xs text-gray-500">PNG, JPG, GIF tối đa 5MB</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={handleCloseEditModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                  disabled={updating}
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={updating}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                >
-                  {updating ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Đang cập nhật...
-                    </>
-                  ) : (
-                    'Cập Nhật Variant'
-                  )}
-                </button>
-              </div>
-            </form>
+      {/* Loading Accessories Indicator */}
+      {loadingAccessories && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-yellow-700">Đang tải danh sách phụ kiện...</span>
           </div>
         </div>
       )}

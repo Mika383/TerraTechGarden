@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Upload, X, Image, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Save, Upload, X, Image } from 'lucide-react';
 import { notification } from 'antd';
-import Step4Accessories from './Step4Accessories';
-import Step5TerrariumVariant from './Step5TerrariumVariant';
+import Step4Accessories from '../Step4Accessories';
+import Step5TerrariumVariant from '../Step5TerrariumVariant';
 
 // Update the ComboFormData interface
 interface ComboFormData {
-  comboId: number;
   comboCategoryId: number;
   name: string;
   description: string;
@@ -54,6 +53,12 @@ interface Accessory {
   accessoryImages: any[];
 }
 
+interface SelectedAccessory {
+  accessoryId: number;
+  quantity: number;
+  accessory: Accessory;
+}
+
 interface SelectedTerrariumVariant {
   terrariumVariantId: number;
   terrariumId: number;
@@ -67,63 +72,14 @@ interface SelectedTerrariumVariant {
   quantity: number;
 }
 
-interface ComboData {
-  comboId: number;
-  comboCategoryId: number;
-  categoryName: string;
-  name: string;
-  description: string;
-  imageUrl: string;
-  originalPrice: number;
-  comboPrice: number;
-  discountPercent: number;
-  saveAmount: number;
-  isActive: boolean;
-  isFeatured: boolean;
-  stockQuantity: number;
-  soldQuantity: number;
-  isInStock: boolean;
-  items: {
-    comboItemId: number;
-    terrariumVariantId: number | null;
-    accessoryId: number | null;
-    productType: string;
-    productName: string;
-    productImage: string | null;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-  }[];
-  createdAt: string;
-}
-
-interface TerrariumVariant {
-  terrariumVariantId: number;
-  terrariumId: number;
-  variantName: string;
-  price: number;
-  stockQuantity: number;
-  urlImage: string | null;
-  createdAt: string | null;
-  updatedAt: string;
-}
-
-interface Terrarium {
-  terrariumId: number;
-  terrariumName: string;
-}
-
-const ComboEdit: React.FC = () => {
+const ComboCreate: React.FC = () => {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [fetchingData, setFetchingData] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
   
   // Form data state
   const [formData, setFormData] = useState<ComboFormData>({
-    comboId: Number(id) || 0,
     comboCategoryId: 0,
     name: '',
     description: '',
@@ -139,121 +95,39 @@ const ComboEdit: React.FC = () => {
   const [comboCategories, setComboCategories] = useState<ComboCategory[]>([]);
   
   // Step-specific states
-  const [selectedAccessories, setSelectedAccessories] = useState<Accessory[]>([]);
+  const [selectedAccessories, setSelectedAccessories] = useState<SelectedAccessory[]>([]);
   const [selectedTerrariumVariants, setSelectedTerrariumVariants] = useState<SelectedTerrariumVariant[]>([]);
 
-  // Fetch combo categories and combo data on component mount
+  // Fetch combo categories on component mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setFetchingData(true);
-        
         // Fetch Combo Categories
         const categoryResponse = await fetch('https://terarium.shop/api/ComboCategories');
         const categoryData = await categoryResponse.json();
         if (categoryData.status === 200) {
           setComboCategories(categoryData.data);
         }
-
-        // Fetch combo data
-        if (id) {
-          const token = localStorage.getItem('authToken');
-          const comboResponse = await fetch(`https://terarium.shop/api/Combos/${id}`, {
-            headers: {
-              'Authorization': token ? `Bearer ${token}` : '',
-            },
-          });
-          if (!comboResponse.ok) throw new Error(`HTTP error! status: ${comboResponse.status}`);
-          
-          const comboResult = await comboResponse.json();
-          if (comboResult.status === 200) {
-            const combo: ComboData = comboResult.data;
-            setFormData({
-              comboId: combo.comboId,
-              comboCategoryId: combo.comboCategoryId,
-              name: combo.name,
-              description: combo.description,
-              imageUrl: combo.imageUrl,
-              comboPrice: combo.comboPrice,
-              discountPercent: combo.discountPercent,
-              stockQuantity: combo.stockQuantity,
-              isFeatured: combo.isFeatured,
-              items: combo.items.map(item => ({
-                accessoryId: item.accessoryId ?? undefined,
-                terrariumVariantId: item.terrariumVariantId ?? undefined,
-                quantity: item.quantity,
-              })),
-            });
-
-            // Populate selected accessories and variants
-            // First fetch all accessories and variants
-            const accessoryResponse = await fetch('https://terarium.shop/api/Accessory/get-all?Pagination.PageNumber=1&Pagination.PageSize=1000');
-            const accessoryData = await accessoryResponse.json();
-            const allAccessories: Accessory[] = accessoryData.data?.results || [];
-
-            const variantResponse = await fetch('https://terarium.shop/api/TerrariumVariant/get-all-terrariumVariant');
-            const variantData = await variantResponse.json();
-            const allVariants: TerrariumVariant[] = variantData.data || [];
-
-            // Fetch terrariums for names
-            const terrariumResponse = await fetch('https://terarium.shop/api/Terrarium/get-all?Pagination.PageNumber=1&Pagination.PageSize=1000');
-            const terrariumData = await terrariumResponse.json();
-            const allTerrariums: Terrarium[] = terrariumData.data?.results || [];
-
-            // Map selected accessories
-            const selectedAcc = combo.items
-              .filter(item => item.accessoryId)
-              .map(item => {
-                const acc = allAccessories.find(a => a.accessoryId === item.accessoryId);
-                return acc ? { ...acc } : null;
-              })
-              .filter(Boolean) as Accessory[];
-
-            setSelectedAccessories(selectedAcc);
-
-            // Map selected variants
-            const selectedVar = combo.items
-              .filter(item => item.terrariumVariantId)
-              .map(item => {
-                const variant = allVariants.find(v => v.terrariumVariantId === item.terrariumVariantId);
-                if (variant) {
-                  const terrarium = allTerrariums.find(t => t.terrariumId === variant.terrariumId);
-                  return {
-                    ...variant,
-                    terrariumName: terrarium?.terrariumName || 'Unknown',
-                    quantity: item.quantity,
-                  };
-                }
-                return null;
-              })
-              .filter(Boolean) as SelectedTerrariumVariant[];
-
-            setSelectedTerrariumVariants(selectedVar);
-          }
-        }
       } catch (error) {
         notification.error({
           message: 'Lỗi',
-          description: 'Không thể tải dữ liệu.',
+          description: 'Không thể tải dữ liệu danh mục.',
           placement: 'topRight',
         });
-        navigate('/manager/combo/list');
-      } finally {
-        setFetchingData(false);
       }
     };
     fetchData();
-  }, [id, navigate]);
+  }, []);
 
   // Update formData.items based on selections
   useEffect(() => {
     const items: ComboFormData['items'] = [];
     
     // Add accessories
-    selectedAccessories.forEach(accessory => {
+    selectedAccessories.forEach(selAcc => {
       items.push({
-        accessoryId: accessory.accessoryId,
-        quantity: 1, // Assuming quantity 1 for accessories as in create
+        accessoryId: selAcc.accessoryId,
+        quantity: selAcc.quantity,
       });
     });
     
@@ -409,8 +283,8 @@ const ComboEdit: React.FC = () => {
 
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`https://terarium.shop/api/Combos/${id}`, {
-        method: 'PUT',
+      const response = await fetch('https://terarium.shop/api/Combos', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : '',
@@ -432,21 +306,21 @@ const ComboEdit: React.FC = () => {
 
       const result = await response.json();
 
-      if (result.status === 200) {
+      if (result.status === 200 || result.status === 201) {
         notification.success({
           message: 'Thành công',
-          description: 'Combo đã được cập nhật thành công!',
+          description: 'Combo đã được tạo thành công!',
           placement: 'topRight',
         });
         navigate('/manager/combo/list');
       } else {
-        throw new Error(result.message || 'Failed to update combo');
+        throw new Error(result.message || 'Failed to create combo');
       }
     } catch (error) {
-      console.error('Error updating combo:', error);
+      console.error('Error creating combo:', error);
       notification.error({
         message: 'Lỗi',
-        description: `Có lỗi xảy ra khi cập nhật combo: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        description: `Có lỗi xảy ra khi tạo combo: ${error instanceof Error ? error.message : 'Unknown error'}`,
         placement: 'topRight',
       });
     } finally {
@@ -529,7 +403,7 @@ const ComboEdit: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Bước 1: Thông tin cơ bản</h2>
-        <p className="text-gray-600">Cập nhật thông tin cơ bản cho combo</p>
+        <p className="text-gray-600">Điền thông tin cơ bản cho combo</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -545,7 +419,7 @@ const ComboEdit: React.FC = () => {
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.comboCategoryId ? 'border-red-500' : 'border-gray-300'}`}
                   value={formData.comboCategoryId}
                   onChange={handleInputChange}
-                  disabled={loading || fetchingData}
+                  disabled={loading}
                 >
                   <option value={0}>Chọn danh mục</option>
                   {comboCategories.map((category) => (
@@ -566,7 +440,7 @@ const ComboEdit: React.FC = () => {
                   value={formData.name}
                   onChange={handleInputChange}
                   placeholder="Nhập tên combo"
-                  disabled={loading || fetchingData}
+                  disabled={loading}
                 />
                 {formErrors.name && <p className="mt-1 text-sm text-red-500">{formErrors.name}</p>}
               </div>
@@ -575,54 +449,88 @@ const ComboEdit: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả *</label>
                 <textarea
                   name="description"
+                  rows={4}
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.description ? 'border-red-500' : 'border-gray-300'}`}
                   value={formData.description}
                   onChange={handleInputChange}
-                  placeholder="Nhập mô tả combo"
-                  rows={4}
-                  disabled={loading || fetchingData}
+                  placeholder="Mô tả chi tiết về combo"
+                  disabled={loading}
                 />
                 {formErrors.description && <p className="mt-1 text-sm text-red-500">{formErrors.description}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hình ảnh *</label>
-                <div className="flex items-center space-x-4">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="image-upload"
-                    disabled={loading || uploadingImage || fetchingData}
-                  />
-                  <label
-                    htmlFor="image-upload"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {uploadingImage ? 'Đang upload...' : 'Upload hình ảnh'}
-                  </label>
-                  {formData.imageUrl && (
-                    <div className="relative">
-                      <img
-                        src={formData.imageUrl}
-                        alt="Combo"
-                        className="w-20 h-20 object-cover rounded-lg border border-gray-300"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik00MCA0OEM0MCA0NC42ODYzIDQyLjY4NjMgNDIgNDYgNDJINDhDNTEuMzEzNyA0MiA1NCA0NC42ODYzIDU0IDQ4VjUwQzU0IDUzLjMxMzcgNTEuMzEzNyA1NiA0OCA1Nkg0NkM0Mi42ODYzIDU2IDQwIDUzLjMxMzcgNDAgNTBWNDhaIiBmaWxsPSIjOUI5Qjk4Ii8+CjxwYXRoIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiBkPSJNMzIgMzJDMjcuNTgyIDMyIDI0IDM1LjU4MiAyNCA0MEwyNCA4OEMyNCA5Mi40MTggMjcuNTgyIDk2IDMyIDk2TDk2IDk2QzEwMC40MTggOTYgMTA0IDkyLjQxOCAxMDQgODhMMTA0IDQwQzEwNCAzNS41ODIgMTAwLjQxOCAzMiA5NiAzMkwzMiAzMlpNMzIgODhMNzIuODQzIDQ3LjE1N0M3My42MjUgNDYuMzc1IDc0Ljg3NSA0Ni4zNzUgNzUuNjU3IDQ3LjE1N0w4OCA2MEw5MiA1NkM5Mi43ODEgNTUuMjE5IDk0LjIxOSA1NS4yMTkgOTUgNTZMOTYgNTdWODhDOTYgODguNzk2IDk1LjM2NCA4OS40MyA5NC41NjggODkuNDNMMzIgODhaTTMyIDQwQzMyIDM5LjIwNCAzMi42MzYgMzguNTY4IDMzLjQzMiAzOC41NjhMNzYuNjYgMzguNTY4SDk2Qzk2Ljc5NiAzOC41NjggOTcuNDMyIDM5LjIwNCA5Ny40MzIgNDBWNDguNjU3TDkzIDUzLjY1N0w5MCA1MC42NTdDODkuMjE5IDQ5Ljg3NiA4Ny43ODEgNDkuODc2IDg3IDUwLjY1N0w4NiA1MS42NTdMODQgNTMuNjU3TDczLjI1NyA0NC4yNzVDNzIuNDc1IDQzLjQ5MyA3MS4xMjUgNDMuNDkzIDcwLjM0MyA0NC4yNzVMMzIgODIuNjE4TDMyIDQwWiIgZmlsbD0iIzlCOUI5OCIvPgo8L3N2Zz4K';
-                        }}
-                      />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hình ảnh Combo *</label>
+                
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center space-x-4">
+                      <label className="cursor-pointer bg-blue-50 hover:bg-blue-100 border-2 border-dashed border-blue-300 rounded-lg p-4 flex items-center space-x-2 transition-colors">
+                        <Upload className="w-5 h-5 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-600">
+                          {uploadingImage ? 'Đang upload...' : 'Chọn file từ máy tính'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          disabled={loading || uploadingImage}
+                          className="hidden"
+                        />
+                      </label>
+                      {uploadingImage && (
+                        <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Chấp nhận: JPG, PNG, GIF (tối đa 5MB)</p>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="imageUrl"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.imageUrl ? 'border-red-500' : 'border-gray-300'}`}
+                      value={formData.imageUrl}
+                      onChange={handleInputChange}
+                      placeholder="Hoặc nhập URL hình ảnh"
+                      disabled={loading || uploadingImage}
+                    />
+                    {formData.imageUrl && (
                       <button
                         type="button"
                         onClick={clearImage}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                        disabled={loading || fetchingData}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        disabled={loading}
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-4 h-4" />
                       </button>
+                    )}
+                  </div>
+
+                  {formData.imageUrl && (
+                    <div className="mt-4">
+                      <div className="relative inline-block">
+                        <img
+                          src={formData.imageUrl}
+                          alt="Preview"
+                          className="w-32 h-32 object-cover rounded-lg border border-gray-300"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik00MCA0OEM0MCA0NC42ODYzIDQyLjY4NjMgNDIgNDYgNDJINDhDNTEuMzEzNyA0MiA1NCA0NC42ODYzIDU0IDQ4VjUwQzU0IDUzLjMxMzcgNTEuMzEzNyA1NiA0OCA1Nkg0NkM0Mi42ODYzIDU2IDQwIDUzLjMxMzcgNDAgNTBWNDhaIiBmaWxsPSIjOUI5Qjk4Ii8+CjxwYXRoIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiBkPSJNMzIgMzJDMjcuNTgyIDMyIDI0IDM1LjU4MiAyNCA0MEwyNCA4OEMyNCA5Mi40MTggMjcuNTgyIDk2IDMyIDk2TDk2IDk2QzEwMC40MTggOTYgMTA0IDkyLjQxOCAxMDQgODhMMTA0IDQwQzEwNCAzNS41ODIgMTAwLjQxOCAzMiA5NiAzMkwzMiAzMlpNMzIgODhMNzIuODQzIDQ3LjE1N0M3My62MjUgNDYuMzc1IDc0Ljg3NSA0Ni4zNzUgNzUuNjU3IDQ3LjE1N0w4OCA2MEw5MiA1NkM5Mi43ODEgNTUuMjE5IDk0LjIxOSA1NS4yMTkgOTUgNTZMOTYgNTdWODhDOTYgODguNzk2IDk1LjM2NCA4OS40MyA5NC41NjggODkuNDNMMzIgODhaTTMyIDQwQzMyIDM5LjIwNCAzMi42MzYgMzguNTY4IDMzLjQzMiAzOC1NjhMNzYuNjYgMzguNTY4SDk2Qzk2Ljc5NiAzOC41NjggOTcuNDMyIDM5LjIwNCA5Ny40MzIgNDBWNDguNjU3TDkzIDUzLjY1N0w5MCA1MC42NTdDODkuMjE5IDQ5Ljg3NiA4Ny43ODEgNDkuODc2IDg3IDUwLjY1N0w4NiA1MS42NTdMODQgNTMuNjU3TDczLjI1NyA0NC4yNzVDNzIuNDc1IDQzLjQ5MyA3MS4xMjUgNDMuNDkzIDcwLjM0MyA0NC4yNzVMMzIgODIuNjE4TDMyIDQwWiIgZmlsbD0iIzlCOUI5OCIvPgo8L3N2Zz4K';
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={clearImage}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                          disabled={loading}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
+                
                 {formErrors.imageUrl && <p className="mt-1 text-sm text-red-500">{formErrors.imageUrl}</p>}
               </div>
 
@@ -636,7 +544,7 @@ const ComboEdit: React.FC = () => {
                   onChange={handleInputChange}
                   placeholder="Nhập giá combo"
                   min="0"
-                  disabled={loading || fetchingData}
+                  disabled={loading}
                 />
                 {formErrors.comboPrice && <p className="mt-1 text-sm text-red-500">{formErrors.comboPrice}</p>}
               </div>
@@ -652,7 +560,7 @@ const ComboEdit: React.FC = () => {
                   placeholder="Nhập tỷ lệ giảm giá"
                   min="0"
                   max="100"
-                  disabled={loading || fetchingData}
+                  disabled={loading}
                 />
                 {formErrors.discountPercent && <p className="mt-1 text-sm text-red-500">{formErrors.discountPercent}</p>}
               </div>
@@ -667,7 +575,7 @@ const ComboEdit: React.FC = () => {
                   onChange={handleInputChange}
                   placeholder="Nhập số lượng tồn kho"
                   min="0"
-                  disabled={loading || fetchingData}
+                  disabled={loading}
                 />
                 {formErrors.stockQuantity && <p className="mt-1 text-sm text-red-500">{formErrors.stockQuantity}</p>}
               </div>
@@ -679,7 +587,7 @@ const ComboEdit: React.FC = () => {
                     name="isFeatured"
                     checked={formData.isFeatured}
                     onChange={handleInputChange}
-                    disabled={loading || fetchingData}
+                    disabled={loading}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-gray-700">Combo Nổi bật</span>
@@ -698,7 +606,7 @@ const ComboEdit: React.FC = () => {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={loading || uploadingImage || fetchingData}
+                disabled={loading || uploadingImage}
                 className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
               >
                 <span>Tiếp theo</span>
@@ -706,7 +614,7 @@ const ComboEdit: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/manager/combo/list')}
-                disabled={loading || uploadingImage || fetchingData}
+                disabled={loading || uploadingImage}
                 className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Hủy
@@ -749,7 +657,7 @@ const ComboEdit: React.FC = () => {
           type="button"
           onClick={() => navigate('/manager/combo/list')}
           className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800"
-          disabled={loading || fetchingData}
+          disabled={loading}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại danh sách
@@ -757,7 +665,7 @@ const ComboEdit: React.FC = () => {
         <button
           type="button"
           onClick={handleNext}
-          disabled={loading || uploadingImage || fetchingData}
+          disabled={loading || uploadingImage}
           className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
           Tiếp theo
@@ -766,14 +674,18 @@ const ComboEdit: React.FC = () => {
     </div>
   );
 
-  if (fetchingData) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <span className="ml-4 text-gray-700">Đang tải dữ liệu combo...</span>
-      </div>
-    );
-  }
+  const getStepTitle = () => {
+    switch (currentStep) {
+      case 1:
+        return 'Thông tin cơ bản';
+      case 2:
+        return 'Chọn phụ kiện';
+      case 3:
+        return 'Chọn Terrarium Variant';
+      default:
+        return 'Thông tin cơ bản';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -787,8 +699,8 @@ const ComboEdit: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sửa Combo</h1>
-          <p className="text-gray-600">Cập nhật thông tin combo trong hệ thống</p>
+          <h1 className="text-2xl font-bold text-gray-900">Thêm Combo Mới</h1>
+          <p className="text-gray-600">Tạo một combo mới trong hệ thống</p>
         </div>
       </div>
 
@@ -860,8 +772,8 @@ const ComboEdit: React.FC = () => {
                   <div>
                     <strong>Phụ kiện ({selectedAccessories.length}):</strong>
                     <ul className="list-disc list-inside ml-4 mt-1">
-                      {selectedAccessories.map(acc => (
-                        <li key={acc.accessoryId}>{acc.name} - {acc.price.toLocaleString()} VNĐ</li>
+                      {selectedAccessories.map(selAcc => (
+                        <li key={selAcc.accessoryId}>{selAcc.accessory.name} x{selAcc.quantity} - {(selAcc.accessory.price * selAcc.quantity).toLocaleString()} VNĐ</li>
                       ))}
                     </ul>
                   </div>
@@ -886,7 +798,7 @@ const ComboEdit: React.FC = () => {
                 
                 <div className="pt-2 border-t border-gray-200">
                   <strong>Tổng giá trị sản phẩm: {(
-                    selectedAccessories.reduce((sum, acc) => sum + acc.price, 0) +
+                    selectedAccessories.reduce((sum, selAcc) => sum + (selAcc.accessory.price * selAcc.quantity), 0) +
                     selectedTerrariumVariants.reduce((sum, variant) => sum + (variant.price * variant.quantity), 0)
                   ).toLocaleString()} VNĐ</strong>
                 </div>
@@ -926,12 +838,12 @@ const ComboEdit: React.FC = () => {
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Đang cập nhật...
+                    Đang tạo combo...
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Cập nhật Combo
+                    Tạo Combo
                   </>
                 )}
               </button>
@@ -943,4 +855,4 @@ const ComboEdit: React.FC = () => {
   );
 };
 
-export default ComboEdit;
+export default ComboCreate;
