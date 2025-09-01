@@ -7,6 +7,13 @@ import {
   Terrarium,
   TerrariumImage,
   TerrariumVariant,
+  // === Types bổ sung cho AI & Layout ===
+  AutoGenerateRequest,
+  GeneratedTerrarium,
+  AddTerrariumByAIRequest,
+  CreatedTerrarium,
+  CreateLayoutRequest,
+  CreatedLayout,
 } from '@/types/terrarium';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -14,6 +21,13 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 // Helpers chuẩn hoá dữ liệu từ BE
 const pickArray = <T,>(res: any): T[] => res?.data?.data ?? [];
 const pickObject = <T,>(res: any): T | null => (res?.data?.data ?? null);
+// Cho các API có thể trả {status, data} hoặc trả thẳng object
+const pickData = <T = any>(res: any): T => (res?.data?.data ?? res?.data ?? res) as T;
+
+const authHeader = () => {
+  const token = localStorage.getItem('authToken');
+  return { headers: { Authorization: `Bearer ${token || ''}` } };
+};
 
 /** ========== CÁC API CŨ (GIỮ NGUYÊN) ========== */
 
@@ -74,7 +88,6 @@ export const getEnvironmentById = async (environmentId: number): Promise<Environ
   const res = await axios.get(`${BASE_URL}/Environment/get/${environmentId}`);
   return res?.data?.data ?? null;
 };
-
 
 export const getAllEnvironments = async (): Promise<Environment[]> => {
   const res = await axios.get(`${BASE_URL}/Environment/get-all`);
@@ -155,3 +168,45 @@ export const getTerrariumEnrichedById = async (id: number): Promise<Terrarium | 
     tankMethod: tank ?? undefined,
   };
 };
+
+/** ========== AI & LAYOUT (BỔ SUNG THEO YÊU CẦU) ========== */
+
+/** Gọi AI sinh mẫu Terrarium */
+export const autoGenerateTerrarium = async (
+  payload: AutoGenerateRequest
+): Promise<GeneratedTerrarium> => {
+  const res = await axios.post(`${BASE_URL}/AI/auto-generate`, payload, authHeader());
+  return pickData<GeneratedTerrarium>(res);
+};
+
+/** Tạo Terrarium bằng AI — THEO SCHEMA BẠN ĐƯA (không gửi accessoryNames) */
+export const addTerrariumByAI = async (
+  payload: AddTerrariumByAIRequest
+): Promise<CreatedTerrarium> => {
+  const res = await axios.post(`${BASE_URL}/Terrarium/add-terrariumbyai`, payload, authHeader());
+  const data = pickData<any>(res);
+
+  // Chuẩn hoá các biến thể response khác nhau
+  if (data?.terrariumId) return { terrariumId: Number(data.terrariumId), terrariumName: data?.terrariumName };
+  if (data?.data?.terrariumId) return { terrariumId: Number(data.data.terrariumId), terrariumName: data.data?.terrariumName };
+  if (typeof data === 'object' && 'id' in data) return { terrariumId: Number((data as any).id) };
+
+  throw new Error('Không lấy được terrariumId từ phản hồi BE.');
+};
+
+/** Tạo Layout từ Terrarium đã tạo */
+export const createTerrariumLayout = async (
+  payload: CreateLayoutRequest
+): Promise<CreatedLayout> => {
+  const res = await axios.post(`${BASE_URL}/TerrariumLayout/create`, payload, authHeader());
+  const data = pickData<any>(res);
+
+  if (data?.layoutId) return { layoutId: Number(data.layoutId) };
+  if (data?.data?.layoutId) return { layoutId: Number(data.data.layoutId) };
+
+  throw new Error('Không lấy được layoutId từ phản hồi BE.');
+};
+
+/** Helper phát hiện lỗi auth để FE điều hướng login */
+export const isAuthError = (e: unknown) =>
+  !!(axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403));
