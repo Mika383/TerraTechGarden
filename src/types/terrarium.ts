@@ -6,6 +6,17 @@ export interface TerrariumImage {
   imageUrl: string;
 }
 
+/**
+ * Phụ kiện cấu hình theo từng biến thể (mới theo BE)
+ * - Được trả về trong field `terrariumVariantAccessories` của mỗi `TerrariumVariant`
+ */
+export interface TerrariumVariantAccessory {
+  terrariumVariantAccessoryId?: number;
+  terrariumVariantId?: number;
+  accessoryId: number;
+  quantity: number;
+}
+
 export interface TerrariumVariant {
   terrariumVariantId: number;
   terrariumId: number;
@@ -15,8 +26,12 @@ export interface TerrariumVariant {
   urlImage: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+
+  /** MỚI: danh sách phụ kiện thuộc về biến thể */
+  terrariumVariantAccessories?: TerrariumVariantAccessory[];
 }
 
+/** (Giữ nguyên bản rút gọn này nếu dự án đang dùng; nếu đã tách sang types/accessory.ts thì có thể xoá) */
 export interface Accessory {
   accessoryId: number;
   name: string;
@@ -52,6 +67,8 @@ export interface TankMethod {
  * - thumbnailUrl
  * - averageRating, feedbackCount, purchaseCount
  * - liên kết đầy đủ: environment, shape, tankMethod (để hiển thị theo tên)
+ * LƯU Ý: Kể từ BE mới, danh sách phụ kiện HIỂN THỊ sẽ đi theo từng Variant
+ * (terrariumVariantAccessories), không còn lấy trực tiếp từ Terrarium nữa.
  */
 export interface Terrarium {
   terrariumId: number;
@@ -73,6 +90,10 @@ export interface Terrarium {
   terrariumImages?: TerrariumImage[];
   image?: string;
 
+  /**
+   * (Giữ lại để tương thích cũ, nhưng trang Detail sẽ KHÔNG sử dụng nữa)
+   * Phụ kiện giờ đi theo từng `TerrariumVariant` → xem `terrariumVariantAccessories`
+   */
   accessories?: Accessory[];
 
   // Liên kết đã enrich từ các API tên

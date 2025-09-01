@@ -220,7 +220,7 @@ const AppRoutes = () => {
           <Route path="reports" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
           <Route path="blog-categories" element={<Suspense fallback={<Loading />}><BlogCategoryManagement /></Suspense>} />
           <Route path="blogs" element={<Suspense fallback={<Loading />}><BlogManagement /></Suspense>} />
-          <Route path="vouchers" element={<Suspense fallback={<Loading />}><VoucherManagement /></Suspense>} />
+          <Route path="vouchers" element={<Suspense fallback={<Loading />} ><VoucherManagement /></Suspense>} />
           <Route path="memberships" element={<Suspense fallback={<Loading />}><MembershipManagement /></Suspense>} />
         </Route>
       </Route>

@@ -1,3 +1,5 @@
+// src/types/cart.ts
+
 export interface CartItemProduct {
   productName: string;
   quantity: number;
@@ -65,8 +67,12 @@ export interface AddVariantToCartPayload {
   variantQuantity: number;
 }
 
+/**
+ * ⚠️ Theo BE mới: key là "terrariumVarientId" (giữ nguyên chính tả của BE).
+ * Payload dùng cho POST /Cart/add-items/multiple (mua dưới dạng linh kiện theo variant)
+ */
 export interface AddBundleAccessoriesPayload {
-  terrariumId: number;
+  terrariumVarientId: number; // CHANGED: từ terrariumId -> terrariumVarientId
   totalPrice?: number;
   bundleAccessories: {
     accessoryId: number;
@@ -79,6 +85,7 @@ export interface AddComboPayload {
   quantity: number;
 }
 
+/** Dùng cho local cart hiển thị/checkbox */
 export interface NormalizedCartItem {
   id: string;
   cartItemId: number;
