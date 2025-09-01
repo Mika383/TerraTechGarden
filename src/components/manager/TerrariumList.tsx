@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Edit, Trash2, Eye, Plus, Search, Image as ImageIcon, Upload, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit, Trash2, Shapes, Plus, Search, Image as ImageIcon, Upload, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { notification } from 'antd';
 
 interface TerrariumImage {
@@ -702,7 +702,7 @@ const handleImageUpload = async (terrariumId: number, file: File) => {
                           className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                           title="Xem variants"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Shapes className="w-4 h-4" />
                         </Link>
                         <Link
                           to={`/manager/terrarium/edit/${terrarium.terrariumId}`}

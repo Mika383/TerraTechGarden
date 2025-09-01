@@ -136,20 +136,6 @@ const getStatusButtonConfig = (status: string | null) => {
         className: 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm hover:shadow-md',
         nextStatus: 'processing'
       };
-    // case 'processing':
-    //   return {
-    //     text: 'Chuyển giao hàng',
-    //     icon: ArrowRight,
-    //     className: 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-sm hover:shadow-md',
-    //     nextStatus: 'shipping'
-    //   };
-    // case 'shipping':
-    //   return {
-    //     text: 'Hoàn thành',
-    //     icon: CheckCircle,
-    //     className: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md',
-    //     nextStatus: 'completed'
-    //   };
     default:
       return null;
   }
@@ -221,9 +207,29 @@ const OrderList: React.FC = () => {
       }
       
       const result = await response.json();
-      const paginationData: PaginationData = result.data;
       
-      setOrders(paginationData.items);
+      // Handle "no orders" case
+      if (result.status === 4) {
+        setOrders([]);
+        setTotalItems(0);
+        setTotalPages(0);
+        setHasNextPage(false);
+        setHasPreviousPage(false);
+        toast.info('Không có đơn hàng nào!');
+        return;
+      }
+      
+      const paginationData: PaginationData = result.data || {
+        items: [],
+        currentPage: 1,
+        pageSize: size,
+        totalItems: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      };
+      
+      setOrders(paginationData.items || []);
       setCurrentPage(paginationData.currentPage);
       setPageSize(paginationData.pageSize);
       setTotalItems(paginationData.totalItems);
@@ -264,13 +270,23 @@ const OrderList: React.FC = () => {
         headers: headers,
       });
       
-      if (!response.ok) return;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       
       const result = await response.json();
-      const orderData = result.data || result;
+      
+      // Handle "no orders" case
+      if (result.status === 4) {
+        setAllOrders([]);
+        return;
+      }
+      
+      const orderData = result.data || [];
       setAllOrders(orderData);
     } catch (error) {
       console.error('Error fetching all orders for statistics:', error);
+      toast.error('Không thể tải dữ liệu thống kê');
     }
   };
 
@@ -556,10 +572,7 @@ const OrderList: React.FC = () => {
 
         {filteredOrders.length === 0 && !loading && (
           <div className="text-center py-8 text-gray-500">
-            {searchTerm || statusFilter !== 'all' || paymentFilter !== 'all'
-              ? 'Không tìm thấy đơn hàng nào phù hợp với tiêu chí tìm kiếm' 
-              : 'Chưa có đơn hàng nào được tạo'
-            }
+            Không có đơn hàng nào!
           </div>
         )}
       </div>

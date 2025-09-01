@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { notification } from 'antd';
@@ -8,7 +7,6 @@ import { useNavigate } from 'react-router-dom';
 import Step1TankMethod from './Step1TankMethod';
 import Step2Shape from './Step2Shape';
 import Step3Environment from './Step3Environment';
-import Step4Accessories from './Step4Accessories';
 import Step5FinalDetails from './Step5FinalDetails';
 
 interface TankMethod {
@@ -30,20 +28,6 @@ interface Environment {
   environmentDescription: string;
 }
 
-interface Accessory {
-  accessoryId: number;
-  name: string;
-  size: string;
-  description: string;
-  price: number;
-  stockQuantity: number;
-  categoryId: number;
-  createdAt: string;
-  updatedAt: string;
-  status: string;
-  accessoryImages: any[];
-}
-
 interface FormData {
   terrariumName: string;
   description: string;
@@ -55,8 +39,7 @@ const STEPS = [
   { id: 1, title: 'Phương Pháp Tank', description: 'Chọn loại tank phù hợp' },
   { id: 2, title: 'Hình Dạng', description: 'Chọn hình dạng và chất liệu' },
   { id: 3, title: 'Môi Trường', description: 'Chọn loại môi trường sống' },
-  { id: 4, title: 'Phụ Kiện', description: 'Chọn các phụ kiện bổ sung' },
-  { id: 5, title: 'Hoàn Thiện', description: 'Điền thông tin chi tiết' },
+  { id: 4, title: 'Hoàn Thiện', description: 'Điền thông tin chi tiết' },
 ];
 
 const TerrariumCreate: React.FC = () => {
@@ -69,7 +52,6 @@ const TerrariumCreate: React.FC = () => {
   const [selectedTankMethod, setSelectedTankMethod] = useState<TankMethod | null>(null);
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null);
-  const [selectedAccessories, setSelectedAccessories] = useState<Accessory[]>([]);
 
   // Form data state
   const [formData, setFormData] = useState<FormData>({
@@ -133,14 +115,13 @@ const TerrariumCreate: React.FC = () => {
     setSubmitMessage(null);
 
     const payload = {
-      ...formData,
-      tankMethodId: selectedTankMethod.tankMethodId,
-      shapeId: selectedShape.shapeId,
       environmentId: selectedEnvironment.environmentId,
-      accessories: selectedAccessories,
-      accessoryNames: selectedAccessories.map(a => a.name),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      shapeId: selectedShape.shapeId,
+      tankMethodId: selectedTankMethod.tankMethodId,
+      terrariumName: formData.terrariumName,
+      description: formData.description,
+      status: formData.status,
+      bodyHTML: formData.bodyHTML
     };
 
     try {
@@ -169,7 +150,7 @@ const TerrariumCreate: React.FC = () => {
 
       const result = await response.json();
 
-      if (result.status === 200 || result.message === "Save data success") {
+      if (result.status === 200 || result.message === "Save data success" || result.status === 201) {
         setSubmitMessage({ type: 'success', text: 'Terrarium đã được tạo thành công! Đang chuyển hướng...' });
         setTimeout(() => {
           navigateToTerrariumList();
@@ -217,20 +198,10 @@ const TerrariumCreate: React.FC = () => {
         );
       case 4:
         return (
-          <Step4Accessories
-            selectedAccessories={selectedAccessories}
-            onSelectionChange={setSelectedAccessories}
-            onNext={handleNext}
-            onPrev={handlePrev}
-          />
-        );
-      case 5:
-        return (
           <Step5FinalDetails
             selectedTankMethod={selectedTankMethod}
             selectedShape={selectedShape}
             selectedEnvironment={selectedEnvironment}
-            selectedAccessories={selectedAccessories}
             formData={formData}
             onFormDataChange={handleFormDataChange}
             onSubmit={validateAndSubmit}

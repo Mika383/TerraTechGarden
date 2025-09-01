@@ -276,77 +276,113 @@ const StatisticsReport: React.FC = () => {
 
   // Tính toán dữ liệu cho biểu đồ tỷ lệ đơn hàng
   const getOrderRateData = () => {
-    if (!ordersData) return null;
+    if (!ordersData || !ordersData.statusBreakdown || ordersData.statusBreakdown.length === 0) {
+      return null;
+    }
 
-    const completedOrders = ordersData.statusBreakdown.find(s => s.status === 'Completed')?.count || 0;
-    const canceledOrders = ordersData.statusBreakdown.find(s => s.status === 'Cancle')?.count || 0;
-    const failedOrders = ordersData.statusBreakdown.find(s => s.status === 'Failed')?.count || 0;
-    
-    const totalProcessedOrders = completedOrders + canceledOrders + failedOrders;
-    const successRate = totalProcessedOrders > 0 ? (completedOrders / totalProcessedOrders) * 100 : 0;
-    const canceledRate = totalProcessedOrders > 0 ? ((canceledOrders + failedOrders) / totalProcessedOrders) * 100 : 0;
-    const otherRate = 100 - successRate - canceledRate;
+    try {
+      const completedOrders = ordersData.statusBreakdown.find(s => s.status === 'Completed')?.count || 0;
+      const canceledOrders = ordersData.statusBreakdown.find(s => s.status === 'Cancle')?.count || 0;
+      const failedOrders = ordersData.statusBreakdown.find(s => s.status === 'Failed')?.count || 0;
+      
+      const totalProcessedOrders = completedOrders + canceledOrders + failedOrders;
+      
+      if (totalProcessedOrders === 0) {
+        return null;
+      }
+      
+      const successRate = (completedOrders / totalProcessedOrders) * 100;
+      const canceledRate = ((canceledOrders + failedOrders) / totalProcessedOrders) * 100;
+      const otherRate = 100 - successRate - canceledRate;
 
-    return {
-      labels: ['Tỷ lệ hủy đơn', 'Tỷ lệ đơn thành công', 'Tỷ lệ khác'],
-      datasets: [
-        {
-          data: [canceledRate, successRate, otherRate],
-          backgroundColor: ['rgba(255, 99, 132, 0.6)', 'rgba(75, 192, 192, 0.6)', 'rgba(201, 203, 207, 0.6)'],
-          borderColor: ['rgba(255, 99, 132, 1)', 'rgba(75, 192, 192, 1)', 'rgba(201, 203, 207, 1)'],
-          borderWidth: 1,
-        },
-      ],
-    };
+      return {
+        labels: ['Tỷ lệ hủy đơn', 'Tỷ lệ đơn thành công', 'Tỷ lệ khác'],
+        datasets: [
+          {
+            data: [canceledRate, successRate, otherRate],
+            backgroundColor: ['rgba(255, 99, 132, 0.6)', 'rgba(75, 192, 192, 0.6)', 'rgba(201, 203, 207, 0.6)'],
+            borderColor: ['rgba(255, 99, 132, 1)', 'rgba(75, 192, 192, 1)', 'rgba(201, 203, 207, 1)'],
+            borderWidth: 1,
+          },
+        ],
+      };
+    } catch (error) {
+      console.error('Error calculating order rate data:', error);
+      return null;
+    }
   };
 
   // Dữ liệu cho biểu đồ đăng ký thành viên
   const getMembershipChartData = () => {
-    if (!membershipData) return null;
+    if (!membershipData || !membershipData.last12MonthsStats || membershipData.last12MonthsStats.length === 0) {
+      return null;
+    }
     
-    return {
-      labels: membershipData.last12MonthsStats.map((item) => {
-        const date = new Date(item.month + '-01');
-        return date.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' });
-      }),
-      datasets: [
-        {
-          label: 'Số lượng đăng ký membership',
-          data: membershipData.last12MonthsStats.map((item) => item.newMemberships),
-          backgroundColor: 'rgba(54, 162, 235, 0.6)',
-          borderColor: 'rgba(54, 162, 235, 1)',
-          borderWidth: 1,
-        },
-      ],
-    };
+    try {
+      return {
+        labels: membershipData.last12MonthsStats.map((item) => {
+          const date = new Date(item.month + '-01');
+          return date.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' });
+        }),
+        datasets: [
+          {
+            label: 'Số lượng đăng ký membership',
+            data: membershipData.last12MonthsStats.map((item) => item.newMemberships),
+            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1,
+          },
+        ],
+      };
+    } catch (error) {
+      console.error('Error creating membership chart data:', error);
+      return null;
+    }
   };
 
-  // Function để lấy top sản phẩm theo từng loại
+  // Function để lấy top sản phẩm theo từng loại với error handling
   const getTopProducts = () => {
-    if (!topProductsData) return null;
+    if (!topProductsData) {
+      return null;
+    }
 
-    const topTerrariumBySales = topProductsData.topTerrariums.reduce((prev, current) => 
-      prev.totalQuantitySold > current.totalQuantitySold ? prev : current
-    );
+    try {
+      // Kiểm tra và xử lý mảng rỗng cho topTerrariums
+      let topTerrariumBySales = null;
+      let topTerrariumByRevenue = null;
+      
+      if (topProductsData.topTerrariums && topProductsData.topTerrariums.length > 0) {
+        topTerrariumBySales = topProductsData.topTerrariums.reduce((prev, current) => 
+          prev.totalQuantitySold > current.totalQuantitySold ? prev : current
+        );
+        topTerrariumByRevenue = topProductsData.topTerrariums.reduce((prev, current) => 
+          prev.totalRevenue > current.totalRevenue ? prev : current
+        );
+      }
 
-    const topTerrariumByRevenue = topProductsData.topTerrariums.reduce((prev, current) => 
-      prev.totalRevenue > current.totalRevenue ? prev : current
-    );
+      // Kiểm tra và xử lý mảng rỗng cho topAccessories
+      let topAccessoryBySales = null;
+      let topAccessoryByRevenue = null;
+      
+      if (topProductsData.topAccessories && topProductsData.topAccessories.length > 0) {
+        topAccessoryBySales = topProductsData.topAccessories.reduce((prev, current) => 
+          prev.totalQuantitySold > current.totalQuantitySold ? prev : current
+        );
+        topAccessoryByRevenue = topProductsData.topAccessories.reduce((prev, current) => 
+          prev.totalRevenue > current.totalRevenue ? prev : current
+        );
+      }
 
-    const topAccessoryBySales = topProductsData.topAccessories.reduce((prev, current) => 
-      prev.totalQuantitySold > current.totalQuantitySold ? prev : current
-    );
-
-    const topAccessoryByRevenue = topProductsData.topAccessories.reduce((prev, current) => 
-      prev.totalRevenue > current.totalRevenue ? prev : current
-    );
-
-    return {
-      topSellingTerrarium: topTerrariumBySales,
-      topRevenueTerrarium: topTerrariumByRevenue,
-      topSellingAccessory: topAccessoryBySales,
-      topRevenueAccessory: topAccessoryByRevenue
-    };
+      return {
+        topSellingTerrarium: topTerrariumBySales,
+        topRevenueTerrarium: topTerrariumByRevenue,
+        topSellingAccessory: topAccessoryBySales,
+        topRevenueAccessory: topAccessoryByRevenue
+      };
+    } catch (error) {
+      console.error('Error processing top products data:', error);
+      return null;
+    }
   };
 
   // Format date cho input
@@ -441,18 +477,18 @@ const StatisticsReport: React.FC = () => {
         </div>
       </div>
 
-      {/* Tổng quan - Sử dụng dữ liệu từ API */}
+      {/* Tổng quan - Sử dụng dữ liệu từ API với error handling */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-lg font-semibold text-gray-700">Tổng số đơn</h2>
           <p className="text-2xl font-bold text-blue-600">
-            {ordersData?.totalOrders.toLocaleString('vi-VN') || 0}
+            {ordersData?.totalOrders?.toLocaleString('vi-VN') || 0}
           </p>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-lg font-semibold text-gray-700">Tổng doanh thu</h2>
           <p className="text-2xl font-bold text-green-600">
-            {revenueData?.totalRevenue.toLocaleString('vi-VN') || 0} VND
+            {revenueData?.totalRevenue?.toLocaleString('vi-VN') || 0} VND
           </p>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg">
@@ -464,68 +500,72 @@ const StatisticsReport: React.FC = () => {
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-lg font-semibold text-gray-700">Tổng số khách hàng</h2>
           <p className="text-2xl font-bold text-purple-600">
-            {revenueData?.totalCustomers.toLocaleString('vi-VN') || 0}
+            {revenueData?.totalCustomers?.toLocaleString('vi-VN') || 0}
           </p>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-lg font-semibold text-gray-700">Đơn hàng đang chờ</h2>
           <p className="text-2xl font-bold text-orange-600">
-            {ordersData?.statusBreakdown.find(s => s.status === 'Pending')?.count.toLocaleString('vi-VN') || 0}
+            {ordersData?.statusBreakdown?.find(s => s.status === 'Pending')?.count?.toLocaleString('vi-VN') || 0}
           </p>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-lg font-semibold text-gray-700">Đơn hàng hoàn thành</h2>
           <p className="text-2xl font-bold text-green-600">
-            {ordersData?.statusBreakdown.find(s => s.status === 'Completed')?.count.toLocaleString('vi-VN') || 0}
+            {ordersData?.statusBreakdown?.find(s => s.status === 'Completed')?.count?.toLocaleString('vi-VN') || 0}
           </p>
         </div>
       </div>
 
       {/* Chi tiết trạng thái đơn hàng */}
-      <div className="bg-white p-6 rounded-xl shadow-lg">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Chi tiết trạng thái đơn hàng</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {ordersData?.statusBreakdown.map((status, index) => (
-            <div key={index} className="border rounded-lg p-4">
-              <h3 className="font-medium text-gray-700">{status.status}</h3>
-              <p className="text-2xl font-bold text-blue-600">{status.count}</p>
-              <p className="text-sm text-gray-500">{status.percentage.toFixed(2)}%</p>
-              <p className="text-sm text-gray-600">
-                Doanh thu: {status.totalRevenue.toLocaleString('vi-VN')} VND
-              </p>
-            </div>
-          ))}
+      {ordersData?.statusBreakdown && ordersData.statusBreakdown.length > 0 && (
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">Chi tiết trạng thái đơn hàng</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {ordersData.statusBreakdown.map((status, index) => (
+              <div key={index} className="border rounded-lg p-4">
+                <h3 className="font-medium text-gray-700">{status.status}</h3>
+                <p className="text-2xl font-bold text-blue-600">{status.count}</p>
+                <p className="text-sm text-gray-500">{status.percentage?.toFixed(2) || 0}%</p>
+                <p className="text-sm text-gray-600">
+                  Doanh thu: {status.totalRevenue?.toLocaleString('vi-VN') || 0} VND
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Thống kê Membership */}
-      <div className="bg-white p-6 rounded-xl shadow-lg">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Thống kê Membership</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="border rounded-lg p-4">
-            <h3 className="font-medium text-gray-700">Tổng số Membership</h3>
-            <p className="text-2xl font-bold text-blue-600">{membershipData?.totalMemberships || 0}</p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <h3 className="font-medium text-gray-700">Membership đang hoạt động</h3>
-            <p className="text-2xl font-bold text-green-600">{membershipData?.activeMemberships || 0}</p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <h3 className="font-medium text-gray-700">Doanh thu tháng này</h3>
-            <p className="text-2xl font-bold text-purple-600">
-              {membershipData?.currentMonthRevenue.toLocaleString('vi-VN') || 0} VND
-            </p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <h3 className="font-medium text-gray-700">Tỷ lệ tăng trưởng</h3>
-            <p className={`text-2xl font-bold ${(membershipData?.revenueGrowthPercent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {membershipData?.revenueGrowthPercent.toFixed(1) || 0}%
-            </p>
+      {membershipData && (
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">Thống kê Membership</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium text-gray-700">Tổng số Membership</h3>
+              <p className="text-2xl font-bold text-blue-600">{membershipData.totalMemberships || 0}</p>
+            </div>
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium text-gray-700">Membership đang hoạt động</h3>
+              <p className="text-2xl font-bold text-green-600">{membershipData.activeMemberships || 0}</p>
+            </div>
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium text-gray-700">Doanh thu tháng này</h3>
+              <p className="text-2xl font-bold text-purple-600">
+                {membershipData.currentMonthRevenue?.toLocaleString('vi-VN') || 0} VND
+              </p>
+            </div>
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium text-gray-700">Tỷ lệ tăng trưởng</h3>
+              <p className={`text-2xl font-bold ${(membershipData.revenueGrowthPercent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {membershipData.revenueGrowthPercent?.toFixed(1) || 0}%
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Sản phẩm nổi bật - Dữ liệu thực từ API */}
+      {/* Sản phẩm nổi bật - Dữ liệu thực từ API với null checking */}
       {topProducts && (
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold text-gray-700 mb-4">Sản phẩm nổi bật</h2>
@@ -534,22 +574,34 @@ const StatisticsReport: React.FC = () => {
             <div>
               <h3 className="text-lg font-medium text-gray-600 mb-3">Terrarium nổi bật</h3>
               <div className="space-y-4">
-                <div className="border rounded-lg p-4">
-                  <h4 className="font-medium text-blue-600">Bán chạy nhất</h4>
-                  <p className="text-lg font-bold">{topProducts.topSellingTerrarium.productName}</p>
-                  <div className="flex justify-between text-sm text-gray-600 mt-2">
-                    <span>Đã bán: {topProducts.topSellingTerrarium.totalQuantitySold}</span>
-                    <span>Doanh thu: {topProducts.topSellingTerrarium.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                {topProducts.topSellingTerrarium ? (
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600">Bán chạy nhất</h4>
+                    <p className="text-lg font-bold">{topProducts.topSellingTerrarium.productName}</p>
+                    <div className="flex justify-between text-sm text-gray-600 mt-2">
+                      <span>Đã bán: {topProducts.topSellingTerrarium.totalQuantitySold}</span>
+                      <span>Doanh thu: {topProducts.topSellingTerrarium.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                    </div>
                   </div>
-                </div>
-                <div className="border rounded-lg p-4">
-                  <h4 className="font-medium text-green-600">Doanh thu cao nhất</h4>
-                  <p className="text-lg font-bold">{topProducts.topRevenueTerrarium.productName}</p>
-                  <div className="flex justify-between text-sm text-gray-600 mt-2">
-                    <span>Đã bán: {topProducts.topRevenueTerrarium.totalQuantitySold}</span>
-                    <span>Doanh thu: {topProducts.topRevenueTerrarium.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                ) : (
+                  <div className="border rounded-lg p-4 text-center text-gray-500">
+                    Không có dữ liệu terrarium bán chạy
                   </div>
-                </div>
+                )}
+                {topProducts.topRevenueTerrarium ? (
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-green-600">Doanh thu cao nhất</h4>
+                    <p className="text-lg font-bold">{topProducts.topRevenueTerrarium.productName}</p>
+                    <div className="flex justify-between text-sm text-gray-600 mt-2">
+                      <span>Đã bán: {topProducts.topRevenueTerrarium.totalQuantitySold}</span>
+                      <span>Doanh thu: {topProducts.topRevenueTerrarium.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border rounded-lg p-4 text-center text-gray-500">
+                    Không có dữ liệu terrarium doanh thu cao
+                  </div>
+                )}
               </div>
             </div>
             
@@ -557,22 +609,34 @@ const StatisticsReport: React.FC = () => {
             <div>
               <h3 className="text-lg font-medium text-gray-600 mb-3">Phụ kiện nổi bật</h3>
               <div className="space-y-4">
-                <div className="border rounded-lg p-4">
-                  <h4 className="font-medium text-blue-600">Bán chạy nhất</h4>
-                  <p className="text-lg font-bold">{topProducts.topSellingAccessory.productName}</p>
-                  <div className="flex justify-between text-sm text-gray-600 mt-2">
-                    <span>Đã bán: {topProducts.topSellingAccessory.totalQuantitySold}</span>
-                    <span>Doanh thu: {topProducts.topSellingAccessory.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                {topProducts.topSellingAccessory ? (
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600">Bán chạy nhất</h4>
+                    <p className="text-lg font-bold">{topProducts.topSellingAccessory.productName}</p>
+                    <div className="flex justify-between text-sm text-gray-600 mt-2">
+                      <span>Đã bán: {topProducts.topSellingAccessory.totalQuantitySold}</span>
+                      <span>Doanh thu: {topProducts.topSellingAccessory.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                    </div>
                   </div>
-                </div>
-                <div className="border rounded-lg p-4">
-                  <h4 className="font-medium text-green-600">Doanh thu cao nhất</h4>
-                  <p className="text-lg font-bold">{topProducts.topRevenueAccessory.productName}</p>
-                  <div className="flex justify-between text-sm text-gray-600 mt-2">
-                    <span>Đã bán: {topProducts.topRevenueAccessory.totalQuantitySold}</span>
-                    <span>Doanh thu: {topProducts.topRevenueAccessory.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                ) : (
+                  <div className="border rounded-lg p-4 text-center text-gray-500">
+                    Không có dữ liệu phụ kiện bán chạy
                   </div>
-                </div>
+                )}
+                {topProducts.topRevenueAccessory ? (
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-green-600">Doanh thu cao nhất</h4>
+                    <p className="text-lg font-bold">{topProducts.topRevenueAccessory.productName}</p>
+                    <div className="flex justify-between text-sm text-gray-600 mt-2">
+                      <span>Đã bán: {topProducts.topRevenueAccessory.totalQuantitySold}</span>
+                      <span>Doanh thu: {topProducts.topRevenueAccessory.totalRevenue.toLocaleString('vi-VN')} VND</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border rounded-lg p-4 text-center text-gray-500">
+                    Không có dữ liệu phụ kiện doanh thu cao
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -594,6 +658,14 @@ const StatisticsReport: React.FC = () => {
                 },
               }}
             />
+          </div>
+        )}
+        {!orderRateData && (
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">Tỷ lệ đơn hàng</h2>
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              Không có dữ liệu để hiển thị biểu đồ
+            </div>
           </div>
         )}
         {membershipChartData && (
@@ -619,6 +691,14 @@ const StatisticsReport: React.FC = () => {
             />
           </div>
         )}
+        {!membershipChartData && (
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">Đăng ký Membership 12 tháng gần đây</h2>
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              Không có dữ liệu để hiển thị biểu đồ
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top Users và Package Summary */}
@@ -627,62 +707,93 @@ const StatisticsReport: React.FC = () => {
           {/* Package Summary */}
           <div className="bg-white p-6 rounded-xl shadow-lg">
             <h2 className="text-lg font-semibold text-gray-700 mb-4">Thống kê gói Membership</h2>
-            <div className="space-y-4">
-              {membershipData.packageSummary.map((pkg, index) => (
-                <div key={index} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-medium text-gray-700">{pkg.packageType}</h3>
-                    <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {pkg.durationDays} ngày
-                    </span>
+            {membershipData.packageSummary && membershipData.packageSummary.length > 0 ? (
+              <div className="space-y-4">
+                {membershipData.packageSummary.map((pkg, index) => (
+                  <div key={index} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-medium text-gray-700">{pkg.packageType}</h3>
+                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {pkg.durationDays} ngày
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Giá:</span>
+                        <p className="font-semibold">{pkg.price?.toLocaleString('vi-VN') || 0} VND</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Đã bán:</span>
+                        <p className="font-semibold">{pkg.totalSold || 0}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Doanh thu:</span>
+                        <p className="font-semibold text-green-600">{pkg.revenue?.toLocaleString('vi-VN') || 0} VND</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Thị phần:</span>
+                        <p className="font-semibold text-blue-600">{pkg.marketSharePercent?.toFixed(1) || 0}%</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">Giá:</span>
-                      <p className="font-semibold">{pkg.price.toLocaleString('vi-VN')} VND</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Đã bán:</span>
-                      <p className="font-semibold">{pkg.totalSold}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Doanh thu:</span>
-                      <p className="font-semibold text-green-600">{pkg.revenue.toLocaleString('vi-VN')} VND</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Thị phần:</span>
-                      <p className="font-semibold text-blue-600">{pkg.marketSharePercent.toFixed(1)}%</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                Không có dữ liệu gói membership
+              </div>
+            )}
           </div>
 
           {/* Top Users */}
           <div className="bg-white p-6 rounded-xl shadow-lg">
             <h2 className="text-lg font-semibold text-gray-700 mb-4">Top khách hàng Membership</h2>
-            <div className="space-y-3">
-              {membershipData.topUsers.slice(0, 6).map((user, index) => (
-                <div key={index} className="border rounded-lg p-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium text-gray-700">{user.username}</h3>
-                      <p className="text-sm text-gray-500">{user.email}</p>
+            {membershipData.topUsers && membershipData.topUsers.length > 0 ? (
+              <div className="space-y-3">
+                {membershipData.topUsers.slice(0, 6).map((user, index) => (
+                  <div key={index} className="border rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium text-gray-700">{user.username || 'N/A'}</h3>
+                        <p className="text-sm text-gray-500">{user.email || 'N/A'}</p>
+                      </div>
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                        {user.currentPackage || 'N/A'}
+                      </span>
                     </div>
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                      {user.currentPackage}
-                    </span>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span className="text-gray-600">{user.totalPurchases || 0} lần mua</span>
+                      <span className="font-semibold text-purple-600">
+                        {user.totalSpent?.toLocaleString('vi-VN') || 0} VND
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm mt-2">
-                    <span className="text-gray-600">{user.totalPurchases} lần mua</span>
-                    <span className="font-semibold text-purple-600">
-                      {user.totalSpent.toLocaleString('vi-VN')} VND
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                Không có dữ liệu top khách hàng
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Thông báo khi không có dữ liệu */}
+      {!ordersData && !revenueData && !topProductsData && !membershipData && !loading && !error && (
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="text-center text-gray-500 py-12">
+            <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 002 2h12a2 2 0 002-2v-5m-16 0h16m-8-5V1m0 12l3-3m-3 3l-3-3" />
+            </svg>
+            <h3 className="text-lg font-medium text-gray-700 mb-2">Không có dữ liệu</h3>
+            <p className="text-gray-500">Không tìm thấy dữ liệu cho khoảng thời gian đã chọn.</p>
+            <button 
+              onClick={handleRefresh}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              Thử tải lại
+            </button>
           </div>
         </div>
       )}

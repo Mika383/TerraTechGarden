@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Check, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Check, Search, Plus, Minus } from 'lucide-react';
 
 // Define a more specific type for accessory images
 interface AccessoryImage {
@@ -28,6 +28,12 @@ interface Accessory {
   accessoryImages: AccessoryImage[];
 }
 
+interface SelectedAccessory {
+  accessoryId: number;
+  quantity: number;
+  accessory: Accessory;
+}
+
 interface ApiResponse<T> {
   status: number;
   message: string;
@@ -35,10 +41,11 @@ interface ApiResponse<T> {
 }
 
 interface Step4Props {
-  selectedAccessories: Accessory[];
-  onSelectionChange: (accessories: Accessory[]) => void;
+  selectedAccessories: SelectedAccessory[];
+  onSelectionChange: (accessories: SelectedAccessory[]) => void;
   onNext: () => void;
   onPrev: () => void;
+  showPrevButton?: boolean;
 }
 
 const Step4Accessories: React.FC<Step4Props> = ({
@@ -46,6 +53,7 @@ const Step4Accessories: React.FC<Step4Props> = ({
   onSelectionChange,
   onNext,
   onPrev,
+  showPrevButton = true,
 }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -58,10 +66,6 @@ const Step4Accessories: React.FC<Step4Props> = ({
 
   useEffect(() => {
     fetchCategories();
-
-    return () => {
-      // No need to clean up searchTimeout since we use useCallback for search
-    };
   }, []);
 
   useEffect(() => {
@@ -132,20 +136,43 @@ const Step4Accessories: React.FC<Step4Props> = ({
     setSelectedCategory(category);
   };
 
-  const handleToggleAccessory = (accessory: Accessory) => {
-    const newSelection = selectedAccessories.some((a) => a.accessoryId === accessory.accessoryId)
-      ? selectedAccessories.filter((a) => a.accessoryId !== accessory.accessoryId)
-      : [...selectedAccessories, accessory];
+  const addAccessory = (accessory: Accessory) => {
+    const existingIndex = selectedAccessories.findIndex(a => a.accessoryId === accessory.accessoryId);
+    if (existingIndex >= 0) {
+      // Increase quantity if already exists
+      const newSelection = [...selectedAccessories];
+      newSelection[existingIndex].quantity += 1;
+      onSelectionChange(newSelection);
+    } else {
+      // Add new accessory with quantity 1
+      const newSelection = [...selectedAccessories, { 
+        accessoryId: accessory.accessoryId, 
+        quantity: 1, 
+        accessory 
+      }];
+      onSelectionChange(newSelection);
+    }
+  };
+
+  const updateAccessoryQuantity = (accessoryId: number, quantity: number) => {
+    if (quantity <= 0) {
+      removeAccessory(accessoryId);
+      return;
+    }
+
+    const newSelection = selectedAccessories.map(a => 
+      a.accessoryId === accessoryId ? { ...a, quantity } : a
+    );
     onSelectionChange(newSelection);
+  };
+
+  const removeAccessory = (accessoryId: number) => {
+    onSelectionChange(selectedAccessories.filter(a => a.accessoryId !== accessoryId));
   };
 
   const clearSearch = () => {
     setSearchTerm('');
     setFilteredAccessories(accessories);
-  };
-
-  const removeAccessory = (accessoryId: number) => {
-    onSelectionChange(selectedAccessories.filter((a) => a.accessoryId !== accessoryId));
   };
 
   const clearAllSelected = () => {
@@ -159,10 +186,27 @@ const Step4Accessories: React.FC<Step4Props> = ({
     return text.replace(regex, '<mark class="bg-yellow-200 px-0.5">$1</mark>');
   };
 
+  const getTotalPrice = () => {
+    return selectedAccessories.reduce((sum, acc) => sum + (acc.accessory.price * acc.quantity), 0);
+  };
+
+  const getTotalQuantity = () => {
+    return selectedAccessories.reduce((sum, acc) => sum + acc.quantity, 0);
+  };
+
+  const isAccessorySelected = (accessoryId: number) => {
+    return selectedAccessories.some(a => a.accessoryId === accessoryId);
+  };
+
+  const getSelectedQuantity = (accessoryId: number) => {
+    const selected = selectedAccessories.find(a => a.accessoryId === accessoryId);
+    return selected ? selected.quantity : 0;
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2"> Chọn Phụ Kiện</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Chọn Phụ Kiện</h2>
         <p className="text-gray-600">Chọn các phụ kiện bổ sung cho terrarium của bạn (tùy chọn)</p>
       </div>
 
@@ -171,7 +215,7 @@ const Step4Accessories: React.FC<Step4Props> = ({
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex justify-between items-center mb-3">
             <h3 className="font-medium text-blue-900">
-              Phụ kiện đã chọn ({selectedAccessories.length})
+              Phụ kiện đã chọn ({getTotalQuantity()} sản phẩm)
             </h3>
             <button
               onClick={clearAllSelected}
@@ -182,33 +226,69 @@ const Step4Accessories: React.FC<Step4Props> = ({
               Xóa tất cả
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {selectedAccessories.map((accessory) => (
+          
+          <div className="space-y-3">
+            {selectedAccessories.map((selectedAcc) => (
               <div
-                key={accessory.accessoryId}
-                className="inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium bg-blue-100 text-blue-800 border border-blue-300"
+                key={selectedAcc.accessoryId}
+                className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-300"
               >
-                <span className="truncate max-w-32" title={accessory.name}>
-                  {accessory.name}
-                </span>
-                <span className="ml-2 text-xs text-blue-600">
-                  ({accessory.price.toLocaleString()} VNĐ)
-                </span>
-                <button
-                  onClick={() => removeAccessory(accessory.accessoryId)}
-                  className="ml-2 inline-flex items-center p-0.5 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600"
-                  type="button"
-                  aria-label={`Xóa ${accessory.name}`}
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                <div className="flex-1">
+                  <div className="font-medium text-blue-900">{selectedAcc.accessory.name}</div>
+                  <div className="text-sm text-blue-600">
+                    {selectedAcc.accessory.price.toLocaleString()} VNĐ × {selectedAcc.quantity} = {' '}
+                    {(selectedAcc.accessory.price * selectedAcc.quantity).toLocaleString()} VNĐ
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Kích thước: {selectedAcc.accessory.size || 'Không có'} • 
+                    Tồn kho: {selectedAcc.accessory.stockQuantity}
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => updateAccessoryQuantity(selectedAcc.accessoryId, selectedAcc.quantity - 1)}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+                      type="button"
+                      aria-label={`Giảm số lượng ${selectedAcc.accessory.name}`}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="w-8 text-center font-medium">{selectedAcc.quantity}</span>
+                    <button
+                      onClick={() => updateAccessoryQuantity(selectedAcc.accessoryId, selectedAcc.quantity + 1)}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+                      type="button"
+                      aria-label={`Tăng số lượng ${selectedAcc.accessory.name}`}
+                      disabled={selectedAcc.quantity >= selectedAcc.accessory.stockQuantity}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  <button
+                    onClick={() => removeAccessory(selectedAcc.accessoryId)}
+                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded"
+                    type="button"
+                    aria-label={`Xóa ${selectedAcc.accessory.name}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-          <div className="mt-3 pt-3 border-t border-blue-200">
-            <span className="text-sm font-medium text-blue-900">
-              Tổng giá trị: {selectedAccessories.reduce((sum, acc) => sum + acc.price, 0).toLocaleString()} VNĐ
-            </span>
+          
+          <div className="mt-4 pt-4 border-t border-blue-200">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-blue-900">
+                Tổng số lượng: {getTotalQuantity()} sản phẩm
+              </span>
+              <span className="text-lg font-bold text-blue-900">
+                Tổng giá trị phụ kiện: {getTotalPrice().toLocaleString()} VNĐ
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -320,55 +400,106 @@ const Step4Accessories: React.FC<Step4Props> = ({
                       Tìm thấy {filteredAccessories.length} kết quả cho "{searchTerm}"
                     </div>
                   )}
-                  {filteredAccessories.map((accessory) => (
-                    <div
-                      key={accessory.accessoryId}
-                      onClick={() => handleToggleAccessory(accessory)}
-                      className={`px-4 py-4 hover:bg-blue-50 transition-colors duration-150 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                        selectedAccessories.some((a) => a.accessoryId === accessory.accessoryId)
-                          ? 'bg-blue-100'
-                          : ''
-                      }`}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          handleToggleAccessory(accessory);
-                        }
-                      }}
-                      aria-label={`Chọn hoặc bỏ chọn ${accessory.name}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900">
-                            <span
-                              dangerouslySetInnerHTML={{
-                                __html: highlightText(accessory.name, searchTerm),
-                              }}
-                            />
+                  {filteredAccessories.map((accessory) => {
+                    const selectedQuantity = getSelectedQuantity(accessory.accessoryId);
+                    const isSelected = isAccessorySelected(accessory.accessoryId);
+                    
+                    return (
+                      <div
+                        key={accessory.accessoryId}
+                        className={`px-4 py-4 border-b border-gray-100 last:border-b-0 transition-colors duration-150 ${
+                          isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <div className="font-medium text-gray-900">
+                                <span
+                                  dangerouslySetInnerHTML={{
+                                    __html: highlightText(accessory.name, searchTerm),
+                                  }}
+                                />
+                              </div>
+                              {isSelected && (
+                                <div className="flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                                  <Check className="w-3 h-3 mr-1" />
+                                  {selectedQuantity}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500 mt-1 space-y-1">
+                              <div>
+                                Mô tả:{' '}
+                                <span
+                                  dangerouslySetInnerHTML={{
+                                    __html: highlightText(accessory.description, searchTerm),
+                                  }}
+                                />
+                              </div>
+                              <div className="flex space-x-4">
+                                <span>Kích thước: {accessory.size || 'Không có'}</span>
+                                <span className="font-medium text-green-600">
+                                  Giá: {accessory.price.toLocaleString()} VNĐ
+                                </span>
+                                <span className={`font-medium ${
+                                  accessory.stockQuantity > 10 ? 'text-green-600' :
+                                  accessory.stockQuantity > 0 ? 'text-yellow-600' : 'text-red-600'
+                                }`}>
+                                  Tồn kho: {accessory.stockQuantity}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500 mt-1 space-y-1">
-                            <div>
-                              Mô tả:{' '}
-                              <span
-                                dangerouslySetInnerHTML={{
-                                  __html: highlightText(accessory.description, searchTerm),
-                                }}
-                              />
-                            </div>
-                            <div className="flex space-x-4">
-                              <span>Kích thước: {accessory.size || 'Không có'}</span>
-                              <span>Giá: {accessory.price.toLocaleString()} VNĐ</span>
-                              <span>Tồn kho: {accessory.stockQuantity}</span>
-                            </div>
+                          
+                          <div className="flex items-center space-x-2 ml-4">
+                            {isSelected ? (
+                              <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-1 bg-white border border-gray-300 rounded-lg p-1">
+                                  <button
+                                    onClick={() => updateAccessoryQuantity(accessory.accessoryId, selectedQuantity - 1)}
+                                    className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                                    type="button"
+                                    aria-label={`Giảm số lượng ${accessory.name}`}
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
+                                  <span className="w-8 text-center font-medium">{selectedQuantity}</span>
+                                  <button
+                                    onClick={() => updateAccessoryQuantity(accessory.accessoryId, selectedQuantity + 1)}
+                                    className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                                    type="button"
+                                    aria-label={`Tăng số lượng ${accessory.name}`}
+                                    disabled={selectedQuantity >= accessory.stockQuantity}
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => removeAccessory(accessory.accessoryId)}
+                                  className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                                  type="button"
+                                  aria-label={`Xóa ${accessory.name}`}
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => addAccessory(accessory)}
+                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                type="button"
+                                disabled={accessory.stockQuantity === 0}
+                                aria-label={`Thêm ${accessory.name} vào giỏ`}
+                              >
+                                {accessory.stockQuantity === 0 ? 'Hết hàng' : 'Thêm'}
+                              </button>
+                            )}
                           </div>
                         </div>
-                        {selectedAccessories.some((a) => a.accessoryId === accessory.accessoryId) && (
-                          <Check className="w-5 h-5 text-blue-600 ml-3 flex-shrink-0" />
-                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </div>
@@ -378,24 +509,35 @@ const Step4Accessories: React.FC<Step4Props> = ({
 
       {/* Navigation */}
       <div className="flex justify-between pt-6 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={onPrev}
-          className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800"
-          aria-label="Quay lại bước trước"
-        >
-          <ChevronLeft className="w-4 h-4 mr-2" />
-          Quay lại
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          aria-label="Tiếp tục đến bước tiếp theo"
-        >
-          Tiếp theo
-          <ChevronRight className="w-4 h-4 ml-2" />
-        </button>
+        {showPrevButton ? (
+          <button
+            type="button"
+            onClick={onPrev}
+            className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800"
+            aria-label="Quay lại bước trước"
+          >
+            <ChevronLeft className="w-4 h-4 mr-2" />
+            Quay lại
+          </button>
+        ) : (
+          <div></div>
+        )}
+        <div className="flex items-center space-x-4">
+          {selectedAccessories.length > 0 && (
+            <div className="text-sm text-gray-600">
+              {getTotalQuantity()} phụ kiện • {getTotalPrice().toLocaleString()} VNĐ
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onNext}
+            className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            aria-label="Tiếp tục đến bước tiếp theo"
+          >
+            Tiếp theo
+            <ChevronRight className="w-4 h-4 ml-2" />
+          </button>
+        </div>
       </div>
     </div>
   );

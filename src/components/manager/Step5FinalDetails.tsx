@@ -25,20 +25,6 @@ interface Environment {
   environmentDescription: string;
 }
 
-interface Accessory {
-  accessoryId: number;
-  name: string;
-  size: string;
-  description: string;
-  price: number;
-  stockQuantity: number;
-  categoryId: number;
-  createdAt: string;
-  updatedAt: string;
-  status: string;
-  accessoryImages: any[];
-}
-
 interface FormData {
   terrariumName: string;
   description: string;
@@ -50,7 +36,6 @@ interface Step5Props {
   selectedTankMethod: TankMethod | null;
   selectedShape: Shape | null;
   selectedEnvironment: Environment | null;
-  selectedAccessories: Accessory[];
   formData: FormData;
   onFormDataChange: (data: Partial<FormData>) => void;
   onSubmit: () => void;
@@ -63,7 +48,6 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
   selectedTankMethod,
   selectedShape,
   selectedEnvironment,
-  selectedAccessories,
   formData,
   onFormDataChange,
   onSubmit,
@@ -92,8 +76,6 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
                    selectedTankMethod && 
                    selectedShape && 
                    selectedEnvironment;
-
-  const totalAccessoryPrice = selectedAccessories.reduce((sum, acc) => sum + acc.price, 0);
 
   // Cloudinary upload functions
   const openImageModal = () => {
@@ -283,29 +265,6 @@ const Step5FinalDetails: React.FC<Step5Props> = ({
                 </div>
                 {selectedEnvironment && (
                   <div className="text-xs text-gray-500 mt-1">{selectedEnvironment.environmentDescription}</div>
-                )}
-              </div>
-              
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="font-medium text-gray-700 text-sm">Phụ kiện</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {selectedAccessories.length === 0 ? 'Chưa chọn' : `${selectedAccessories.length} phụ kiện đã chọn`}
-                </div>
-                {selectedAccessories.length > 0 && (
-                  <div className="text-xs text-gray-500 mt-2 space-y-1 max-h-32 overflow-y-auto">
-                    {selectedAccessories.map(accessory => (
-                      <div key={accessory.accessoryId} className="flex justify-between items-center">
-                        <span className="truncate max-w-[120px]" title={accessory.name}>{accessory.name}</span>
-                        <span className="text-blue-600 font-medium">{accessory.price.toLocaleString()} VNĐ</span>
-                      </div>
-                    ))}
-                    <div className="pt-2 border-t border-gray-300">
-                      <div className="flex justify-between font-medium text-gray-700">
-                        <span>Tổng giá trị:</span>
-                        <span className="text-blue-600">{totalAccessoryPrice.toLocaleString()} VNĐ</span>
-                      </div>
-                    </div>
-                  </div>
                 )}
               </div>
             </div>
