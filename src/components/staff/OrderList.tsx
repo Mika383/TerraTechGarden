@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Archive, ChevronLeft, ChevronRight, Eye, CheckCircle, Clock, ArrowRight } from 'lucide-react';
+import { Plus, Search, Archive, ChevronLeft, ChevronRight, Eye, CheckCircle, Clock, ArrowRight, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface OrderItem {
@@ -43,18 +43,19 @@ interface PaginationData {
 const getStatusText = (status: string | null | undefined): string => {
   if (!status) return 'Không xác định';
   
-  switch (status.toLowerCase()) {
-    case 'failed': return 'Giao thất bại';
-    case 'cancel':
-    case 'cancle': return 'Đơn bị hủy'; // Handle both spellings
-    case 'pending': return 'Chờ xử lý';
-    case 'confirmed': return 'Đã xác nhận';
-    case 'processing': return 'Đang xử lý';
-    case 'shipping': return 'Đang vận chuyển';
-    case 'completed': return 'Hoàn thành';
-    case 'requestrefund': return 'Yêu cầu hoàn tiền';
-    case 'refuning': return 'Đang hoàn tiền';
-    case 'refunded': return 'Đã hoàn tiền';
+  switch (status) {
+    case 'Failed': return 'Giao thất bại';
+    case 'Cancel': return 'Đơn bị hủy';
+    case 'Pending': return 'Chờ xử lý';
+    case 'Confirmed': return 'Đã xác nhận';
+    case 'Processing': return 'Đang xử lý';
+    case 'Shipping': return 'Đang vận chuyển';
+    case 'Completed': return 'Hoàn thành';
+    case 'RequestRefund': return 'Yêu cầu hoàn tiền';
+    case 'Refuning': return 'Đang hoàn tiền';
+    case 'Refunded': return 'Đã hoàn tiền';
+    case 'Rejected': return 'Đã từ chối';
+    case 'Approved': return 'Đã phê duyệt';
     default: return 'Không xác định';
   }
 };
@@ -63,40 +64,39 @@ const getStatusText = (status: string | null | undefined): string => {
 const getStatusColor = (status: string | null | undefined, type: 'order' | 'payment' | 'shipping') => {
   if (!status) return 'text-gray-600 bg-gray-50';
   
-  const normalizedStatus = status.toLowerCase();
-  
   if (type === 'order') {
-    switch (normalizedStatus) {
-      case 'pending': return 'text-yellow-600 bg-yellow-50';
-      case 'confirmed': return 'text-blue-600 bg-blue-50';
-      case 'processing': return 'text-purple-600 bg-purple-50';
-      case 'shipping': return 'text-indigo-600 bg-indigo-50';
-      case 'completed': return 'text-green-600 bg-green-50';
-      case 'failed': return 'text-red-600 bg-red-50';
-      case 'cancel':
-      case 'cancle': return 'text-gray-600 bg-gray-50';
-      case 'requestrefund': return 'text-orange-600 bg-orange-50';
-      case 'refuning': return 'text-orange-500 bg-orange-50';
-      case 'refunded': return 'text-green-500 bg-green-50';
+    switch (status) {
+      case 'Pending': return 'text-yellow-600 bg-yellow-50';
+      case 'Approved': return 'text-blue-500 bg-blue-50';
+      case 'Confirmed': return 'text-blue-600 bg-blue-50';
+      case 'Processing': return 'text-purple-600 bg-purple-50';
+      case 'Shipping': return 'text-indigo-600 bg-indigo-50';
+      case 'Completed': return 'text-green-600 bg-green-50';
+      case 'Failed': return 'text-red-600 bg-red-50';
+      case 'Cancel': return 'text-gray-600 bg-gray-50';
+      case 'Rejected': return 'text-red-700 bg-red-100';
+      case 'RequestRefund': return 'text-orange-600 bg-orange-50';
+      case 'Refuning': return 'text-orange-500 bg-orange-50';
+      case 'Refunded': return 'text-green-500 bg-green-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   }
   
   if (type === 'payment') {
-    switch (normalizedStatus) {
-      case 'paid': return 'text-green-600 bg-green-50';
-      case 'unpaid': return 'text-red-600 bg-red-50';
-      case 'cancelled': return 'text-gray-600 bg-gray-50';
+    switch (status) {
+      case 'Paid': return 'text-green-600 bg-green-50';
+      case 'Unpaid': return 'text-red-600 bg-red-50';
+      case 'Cancelled': return 'text-gray-600 bg-gray-50';
       default: return 'text-yellow-600 bg-yellow-50';
     }
   }
   
   if (type === 'shipping') {
-    switch (normalizedStatus) {
-      case 'shipped': return 'text-green-600 bg-green-50';
-      case 'delivered': return 'text-blue-600 bg-blue-50';
-      case 'unprocessed': return 'text-red-600 bg-red-50';
-      case 'pending': return 'text-yellow-600 bg-yellow-50';
+    switch (status) {
+      case 'Shipped': return 'text-green-600 bg-green-50';
+      case 'Delivered': return 'text-blue-600 bg-blue-50';
+      case 'Unprocessed': return 'text-red-600 bg-red-50';
+      case 'Pending': return 'text-yellow-600 bg-yellow-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   }
@@ -104,40 +104,16 @@ const getStatusColor = (status: string | null | undefined, type: 'order' | 'paym
   return 'text-gray-600 bg-gray-50';
 };
 
-// Get next status for progression
+// Get next status for progression - UPDATED
 const getNextStatus = (currentStatus: string | null): string | null => {
   if (!currentStatus) return null;
   
-  switch (currentStatus.toLowerCase()) {
-    case 'pending': return 'confirmed';
-    case 'confirmed': return 'processing';
-    case 'processing': return 'shipping';
-    case 'shipping': return 'completed';
+  switch (currentStatus) {
+    case 'Pending': return 'Confirmed'; // Changed from 'Approved' to 'Confirmed'
+    case 'Confirmed': return 'Processing';
+    case 'Processing': return 'Shipping';
+    case 'Shipping': return 'Completed';
     default: return null;
-  }
-};
-
-// Get button config for status updates
-const getStatusButtonConfig = (status: string | null) => {
-  if (!status) return null;
-  
-  switch (status.toLowerCase()) {
-    case 'pending':
-      return {
-        text: 'Xác nhận đơn',
-        icon: CheckCircle,
-        className: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md',
-        nextStatus: 'confirmed'
-      };
-    case 'confirmed':
-      return {
-        text: 'Bắt đầu xử lý',
-        icon: Clock,
-        className: 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm hover:shadow-md',
-        nextStatus: 'processing'
-      };
-    default:
-      return null;
   }
 };
 
@@ -158,6 +134,65 @@ const formatDate = (dateString: string) => {
   });
 };
 
+// Reject Confirmation Modal Component
+const RejectConfirmModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  orderId: number;
+  isLoading: boolean;
+}> = ({ isOpen, onClose, onConfirm, orderId, isLoading }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Xác nhận từ chối đơn hàng</h3>
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className="text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="mb-6">
+          <p className="text-gray-600">
+            Bạn có chắc chắn muốn từ chối đơn hàng <span className="font-semibold">#{orderId}</span> không?
+          </p>
+          <p className="text-sm text-red-600 mt-2">
+            Hành động này không thể hoàn tác.
+          </p>
+        </div>
+        
+        <div className="flex space-x-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center"
+          >
+            {isLoading ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+            ) : (
+              <X className="w-4 h-4 mr-2" />
+            )}
+            {isLoading ? 'Đang xử lý...' : 'Từ chối đơn'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]); // For statistics
@@ -165,6 +200,11 @@ const OrderList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
+  
+  // Modal states
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [orderToReject, setOrderToReject] = useState<number | null>(null);
+  const [rejectLoading, setRejectLoading] = useState(false);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -307,19 +347,13 @@ const OrderList: React.FC = () => {
       (paymentStatus && paymentStatus.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (orderStatus && orderStatus.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesStatus = statusFilter === 'all' || (orderStatus && orderStatus.toLowerCase() === statusFilter.toLowerCase());
-    const matchesPayment = paymentFilter === 'all' || (paymentStatus && paymentStatus.toLowerCase() === paymentFilter.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || (orderStatus && orderStatus === statusFilter);
+    const matchesPayment = paymentFilter === 'all' || (paymentStatus && paymentStatus === paymentFilter);
     
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
-  const handleStatusUpdate = async (orderId: number, currentStatus: string | null) => {
-    const nextStatus = getNextStatus(currentStatus);
-    if (!nextStatus) {
-      toast.error('Trạng thái không hợp lệ để cập nhật');
-      return;
-    }
-
+  const handleStatusUpdate = async (orderId: number, currentStatus: string | null, newStatus: string) => {
     // Add to updating set
     setUpdatingOrders(prev => new Set(prev).add(orderId));
 
@@ -337,7 +371,7 @@ const OrderList: React.FC = () => {
       const response = await fetch(`https://terarium.shop/api/Order/${orderId}/status`, {
         method: 'PUT',
         headers: headers,
-        body: JSON.stringify(nextStatus),
+        body: JSON.stringify(newStatus),
       });
 
       if (response.status === 401) {
@@ -352,11 +386,11 @@ const OrderList: React.FC = () => {
       // Update the order status in state
       setOrders(orders.map(order => 
         order.orderId === orderId 
-          ? { ...order, status: nextStatus }
+          ? { ...order, status: newStatus }
           : order
       ));
       
-      toast.success(`Cập nhật trạng thái thành: ${getStatusText(nextStatus)}`);
+      toast.success(`Cập nhật trạng thái thành: ${getStatusText(newStatus)}`);
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Không thể cập nhật trạng thái');
@@ -367,6 +401,35 @@ const OrderList: React.FC = () => {
         newSet.delete(orderId);
         return newSet;
       });
+    }
+  };
+
+  const handleConfirmOrder = (orderId: number, currentStatus: string | null) => {
+    const nextStatus = getNextStatus(currentStatus);
+    if (nextStatus) {
+      handleStatusUpdate(orderId, currentStatus, nextStatus);
+    }
+  };
+
+  const handleRejectOrder = (orderId: number) => {
+    setOrderToReject(orderId);
+    setShowRejectModal(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!orderToReject) return;
+
+    setRejectLoading(true);
+    await handleStatusUpdate(orderToReject, 'Pending', 'Rejected');
+    setRejectLoading(false);
+    setShowRejectModal(false);
+    setOrderToReject(null);
+  };
+
+  const handleCloseRejectModal = () => {
+    if (!rejectLoading) {
+      setShowRejectModal(false);
+      setOrderToReject(null);
     }
   };
 
@@ -453,7 +516,7 @@ const OrderList: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Tổng đơn hàng</div>
           <div className="text-2xl font-bold text-gray-900">{totalItems}</div>
@@ -461,25 +524,31 @@ const OrderList: React.FC = () => {
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Đã thanh toán</div>
           <div className="text-2xl font-bold text-green-600">
-            {allOrders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'paid').length}
+            {allOrders.filter(o => o.paymentStatus === 'Paid').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Chưa thanh toán</div>
           <div className="text-2xl font-bold text-red-600">
-            {allOrders.filter(o => o.paymentStatus && o.paymentStatus.toLowerCase() === 'unpaid').length}
+            {allOrders.filter(o => o.paymentStatus === 'Unpaid').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Hoàn thành</div>
           <div className="text-2xl font-bold text-green-600">
-            {allOrders.filter(o => o.status && o.status.toLowerCase() === 'completed').length}
+            {allOrders.filter(o => o.status === 'Completed').length}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="text-sm text-gray-600">Đã hủy</div>
           <div className="text-2xl font-bold text-red-600">
-            {allOrders.filter(o => o.status && (o.status.toLowerCase() === 'cancel' || o.status.toLowerCase() === 'cancle')).length}
+            {allOrders.filter(o => o.status === 'Cancel').length}
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="text-sm text-gray-600">Đã từ chối</div>
+          <div className="text-2xl font-bold text-red-700">
+            {allOrders.filter(o => o.status === 'Rejected').length}
           </div>
         </div>
       </div>
@@ -503,8 +572,8 @@ const OrderList: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredOrders.map((order) => {
-                const buttonConfig = getStatusButtonConfig(order.status);
                 const isUpdating = updatingOrders.has(order.orderId);
+                const isPendingStatus = order.status === 'Pending';
                 
                 return (
                   <tr key={order.orderId} className="hover:bg-gray-50">
@@ -539,19 +608,49 @@ const OrderList: React.FC = () => {
                       {formatCurrency(order.deposit)}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {buttonConfig && (
+                      {isPendingStatus ? (
+                        <div className="flex space-x-2 justify-center">
+                          {/* Confirm Button */}
+                          <button
+                            onClick={() => handleConfirmOrder(order.orderId, order.status)}
+                            disabled={isUpdating}
+                            className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md"
+                          >
+                            {isUpdating ? (
+                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                            )}
+                            {isUpdating ? 'Đang cập nhật...' : 'Xác nhận đơn'}
+                          </button>
+
+                          {/* Reject Button */}
+                          <button
+                            onClick={() => handleRejectOrder(order.orderId)}
+                            disabled={isUpdating}
+                            className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-sm hover:shadow-md"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Từ chối đơn
+                          </button>
+                        </div>
+                      ) : order.status === 'Confirmed' ? (
+                        // Show "Start Processing" button for confirmed orders
                         <button
-                          onClick={() => handleStatusUpdate(order.orderId, order.status)}
+                          onClick={() => handleConfirmOrder(order.orderId, order.status)}
                           disabled={isUpdating}
-                          className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${buttonConfig.className}`}
+                          className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm hover:shadow-md"
                         >
                           {isUpdating ? (
                             <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
                           ) : (
-                            <buttonConfig.icon className="w-4 h-4 mr-2" />
+                            <Clock className="w-4 h-4 mr-2" />
                           )}
-                          {isUpdating ? 'Đang cập nhật...' : buttonConfig.text}
+                          {isUpdating ? 'Đang cập nhật...' : 'Bắt đầu xử lý'}
                         </button>
+                      ) : (
+                        // No action button for processing, shipping, completed, cancelled, rejected orders
+                        <span className="text-gray-400 text-sm">Không có hành động</span>
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">
@@ -663,6 +762,15 @@ const OrderList: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Reject Confirmation Modal */}
+      <RejectConfirmModal
+        isOpen={showRejectModal}
+        onClose={handleCloseRejectModal}
+        onConfirm={handleConfirmReject}
+        orderId={orderToReject || 0}
+        isLoading={rejectLoading}
+      />
     </div>
   );
 };
