@@ -1,17 +1,16 @@
 // src/types/order.ts
 
-// Phân loại item theo chuẩn BE mới (gồm COMBO)
+// Phân loại item theo chuẩn BE (gồm COMBO)
 export type OrderItemType = 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM' | 'COMBO';
 
 /**
  * Item trong đơn hàng (RESPONSE)
- * Lưu ý: BE có thể trả null cho nhiều field; để linh hoạt ta dùng union với null và optional.
  * childItems là đệ quy để hỗ trợ combo gói nhiều dòng con.
  */
 export interface OrderItem {
   orderItemId: number;
 
-  itemType: OrderItemType;
+  itemType: OrderItemType | string;
 
   // Tham chiếu sản phẩm
   terrariumId?: number | null;
@@ -42,11 +41,13 @@ export interface OrderItem {
 
 /**
  * Đơn hàng (RESPONSE)
+ * Lưu ý: API get-all-by-userid KHÔNG còn trả orderItems.
  */
 export interface Order {
   orderId: number;
   userId: number;
 
+  voucherId?: number | null;
   addressId?: number | null;
 
   // Tổng tiền
@@ -62,29 +63,14 @@ export interface Order {
   paymentMethod?: string | null;
   transactionId?: string | null;
 
-  // Danh sách item
-  orderItems: OrderItem[];
+  // Danh sách item — có ở /Order/{id}, vắng ở /get-all-by-userid
+  orderItems?: OrderItem[];
 }
 
-/* ------------------------- VOUCHER ------------------------- */
-export interface Voucher {
+/* ------------------------- VOUCHER (tham chiếu) ------------------------- */
+export interface VoucherRef {
   voucherId: number;
-  code: string;
-  description: string;
-
-  discountAmount: number;
-  discountPercent?: number;
-
-  validFrom: string;
-  validTo: string;
-  status: 'active' | 'inactive' | 'expired';
-
-  minOrderAmount?: number | null;
-  isPersonal?: boolean;
-  targetUserId?: string | null;
-  totalUsage?: number;
-  remainingUsage?: number;
-  perUserUsageLimit?: number;
+  code?: string;
 }
 
 /* --------------------- CREATE ORDER ------------------ */
@@ -97,6 +83,7 @@ export interface CreateOrderItem {
   comboQuantity?: number;
 
   // BUNDLE_ACCESSORY
+  /** ⚠️ BE mới: KHÔNG dùng terrariumId cho bundle, luôn để = 0 khi gửi */
   terrariumId?: number;
   terrariumVariantId?: number;
   accessoryId?: number;
@@ -115,4 +102,18 @@ export interface CreateOrderRequest {
 
   totalAmountOld: number;
   totalAmountNew: number;
+}
+
+/* --------------------- MOMO PAYMENT ------------------ */
+export interface CreateMoMoPaymentRequest {
+  orderId: number;
+  orderInfo: string;
+  finalAmount: number;
+  voucherId: number;
+  payAll: boolean;
+}
+
+export interface CreateMoMoPaymentResponse {
+  payUrl: string;
+  qrImageBase64?: string;
 }

@@ -1,4 +1,3 @@
-// src/types/voucher.ts
 export type VoucherStatus = 'active' | 'inactive' | 'Active' | 'Inactive';
 
 export interface Voucher {
@@ -15,6 +14,9 @@ export interface Voucher {
   totalUsage: number;
   remainingUsage: number;
   perUserUsageLimit?: number | null;
+
+  /** BE mới có thêm, có thể là 0 hoặc null */
+  minOrderAmount?: number | null;
 }
 
 export interface CreateVoucherRequest {
@@ -29,8 +31,12 @@ export interface CreateVoucherRequest {
   targetUserId?: string | null;
   totalUsage?: number | null;
   perUserUsageLimit?: number | null;
+
+  /** BE mới có thêm, có thể là 0 hoặc null */
+  minOrderAmount?: number | null;
 }
 
 export interface UpdateVoucherRequest extends CreateVoucherRequest {
-  voucherId?: number; // một số BE yêu cầu
+  /** một số BE yêu cầu */
+  voucherId?: number;
 }

@@ -41,6 +41,10 @@ import WalletPage from '@/pages/Customer/WalletPage';
 import PaymentFail from '@/pages/Customer/PaymentFail';
 import CreateVariantPage from '@/components/manager/CreateVariantPage';
 import EditVariantPage from '@/components/manager/EditVariantPage';
+import OrderPage from '../pages/Customer/Order';
+
+import PaymentWalletSuccess from '@/pages/Customer/PaymentWalletSuccess';
+import WalletSuccess from '@/pages/Customer/WalletSuccess';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -129,10 +133,12 @@ const AppRoutes = () => {
         <Route path="personalize" element={<Suspense fallback={<Loading />}><Personalize /></Suspense>} />
         <Route path="payment-fail" element={<Suspense fallback={<Loading />}><PaymentFail /></Suspense>} />
         <Route path="payment-success" element={<Suspense fallback={<Loading />}><PaymentSuccess /></Suspense>} />
+        <Route path="/wallet-success/:orderId" element={<Suspense fallback={<Loading />}><PaymentWalletSuccess /></Suspense>} />
         <Route path="verify-email" element={<Suspense fallback={<Loading />}><VerifyEmail /></Suspense>} />
         <Route path="combo/:id" element={<Suspense fallback={<Loading />}><ComboDetail /></Suspense>} />
-        <Route path="membership-success/payment-success" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
-        <Route path="membership-fail/payment-fail" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
+        <Route path="membership-success" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
+        <Route path="membership-fail" element={<Suspense fallback={<Loading />}><MembershipSuccess /></Suspense>} />
+        <Route path="wallet-deposit" element={<Suspense fallback={<Loading />}><WalletSuccess/></Suspense>} />
         <Route
           path="customer-dashboard"
           element={<PrivateRoute allowedRoles={['User', 'Staff', 'Manager', 'Admin']} />}
@@ -141,7 +147,7 @@ const AppRoutes = () => {
             element={<Suspense fallback={<Loading />}><CustomerLayout /></Suspense>}
           >
             <Route index element={<Suspense fallback={<Loading />}><CustomerDashboard /></Suspense>} />
-            <Route path="orders" element={<Suspense fallback={<Loading />}><Orders /></Suspense>} />
+            <Route path="orders" element={<Suspense fallback={<Loading />}><OrderPage /></Suspense>} />
             <Route path="order-detail/:orderId" element={<Suspense fallback={<Loading />}><OrderDetail /></Suspense>} />
             <Route path="notifications" element={<Suspense fallback={<Loading />}><Notifications /></Suspense>} />
             <Route path="favorites" element={<Suspense fallback={<Loading />}><Favorites /></Suspense>} />
