@@ -3,13 +3,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
-import { getOrderById } from "@/api/order";
+
+import { getOrderById } from "@/api";
+import { getVouchers } from "@/api/voucher";
+
 import type { Order, OrderItem } from "@/types/order";
+import type { Voucher } from "@/types/voucher";
 import OrderItemsDisplay from "@/components/OrderItemsDisplay";
 
-// ================= Helpers (dynamic, no hard-code) =================
+// ================= Helpers =================
 type KV = Record<string, string | undefined>;
-
 const money = (n?: number) => (n ?? 0).toLocaleString("vi-VN") + " VND";
 
 const parseVnpDate = (v?: string) => {
@@ -26,17 +29,13 @@ const parseVnpDate = (v?: string) => {
 
 const decodeSafely = (s?: string) => {
   if (!s) return "N/A";
-  try {
-    return decodeURIComponent(s);
-  } catch {
-    return s;
-  }
+  try { return decodeURIComponent(s); } catch { return s; }
 };
 
 const detectGateway = (q: KV): "VNPay" | "MoMo" | "PayOS" | "Unknown" => {
   const keys = Object.keys(q);
   if (keys.some((k) => k.startsWith("vnp_"))) return "VNPay";
-  if (["resultCode", "transId", "payType"].some((k) => k in q)) return "MoMo";
+  if (["resultCode", "transId", "payType", "partnerCode"].some((k) => k in q)) return "MoMo";
   if (["orderCode", "signature"].some((k) => k in q)) return "PayOS";
   return "Unknown";
 };
@@ -72,8 +71,13 @@ const extractAmount = (q: KV): number => {
 const extractTransId = (q: KV): string =>
   q.transId || q.vnp_TransactionNo || q.transactionId || "N/A";
 
-const extractBank = (q: KV, gw: ReturnType<typeof detectGateway>): string =>
-  (gw === "VNPay" ? q.vnp_BankCode : q.bank) || "N/A";
+// ✅ FIX: Bank name by gateway
+const extractBank = (q: KV, gw: ReturnType<typeof detectGateway>): string => {
+  if (gw === "VNPay") return q.vnp_BankCode || "N/A";
+  if (gw === "MoMo") return q.bankName || q.bankCode || q.payType || "MoMo";
+  if (gw === "PayOS") return q.bank || q.method || "N/A";
+  return q.bank || "N/A";
+};
 
 const extractPayType = (q: KV, gw: ReturnType<typeof detectGateway>): string =>
   (gw === "VNPay" ? q.vnp_CardType : q.payType) || q.method || q.paymentMethod || "N/A";
@@ -99,14 +103,12 @@ const extractTime = (q: KV, gw: ReturnType<typeof detectGateway>): string => {
   if (!t) return "N/A";
   const n = Number(t);
   if (!Number.isNaN(n)) {
-    try {
-      return new Date(n).toLocaleString("vi-VN");
-    } catch {}
+    try { return new Date(n).toLocaleString("vi-VN"); } catch {}
   }
   return t;
 };
 
-// ===== NEW: Gom combo theo comboId -> mỗi combo hiển thị 1 parent có childItems =====
+// ===== Gom combo theo comboId -> mỗi combo 1 parent có childItems =====
 function toDisplayOrder(order: Order): Order {
   const items = order.orderItems || [];
 
@@ -124,10 +126,7 @@ function toDisplayOrder(order: Order): Order {
     const id = it.comboId as number;
     const g = groups.get(id) || { header: undefined, children: [] };
 
-    // Heuristic nhận biết dòng header: có unitPrice > 0 hoặc không có tên/ảnh
-    const looksHeader =
-      (it.unitPrice ?? 0) > 0 || (!it.productName && !it.imageUrl);
-
+    const looksHeader = (it.unitPrice ?? 0) > 0 || (!it.productName && !it.imageUrl);
     if (looksHeader && !g.header) g.header = { ...it };
     else g.children.push({ ...it });
 
@@ -136,7 +135,6 @@ function toDisplayOrder(order: Order): Order {
 
   const groupedParents: OrderItem[] = [];
   for (const [cid, g] of groups.entries()) {
-    // Chọn child đại diện để hiển thị tên/ảnh nếu header thiếu
     const mainChild =
       g.children.find((c) => c.terrariumVariantId) ||
       g.children.find((c) => !!c.productName) ||
@@ -145,7 +143,7 @@ function toDisplayOrder(order: Order): Order {
     const header: OrderItem =
       g.header ??
       ({
-        orderItemId: Number(`9${cid}`), // synthetic id để tránh trùng
+        orderItemId: Number(`9${cid}`),
         itemType: "COMBO",
         comboId: cid,
         quantity: 1,
@@ -165,12 +163,11 @@ function toDisplayOrder(order: Order): Order {
 
   return {
     ...order,
-    // Top-level chỉ còn: các item thường + 1 item đại diện cho mỗi combo
     orderItems: [...nonCombo, ...groupedParents],
   };
 }
 
-// ================== UI blocks (giữ layout/logic hiện tại) ==================
+// ================== UI blocks ==================
 const PaymentInfoCard: React.FC<{ query: KV }> = ({ query }) => {
   const gateway = detectGateway(query);
   const success = isPaymentSuccess(query);
@@ -195,7 +192,6 @@ const PaymentInfoCard: React.FC<{ query: KV }> = ({ query }) => {
           <p><strong>Số tiền:</strong> {money(amount)}</p>
           <p><strong>Mã giao dịch:</strong> {transId}</p>
           <p><strong>Phương thức:</strong> {payType}</p>
-          <p><strong>Ngân hàng:</strong> {bank}</p>
         </div>
         <div>
           <p><strong>Thông tin đơn hàng:</strong> {orderInfo}</p>
@@ -209,14 +205,16 @@ const PaymentInfoCard: React.FC<{ query: KV }> = ({ query }) => {
               {success ? "Thành công" : "Thất bại"}
             </span>
           </p>
-          <p><strong>Mã đơn hàng:</strong> {displayOrderId}</p>
+          
         </div>
+        
       </div>
+      <p><strong>Mã đơn hàng:</strong> {displayOrderId}</p>
     </div>
   );
 };
 
-// ========================= Main component =========================
+// ========================= Main =========================
 const PaymentSuccess: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -225,6 +223,18 @@ const PaymentSuccess: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const vs = await getVouchers();
+        setVouchers(Array.isArray(vs) ? vs : []);
+      } catch {
+        // silent
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const sp = new URLSearchParams(location.search);
@@ -235,7 +245,6 @@ const PaymentSuccess: React.FC = () => {
 
   const success = useMemo(() => isPaymentSuccess(query), [query]);
 
-  // NEW: order đã được gom combo để truyền vào UI
   const orderForDisplay = useMemo(() => (order ? toDisplayOrder(order) : null), [order]);
 
   useEffect(() => {
@@ -260,9 +269,58 @@ const PaymentSuccess: React.FC = () => {
         setLoading(false);
       }
     };
-
     fetchOrder();
   }, [query, success]);
+
+  // Trong phần tính toán thanh toán
+const originalAmount = order?.originalAmount ?? 0;
+
+// Tính voucherDiscount dựa trên voucherUsed
+const voucherUsed = useMemo(() => {
+  if (!order?.voucherId) return undefined;
+  return vouchers.find((v) => v.voucherId === order.voucherId);
+}, [order?.voucherId, vouchers]);
+
+const voucherDiscount = useMemo(() => {
+  if (!voucherUsed) return 0;
+  if (voucherUsed.discountPercent && voucherUsed.discountPercent > 0) {
+    // Tính giảm giá theo phần trăm
+    return (originalAmount * voucherUsed.discountPercent) / 100;
+  } else if (voucherUsed.discountAmount && voucherUsed.discountAmount > 0) {
+    // Sử dụng số tiền giảm cố định
+    return voucherUsed.discountAmount;
+  }
+  return 0;
+}, [voucherUsed, originalAmount]);
+
+const totalAmount = order?.totalAmount ?? 0;
+const fullPaymentDiscount = Math.max(0, originalAmount - voucherDiscount - totalAmount);
+const deposit = order?.deposit ?? 0;
+
+// Logic tính codAmount (giữ nguyên như bạn yêu cầu)
+let codAmount;
+if (deposit === 0) {
+  // Người dùng chọn thanh toán toàn bộ bằng chuyển khoản, không cần COD
+  codAmount = 0;
+} else if (deposit > 0) {
+  // Người dùng chọn cọc, tính COD là phần còn lại
+  codAmount = Math.max(0, totalAmount - deposit);
+} else {
+  // Trường hợp deposit âm (không nên xảy ra, nhưng phòng thủ)
+  codAmount = totalAmount;
+}
+
+  const reasons: string[] = [];
+  if (voucherUsed) {
+    if (voucherUsed.discountPercent && voucherUsed.discountPercent > 0) {
+      reasons.push(`Voucher ${voucherUsed.code}: -${voucherUsed.discountPercent}%`);
+    } else if (voucherUsed.discountAmount && voucherUsed.discountAmount > 0) {
+      reasons.push(`Voucher ${voucherUsed.code}: -${money(voucherUsed.discountAmount)}`);
+    } else {
+      reasons.push(`Voucher ${voucherUsed.code}`);
+    }
+  }
+  if (fullPaymentDiscount > 0) reasons.push("Ưu đãi thanh toán toàn bộ (Full payment)");
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -292,7 +350,78 @@ const PaymentSuccess: React.FC = () => {
         ) : (
           <>
             <PaymentInfoCard query={query} />
-            {/* Truyền order đã gom combo */}
+
+            {/* ====== Tóm tắt đơn hàng ====== */}
+            {order && (
+              <div className="bg-white p-6 rounded-lg shadow-lg border border-amber-200">
+                <h2 className="text-xl font-semibold mb-4 text-gray-800">Tóm tắt đơn hàng</h2>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Tạm tính (giá gốc)</span>
+                    <span className="font-medium">{money(originalAmount)}</span>
+                  </div>
+
+                  {voucherUsed ? (
+                    <div className="flex justify-between text-yellow-700">
+                      <span>
+                        Giảm voucher <b>{voucherUsed.code}</b>{" "}
+                        {voucherUsed.discountPercent && voucherUsed.discountPercent > 0
+                          ? `(−${voucherUsed.discountPercent}%)`
+                          : voucherUsed.discountAmount && voucherUsed.discountAmount > 0
+                          ? `(−${money(voucherUsed.discountAmount)})`
+                          : ""}
+                      </span>
+                      <span>−{money(voucherDiscount)}</span>
+                    </div>
+                  ) : (
+                    voucherDiscount > 0 && (
+                      <div className="flex justify-between text-yellow-700">
+                        <span>Giảm voucher</span>
+                        <span>−{money(voucherDiscount)}</span>
+                      </div>
+                    )
+                  )}
+
+                  {fullPaymentDiscount > 0 && (
+                    <div className="flex justify-between text-green-700">
+                      <span>Ưu đãi thanh toán toàn bộ</span>
+                      <span>−{money(fullPaymentDiscount)}</span>
+                    </div>
+                  )}
+
+                  {/* Đã cọc */}
+                  <div className="flex justify-between text-blue-700">
+                    <span>Đã đặt cọc</span>
+                    <span>-{money(deposit)}</span>
+                  </div>
+
+                  <hr />
+
+                  <div className="flex justify-between font-semibold text-base">
+                    <span>Tổng tiền cần thanh toán</span>
+                    <span className="text-green-700">{money(totalAmount)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-red-600">
+                    <span>Thanh toán khi nhận hàng</span>
+                    <span>{money(codAmount)}</span>
+                  </div>
+
+                  {reasons.length > 0 && (
+                    <div className="mt-3 text-xs text-gray-600">
+                      <div className="font-semibold mb-1">Lý do được giảm:</div>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {reasons.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ====== Sản phẩm (đã gom combo) ====== */}
             {orderForDisplay && <OrderItemsDisplay order={orderForDisplay} />}
             {orderError && (
               <p className="text-center text-red-500 font-semibold">{orderError}</p>
