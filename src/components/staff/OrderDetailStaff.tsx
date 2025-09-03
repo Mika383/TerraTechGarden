@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle, Clock, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, Clock, ArrowRight, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface OrderItem {
@@ -72,98 +72,85 @@ const isCombo = (item: TerrariumVariant | Accessory | Combo | null): item is Com
 
 const getStatusText = (status: string | null | undefined): string => {
   if (!status) return 'Không xác định';
-  switch (status.toLowerCase()) {
-    case 'failed': return 'Giao thất bại';
-    case 'cancel':
-    case 'cancle': return 'Đơn bị hủy';
-    case 'pending': return 'Chờ xử lý';
-    case 'confirmed': return 'Đã xác nhận';
-    case 'processing': return 'Đang xử lý';
-    case 'shipping': return 'Đang vận chuyển';
-    case 'completed': return 'Hoàn thành';
-    case 'requestrefund': return 'Yêu cầu hoàn tiền';
-    case 'refuning': return 'Đang hoàn tiền';
-    case 'refunded': return 'Đã hoàn tiền';
+  switch (status) {
+    case 'Failed': return 'Giao thất bại';
+    case 'Cancel': return 'Đơn bị hủy';
+    case 'Rejected': return 'Đã từ chối';
+    case 'Pending': return 'Chờ xử lý';
+    case 'Approved': return 'Đã phê duyệt';
+    case 'Confirmed': return 'Đã xác nhận';
+    case 'Processing': return 'Đang xử lý';
+    case 'Shipping': return 'Đang vận chuyển';
+    case 'Completed': return 'Hoàn thành';
+    case 'RequestRefund': return 'Yêu cầu hoàn tiền';
+    case 'Refuning': return 'Đang hoàn tiền';
+    case 'Refunded': return 'Đã hoàn tiền';
     default: return 'Không xác định';
   }
 };
 
 const getStatusColor = (status: string | null | undefined, type: 'order' | 'payment') => {
   if (!status) return 'text-gray-600 bg-gray-50 border-gray-200';
-  const normalizedStatus = status.toLowerCase();
   if (type === 'order') {
-    switch (normalizedStatus) {
-      case 'pending': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'confirmed': return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'processing': return 'text-purple-600 bg-purple-50 border-purple-200';
-      case 'shipping': return 'text-indigo-600 bg-indigo-50 border-indigo-200';
-      case 'completed': return 'text-green-600 bg-green-50 border-green-200';
-      case 'failed': return 'text-red-600 bg-red-50 border-red-200';
-      case 'cancel':
-      case 'cancle': return 'text-gray-600 bg-gray-50 border-gray-200';
-      case 'requestrefund': return 'text-orange-600 bg-orange-50 border-orange-200';
-      case 'refuning': return 'text-orange-500 bg-orange-50 border-orange-200';
-      case 'refunded': return 'text-green-500 bg-green-50 border-green-200';
+    switch (status) {
+      case 'Pending': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'Approved': return 'text-blue-500 bg-blue-50 border-blue-200';
+      case 'Confirmed': return 'text-blue-600 bg-blue-50 border-blue-200';
+      case 'Processing': return 'text-purple-600 bg-purple-50 border-purple-200';
+      case 'Shipping': return 'text-indigo-600 bg-indigo-50 border-indigo-200';
+      case 'Completed': return 'text-green-600 bg-green-50 border-green-200';
+      case 'Failed': return 'text-red-600 bg-red-50 border-red-200';
+      case 'Rejected': return 'text-red-600 bg-red-50 border-red-200';
+      case 'Cancel': return 'text-gray-600 bg-gray-50 border-gray-200';
+      case 'RequestRefund': return 'text-orange-600 bg-orange-50 border-orange-200';
+      case 'Refuning': return 'text-orange-500 bg-orange-50 border-orange-200';
+      case 'Refunded': return 'text-green-500 bg-green-50 border-green-200';
       default: return 'text-gray-600 bg-gray-50 border-gray-200';
     }
   }
   if (type === 'payment') {
-    switch (normalizedStatus) {
-      case 'paid': return 'text-green-600 bg-green-50 border-green-200';
-      case 'unpaid': return 'text-red-600 bg-red-50 border-red-200';
-      case 'cancelled': return 'text-gray-600 bg-gray-50 border-gray-200';
+    switch (status) {
+      case 'Paid': return 'text-green-600 bg-green-50 border-green-200';
+      case 'Unpaid': return 'text-red-600 bg-red-50 border-red-200';
+      case 'Cancelled': return 'text-gray-600 bg-gray-50 border-gray-200';
       default: return 'text-yellow-600 bg-yellow-50 border-yellow-200';
     }
   }
   return 'text-gray-600 bg-gray-50 border-gray-200';
 };
 
-// Get next status for progression - Same as OrderList
+// Get next status for progression - UPDATED
 const getNextStatus = (currentStatus: string | null): string | null => {
   if (!currentStatus) return null;
   
-  switch (currentStatus.toLowerCase()) {
-    case 'pending': return 'confirmed';
-    case 'confirmed': return 'processing';
-    case 'processing': return 'shipping';
-    case 'shipping': return 'completed';
+  switch (currentStatus) {
+    case 'Pending': return 'Confirmed'; // Changed from 'Approved' to 'Confirmed'
+    case 'Confirmed': return 'Processing';
+    case 'Processing': return 'Shipping';
+    case 'Shipping': return 'Completed';
     default: return null;
   }
 };
 
-// Get button config for status updates - Same as OrderList
+// Get button config for status updates - UPDATED
 const getStatusButtonConfig = (status: string | null) => {
   if (!status) return null;
   
-  switch (status.toLowerCase()) {
-    case 'pending':
+  switch (status) {
+    case 'Pending':
       return {
         text: 'Xác nhận đơn',
         icon: CheckCircle,
         className: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md',
-        nextStatus: 'confirmed'
+        nextStatus: 'Confirmed'
       };
-    case 'confirmed':
+    case 'Confirmed':
       return {
         text: 'Bắt đầu xử lý',
         icon: Clock,
         className: 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm hover:shadow-md',
-        nextStatus: 'processing'
+        nextStatus: 'Processing'
       };
-    // case 'processing':
-    //   return {
-    //     text: 'Chuyển giao hàng',
-    //     icon: ArrowRight,
-    //     className: 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-sm hover:shadow-md',
-    //     nextStatus: 'shipping'
-    //   };
-    // case 'shipping':
-    //   return {
-    //     text: 'Hoàn thành',
-    //     icon: CheckCircle,
-    //     className: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md',
-    //     nextStatus: 'completed'
-    //   };
     default:
       return null;
   }
@@ -194,6 +181,7 @@ const OrderDetailStaff: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [itemsDetails, setItemsDetails] = useState<(TerrariumVariant | Accessory | Combo | null)[]>([]);
   const [updating, setUpdating] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   const fetchOrder = async () => {
     try {
@@ -302,6 +290,44 @@ const OrderDetailStaff: React.FC = () => {
     }
   };
 
+  const handleRejectOrder = async () => {
+    if (!order) return;
+    
+    setRejecting(true);
+    
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`https://terarium.shop/api/Order/${id}/status`, {
+        method: 'PUT',
+        headers: headers,
+        body: JSON.stringify('Rejected'),
+      });
+
+      if (response.status === 401) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setOrder({ ...order, status: 'Rejected' });
+      toast.success('Đã từ chối đơn hàng');
+    } catch (err) {
+      console.error('Error rejecting order:', err);
+      toast.error('Không thể từ chối đơn hàng');
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   useEffect(() => {
     fetchOrder();
   }, [id]);
@@ -336,6 +362,7 @@ const OrderDetailStaff: React.FC = () => {
   }
 
   const buttonConfig = getStatusButtonConfig(order.status);
+  const canReject = order.status === 'Pending';
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -387,7 +414,7 @@ const OrderDetailStaff: React.FC = () => {
               {buttonConfig && (
                 <button
                   onClick={handleStatusUpdate}
-                  disabled={updating}
+                  disabled={updating || rejecting}
                   className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${buttonConfig.className}`}
                 >
                   {updating ? (
@@ -396,6 +423,20 @@ const OrderDetailStaff: React.FC = () => {
                     <buttonConfig.icon className="w-4 h-4 mr-2" />
                   )}
                   {updating ? 'Đang cập nhật...' : buttonConfig.text}
+                </button>
+              )}
+              {canReject && (
+                <button
+                  onClick={handleRejectOrder}
+                  disabled={updating || rejecting}
+                  className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-sm hover:shadow-md"
+                >
+                  {rejecting ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                  ) : (
+                    <X className="w-4 h-4 mr-2" />
+                  )}
+                  {rejecting ? 'Đang từ chối...' : 'Từ chối đơn'}
                 </button>
               )}
             </div>
@@ -469,6 +510,11 @@ const OrderDetailStaff: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {order.orderItems.length === 0 && (
+            <div className="text-center py-4 text-gray-500">
+              Không có sản phẩm trong đơn hàng
+            </div>
+          )}
         </div>
       </div>
     </div>
