@@ -102,6 +102,10 @@ export interface CreateOrderRequest {
 
   totalAmountOld: number;
   totalAmountNew: number;
+
+  // ✅ NEW
+  note?: string;            // ghi chú khách hàng
+  isPayFull?: boolean;      // true nếu thanh toán toàn bộ
 }
 
 /* --------------------- MOMO PAYMENT ------------------ */

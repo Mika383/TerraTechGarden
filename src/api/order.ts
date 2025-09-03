@@ -124,6 +124,10 @@ export const createOrder = async (
     totalAmountOld: payload.totalAmountOld ?? 0,
     totalAmountNew: payload.totalAmountNew ?? 0,
 
+    // ✅ NEW
+    note: (payload.note ?? '').trim(),
+    isPayFull: Boolean(payload.isPayFull),
+
     items: (payload.items || []).map(normalizeItem),
   };
 
