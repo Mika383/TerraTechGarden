@@ -44,39 +44,6 @@ export async function useWalletForPayment(opts: {
   // BE trả số dư mới sau khi trừ
   return pickNumber(res);
 }
-const rawAuthHeader = () => {
-  const token = localStorage.getItem('authToken') || '';
-  return { headers: { Authorization: token } }; // 👈 không prefix Bearer
-};
 
-/** ✅ Hàm mới: tên khác để tránh xung đột kiểu trong barrel */
-export async function payWithWallet(opts: {
-  userId: number;
-  amount: number;
-  orderId: number;
-  withAuth?: boolean;
-}): Promise<number> {
-  const { userId, amount, orderId, withAuth = true } = opts;
-  const res = await axios.post(
-    `${BASE_URL}/Wallet/pay`,
-    null,
-    {
-      params: { userId, amount, orderId },
-      ...(withAuth ? authHeader() : {}),
-    }
-  );
-  return pickNumber(res);
-}
 
-export async function payWithWalletNoBearerPrefix(opts: { userId: number; amount: number; orderId: number }) {
-  const { userId, amount, orderId } = opts;
-  const res = await axios.post(
-    `${BASE_URL}/Wallet/pay`,
-    null,
-    {
-      params: { userId, amount, orderId },
-      ...rawAuthHeader(),
-    }
-  );
-  return pickNumber(res);
-}
+
