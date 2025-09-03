@@ -9,13 +9,11 @@ import { Address } from '@/types/profile';
 import {
   createOrder,
   getVoucherByCode,
-  
   createMoMoPayment
 } from '@/api';
 import { getCart, deleteCartItem } from '@/api/cart';
 import { getTerrariumById, getVariantsByTerrariumId, getTerrariumVariantById } from '@/api/terrarium';
-import { getWalletBalance, useWalletForPayment } from '@/api';
-import { payWithWallet, payWithWalletNoBearerPrefix } from '@/api/wallet';  
+import { getWalletBalance, useWalletForPayment } from '@/api/wallet'; // ✅ dùng module ví mới (query params, amount=int)
 import { getAccessoryById } from '@/api/accessory';
 import { getComboById } from '@/api/combo';
 import type { Voucher, CreateOrderItem } from '@/types';
@@ -169,7 +167,7 @@ const Checkout: React.FC = () => {
     })();
   }, [userId]);
 
-  // ACCESSORY meta (same as original)
+  // ACCESSORY meta
   useEffect(() => {
     (async () => {
       if (!apiCart) return;
@@ -201,7 +199,7 @@ const Checkout: React.FC = () => {
     })();
   }, [apiCart, accessoryName, accessoryThumb]);
 
-  // === Chọn theo Cart: tách combos, singles, bundles (same as original) ===
+  // === Chọn theo Cart: tách combos, singles, bundles ===
   const allSingles = apiCart?.singleItems || [];
   const combosSelected = useMemo(() => {
     const src = allSingles.filter(e => !!e.comboId);
@@ -236,7 +234,7 @@ const Checkout: React.FC = () => {
     return [...variantSinglesFromBundles, ...singles];
   }, [apiCart, selectedIds, variantSinglesFromBundles]);
 
-  // === Resolve variant → terrarium (same as original) ===
+  // === Resolve variant → terrarium ===
   useEffect(() => {
     const run = async () => {
       const variantIds = new Set<number>();
@@ -314,7 +312,7 @@ const Checkout: React.FC = () => {
     run();
   }, [apiCart, mergedSingles, variantsMap, terrariumName, terrariumThumb, variantToTerrariumMap]);
 
-  // === Fetch combo meta (same as original) ===
+  // === Fetch combo meta ===
   useEffect(() => {
     const fetchComboMeta = async () => {
       if (!combosSelected.length) return;
@@ -373,23 +371,25 @@ const Checkout: React.FC = () => {
     fetchComboMeta();
   }, [combosSelected, comboMeta]);
 
-  // ====== TÍNH TIỀN ======
-  const subtotalFromAPI = useMemo(() => {
-    const sumSingles = mergedSingles.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
-    const sumBundles = bundlesAll.reduce(
-      (s, b) => s + b.bundleAccessories.reduce((ss, e) => ss + (e.totalCartPrice || 0), 0),
-      0
-    );
-    const sumCombos = combosSelected.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
-    return sumSingles + sumBundles + sumCombos;
-  }, [mergedSingles, bundlesAll, combosSelected]);
-
-  const subtotalLocal = useMemo(
-    () => localSimple.reduce((s, it) => s + it.price * it.quantity, 0),
-    [localSimple]
+ // ✅ Đúng: luôn gọi hooks với dependency array cố định
+const subtotalFromAPI = useMemo(() => {
+  const sumSingles = mergedSingles.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
+  const sumBundles = bundlesAll.reduce(
+    (s, b) => s + b.bundleAccessories.reduce((ss, e) => ss + (e.totalCartPrice || 0), 0),
+    0
   );
+  const sumCombos = combosSelected.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
+  return sumSingles + sumBundles + sumCombos;
+}, [mergedSingles, bundlesAll, combosSelected]);
 
-  const subtotal = apiCart ? subtotalFromAPI : subtotalLocal;
+const subtotalLocal = useMemo(
+  () => localSimple.reduce((s, it) => s + it.price * it.quantity, 0),
+  [localSimple]
+);
+
+// chỉ chọn kết quả, KHÔNG gọi hook trong điều kiện
+const subtotal = apiCart ? subtotalFromAPI : subtotalLocal;
+
 
   // Voucher calculation
   const voucherApplicable = useMemo(() => {
@@ -416,9 +416,8 @@ const Checkout: React.FC = () => {
 
   /**
    * NEW 10% logic (full payment):
-   * - Tính trên tổng sau voucher + phí ship
-   *   base = (subtotal - discountFromVoucher) + shippingFee
-   *   discountFromFull = 10% * base
+   * base = (subtotal - voucher + ship)
+   * discountFromFull = 10% * base
    */
   const discountFromFull = useMemo(() => {
     if (paymentOption !== 'full') return 0;
@@ -428,14 +427,15 @@ const Checkout: React.FC = () => {
 
   // Totals
   const totalAmountOld = Math.max(0, subtotal + shippingFee);
-  // final total = (subtotal - voucher + ship) - fullDiscount
   const totalAmountNew = Math.max(0, subtotal - discountFromVoucher + shippingFee - discountFromFull);
 
-  // Payment amount
-  const actualPaymentAmount =
+  // ✅ Payment amount (ép INT cho ví & gửi MoMo)
+  const actualPaymentAmount = Math.max(
+    0,
     paymentOption === 'deposit'
-      ? Math.max(0, Math.round((Math.max(0, subtotal - discountFromVoucher + shippingFee)) * 0.3 ))
-      : totalAmountNew;
+      ? Math.round(Math.max(0, subtotal - discountFromVoucher + shippingFee) * 0.3)
+      : Math.round(totalAmountNew)
+  );
 
   // Check if wallet has enough balance
   const walletCanPayFull = walletBalance >= actualPaymentAmount;
@@ -473,7 +473,7 @@ const Checkout: React.FC = () => {
     }
   };
 
-  // Build order items (same as original)
+  // Build order items
   const buildOrderItems = (): CreateOrderItemWithCombo[] => {
     const items: CreateOrderItemWithCombo[] = [];
 
@@ -558,7 +558,7 @@ const Checkout: React.FC = () => {
     return items;
   };
 
-  // Cleanup cart (same as original)
+  // Cleanup cart
   const cleanupCartItems = async (orderItems: CreateOrderItemWithCombo[], selectedCombos: RawCartEntry[]) => {
     try {
       const cartData = await getCart();
@@ -614,7 +614,6 @@ const Checkout: React.FC = () => {
       return;
     }
 
-    // Check wallet balance if wallet payment is selected
     if (paymentMethod === 'wallet' && !walletCanPayFull) {
       toast.error('Số dư ví không đủ để thanh toán!');
       return;
@@ -629,11 +628,13 @@ const Checkout: React.FC = () => {
 
       const payload = {
         voucherId: voucherApplicable ? voucher!.voucherId : 0,
-        deposit: paymentOption === 'deposit' ? actualPaymentAmount : 0,
+        deposit: paymentOption === 'deposit' ? actualPaymentAmount : 0, // ✅ int
         addressId: (address as any).id,
         items,
         totalAmountOld,
-        totalAmountNew
+        totalAmountNew,
+        note: customerNote.trim(),           // ✅ gửi note
+        isPayFull: paymentOption === 'full', // ✅ cờ full
       } as const;
 
       const { orderId } = await createOrder(payload as any);
@@ -642,7 +643,6 @@ const Checkout: React.FC = () => {
         return;
       }
 
-      // Send web notification
       try {
         await sendWebNotification(
           userId,
@@ -653,18 +653,19 @@ const Checkout: React.FC = () => {
         console.warn('[Checkout] Gửi thông báo web thất bại:', e);
       }
 
-      // Cleanup cart
       await cleanupCartItems(items, combosSelected);
 
       if (paymentMethod === 'wallet') {
-        // Use wallet for payment
+        // ✅ Ví: POST /Wallet/pay?userId=&amount=&orderId= (amount=int)
         try {
-          await useWalletForPayment({ userId, amount: actualPaymentAmount, orderId});
+          await useWalletForPayment({
+            userId,
+            amount: actualPaymentAmount,
+            orderId
+          });
           toast.success('Thanh toán thành công bằng ví!');
           localStorage.removeItem('cartItems');
           localStorage.removeItem('checkoutItems');
-
-          // ★ Điều hướng sang trang PaymentWalletSuccess (route: /wallet-success/:orderId)
           navigate(`/wallet-success/${orderId}`);
         } catch (error) {
           console.error('Error using wallet:', error);
@@ -706,226 +707,213 @@ const Checkout: React.FC = () => {
     }
   };
 
+  /* ======================= UI: SẢN PHẨM / ĐỊA CHỈ / VOUCHER / SUMMARY ======================= */
   const ProductSectionAPI = (
-  <div className="bg-white p-4 sm:p-5 rounded-lg shadow space-y-4">
-    <h2 className="text-base sm:text-lg md:text-xl font-semibold">Sản phẩm</h2>
+    <div className="bg-white p-4 sm:p-5 rounded-lg shadow space-y-4">
+      <h2 className="text-base sm:text-lg md:text-xl font-semibold">Sản phẩm</h2>
 
-    {/* COMBOS */}
-    {combosSelected.map((e) => {
-      const comboKey = keyOfCombo(e);
-      const isOpen = comboOpen[comboKey] ?? false;
-      const data = e.comboId ? comboMeta[e.comboId] : undefined;
+      {/* COMBOS */}
+      {combosSelected.map((e) => {
+        const comboKey = keyOfCombo(e);
+        const isOpen = comboOpen[comboKey] ?? false;
+        const data = e.comboId ? comboMeta[e.comboId] : undefined;
 
-      return (
-        <div key={e.cartItemId} className="rounded-lg border">
-          <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-purple-50">
-            <div className="flex items-center gap-3">
-              <img
-                src={data?.image || FALLBACK_IMG}
-                alt= {data?.name || `Combo #${e.comboId}`}
-                className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
-                onClick={() => navigate(`/combo/${e.comboId}`)}
-                onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-              />
-              <div className="font-semibold">
-                <button onClick={() => navigate(`/combo/${e.comboId}`)} className="text-purple-700 hover:underline">
-                  Combo {data?.name || `Combo #${e.comboId}`}
+        return (
+          <div key={e.cartItemId} className="rounded-lg border">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-purple-50">
+              <div className="flex items-center gap-3">
+                <img
+                  src={data?.image || FALLBACK_IMG}
+                  alt= {data?.name || `Combo #${e.comboId}`}
+                  className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
+                  onClick={() => navigate(`/combo/${e.comboId}`)}
+                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                />
+                <div className="font-semibold">
+                  <button onClick={() => navigate(`/combo/${e.comboId}`)} className="text-purple-700 hover:underline">
+                    Combo {data?.name || `Combo #${e.comboId}`}
+                  </button>
+                  <div className="text-sm text-gray-600">SL: <b>{e.totalCartQuantity || qtyOf(e)}</b></div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 text-sm">
+                <div className="text-purple-700 font-semibold">{currency(e.totalCartPrice || 0)}</div>
+                <button
+                  onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))}
+                  className="text-gray-600 hover:text-gray-800"
+                >
+                  {isOpen ? 'Thu gọn' : 'Mở rộng'}
                 </button>
-                <div className="text-sm text-gray-600">SL: <b>{e.totalCartQuantity || qtyOf(e)}</b></div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-sm">
-              <div className="text-purple-700 font-semibold">{currency(e.totalCartPrice || 0)}</div>
-              <button
-                onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))}
-                className="text-gray-600 hover:text-gray-800"
-              >
-                {isOpen ? 'Thu gọn' : 'Mở rộng'}
-              </button>
-            </div>
-          </div>
-
-          {isOpen && data?.items && (
-            <div className="divide-y bg-gray-50">
-              <div className="px-4 py-2 text-sm text-gray-600 font-medium bg-purple-50 border-b">
-                Sản phẩm trong combo:
-              </div>
-              {data.items.map((it: any, idx: number) => (
-                <div key={`combo-item-${idx}`} className="p-3 sm:p-4 flex items-center gap-3">
-                  <img
-                    src={it.image || FALLBACK_IMG}
-                    alt={it.name || 'Sản phẩm'}
-                    className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
-                    onClick={() => {
-                      if (it.type === 'accessory' && it.accessoryId) {
-                        navigate(`/accessory/${it.accessoryId}`);
-                      } else if (it.type === 'terrarium') {
-                        navigate(`/terrarium/${it.terrariumId ?? ''}`);
-                      }
-                    }}
-                    onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-800 truncate">{it.name || 'Sản phẩm'}</div>
-                    {it.variantName && (
-                      <div className="text-xs sm:text-sm text-gray-500">Phân loại: {it.variantName}</div>
-                    )}
-                    <div className="text-sm text-gray-600">
-                      {currency(it.unitPrice || 0)} × {it.quantity}
+            {isOpen && data?.items && (
+              <div className="divide-y bg-gray-50">
+                <div className="px-4 py-2 text-sm text-gray-600 font-medium bg-purple-50 border-b">
+                  Sản phẩm trong combo:
+                </div>
+                {data.items.map((it: any, idx: number) => (
+                  <div key={`combo-item-${idx}`} className="p-3 sm:p-4 flex items-center gap-3">
+                    <img
+                      src={it.image || FALLBACK_IMG}
+                      alt={it.name || 'Sản phẩm'}
+                      className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
+                      onClick={() => {
+                        if (it.type === 'accessory' && it.accessoryId) {
+                          navigate(`/accessory/${it.accessoryId}`);
+                        } else if (it.type === 'terrarium') {
+                          navigate(`/terrarium/${it.terrariumId ?? ''}`);
+                        }
+                      }}
+                      onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 truncate">{it.name || 'Sản phẩm'}</div>
+                      {it.variantName && (
+                        <div className="text-xs sm:text-sm text-gray-500">Phân loại: {it.variantName}</div>
+                      )}
+                      <div className="text-sm text-gray-600">
+                        {currency(it.unitPrice || 0)} × {it.quantity}
+                      </div>
+                    </div>
+                    <div className="w-32 text-right font-semibold text-gray-800">
+                      {currency(it.totalPrice || 0)}
                     </div>
                   </div>
-                  <div className="w-32 text-right font-semibold text-gray-800">
-                    {currency(it.totalPrice || 0)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    })}
-
-    {/* BUNDLES — có nút Thu gọn/Mở rộng */}
-{bundlesAll.map((b) => {
-  const mainVariantId = b?.mainItem?.terrariumVariantId || 0;
-  const resolvedTidFromMain = mainVariantId ? variantToTerrariumMap[mainVariantId] : 0;
-  let tid = resolvedTidFromMain;
-  if (!tid) {
-    const firstAccVariantId = b.bundleAccessories?.[0]?.terrariumVariantId || 0;
-    if (firstAccVariantId) tid = variantToTerrariumMap[firstAccVariantId] || 0;
-  }
-
-  const bundleKey = keyOfBundle(b);
-  const isOpen = bundleOpen[bundleKey] ?? false;
-
-  const name = tid ? (terrariumName[tid] || `Bộ terrarium #${tid}`) : 'Bộ phụ kiện theo biến thể';
-  const thumb = tid ? (terrariumThumb[tid] || FALLBACK_IMG) : FALLBACK_IMG;
-
-  const totalQty = calcBundleQty(b);
-  const totalPrice = b.bundleAccessories.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
-
-  return (
-    <div key={bundleKey} className="rounded-lg border">
-      <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-gray-50">
-        <div className="flex items-center gap-2">
-          <img
-            src={thumb}
-            alt={name}
-            className="w-8 h-8 rounded border bg-white object-cover"
-            onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-          />
-          <div className="font-semibold">
-            Bộ phụ kiện của{' '}
-            {tid ? (
-              <button onClick={() => navigate(`/terrarium/${tid}`)} className="text-green-700 hover:underline">
-                {name}
-              </button>
-            ) : (
-              <span className="text-gray-700">biến thể #{mainVariantId}</span>
+                ))}
+              </div>
             )}
           </div>
-        </div>
+        );
+      })}
 
-        <div className="flex items-center gap-3 text-sm">
-          <div>SL: <b>{totalQty}</b></div>
-          <div className="text-green-700 font-semibold">{currency(totalPrice)}</div>
-          <button
-            onClick={() => setBundleOpen((m) => ({ ...m, [bundleKey]: !isOpen }))}
-            className="text-gray-600 hover:text-gray-800"
-          >
-            {isOpen ? 'Thu gọn' : 'Mở rộng'}
-          </button>
-        </div>
-      </div>
+      {/* BUNDLES — có nút Thu gọn/Mở rộng */}
+      {bundlesAll.map((b) => {
+        const mainVariantId = b?.mainItem?.terrariumVariantId || 0;
+        const resolvedTidFromMain = mainVariantId ? variantToTerrariumMap[mainVariantId] : 0;
+        let tid = resolvedTidFromMain;
+        if (!tid) {
+          const firstAccVariantId = b.bundleAccessories?.[0]?.terrariumVariantId || 0;
+          if (firstAccVariantId) tid = variantToTerrariumMap[firstAccVariantId] || 0;
+        }
 
-      {isOpen && (
-        <div className="divide-y">
-          {b.bundleAccessories.map((e) => {
-            const aId = e.accessoryId || 0;
-            const aName = aId ? (accessoryName[aId] || e.item?.[0]?.productName || `Phụ kiện #${aId}`) : 'Phụ kiện';
-            const aThumb = aId ? (accessoryThumb[aId] || e.item?.[0]?.imageUrl || FALLBACK_IMG) : FALLBACK_IMG;
+        const bundleKey = keyOfBundle(b);
+        const isOpen = bundleOpen[bundleKey] ?? false;
 
-            return (
-              <div key={e.cartItemId} className="p-3 sm:p-4 flex items-center gap-3">
+        const name = tid ? (terrariumName[tid] || `Bộ terrarium #${tid}`) : 'Bộ phụ kiện theo biến thể';
+        const thumb = tid ? (terrariumThumb[tid] || FALLBACK_IMG) : FALLBACK_IMG;
+
+        const totalQty = calcBundleQty(b);
+        const totalPrice = b.bundleAccessories.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
+
+        return (
+          <div key={bundleKey} className="rounded-lg border">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-gray-50">
+              <div className="flex items-center gap-2">
                 <img
-                  src={aThumb}
-                  alt={aName}
-                  className="w-14 h-14 object-cover rounded border bg-white"
-                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                  src={thumb}
+                  alt={name}
+                  className="w-8 h-8 rounded border bg-white object-cover"
+                  onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
                 />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-800 truncate">{aName}</div>
-                  <div className="text-sm text-gray-600">
-                    {currency(unitPriceOf(e))} × {qtyOf(e)}
-                  </div>
-                </div>
-                <div className="w-32 text-right font-semibold text-gray-800">
-                  {currency(e.totalCartPrice || 0)}
+                <div className="font-semibold">
+                  Bộ phụ kiện của{' '}
+                  {tid ? (
+                    <button onClick={() => navigate(`/terrarium/${tid}`)} className="text-green-700 hover:underline">
+                      {name}
+                    </button>
+                  ) : (
+                    <span className="text-gray-700">biến thể #{mainVariantId}</span>
+                  )}
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-})}
 
+              <div className="flex items-center gap-3 text-sm">
+                <div>SL: <b>{totalQty}</b></div>
+                <div className="text-green-700 font-semibold">{currency(totalPrice)}</div>
+                <button
+                  onClick={() => setBundleOpen((m) => ({ ...m, [bundleKey]: !isOpen }))}
+                  className="text-gray-600 hover:text-gray-800"
+                >
+                  {isOpen ? 'Thu gọn' : 'Mở rộng'}
+                </button>
+              </div>
+            </div>
 
-    {/* Singles + main items */}
-    {mergedSingles.length > 0 && (
-      <div className="rounded-lg border">
-        <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm lẻ</div>
-        <div className="divide-y">
-          {mergedSingles.map((e) => {
-            const isVariant = !!e.terrariumVariantId;
-            const actualTerrariumId = isVariant
-              ? (variantToTerrariumMap[e.terrariumVariantId!] || e.terrariumId)
-              : e.terrariumId;
+            {isOpen && (
+              <div className="divide-y">
+                {b.bundleAccessories.map((e) => {
+                  const aId = e.accessoryId || 0;
+                  const aName = aId ? (accessoryName[aId] || e.item?.[0]?.productName || `Phụ kiện #${aId}`) : 'Phụ kiện';
+                  const aThumb = aId ? (accessoryThumb[aId] || e.item?.[0]?.imageUrl || FALLBACK_IMG) : FALLBACK_IMG;
 
-            const terrariumDisplayName = actualTerrariumId
-              ? (terrariumName[actualTerrariumId] || `Bể terrarium #${actualTerrariumId}`)
-              : '';
+                  return (
+                    <div key={e.cartItemId} className="p-3 sm:p-4 flex items-center gap-3">
+                      <img
+                        src={aThumb}
+                        alt={aName}
+                        className="w-14 h-14 object-cover rounded border bg-white"
+                        onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-800 truncate">{aName}</div>
+                        <div className="text-sm text-gray-600">
+                          {currency(unitPriceOf(e))} × {qtyOf(e)}
+                        </div>
+                      </div>
+                      <div className="w-32 text-right font-semibold text-gray-800">
+                        {currency(e.totalCartPrice || 0)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
-            const terrariumImage = actualTerrariumId
-              ? (terrariumThumb[actualTerrariumId] || FALLBACK_IMG)
-              : FALLBACK_IMG;
+      {/* Singles + main items */}
+      {mergedSingles.length > 0 && (
+        <div className="rounded-lg border">
+          <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm lẻ</div>
+          <div className="divide-y">
+            {mergedSingles.map((e) => {
+              const isVariant = !!e.terrariumVariantId;
+              const actualTerrariumId = isVariant
+                ? (variantToTerrariumMap[e.terrariumVariantId!] || e.terrariumId)
+                : e.terrariumId;
 
-            const list = actualTerrariumId ? (variantsMap[actualTerrariumId] || []) : [];
-            const currentVariant = isVariant
-              ? list.find((v: any) => v.terrariumVariantId === e.terrariumVariantId)
-              : null;
+              const terrariumDisplayName = actualTerrariumId
+                ? (terrariumName[actualTerrariumId] || `Bể terrarium #${actualTerrariumId}`)
+                : '';
 
-            const displayName =
-              isVariant && terrariumDisplayName
-                ? terrariumDisplayName
-                : e.accessoryId
-                ? (accessoryName[e.accessoryId] || `Phụ kiện #${e.accessoryId}`)
-                : 'Sản phẩm';
+              const terrariumImage = actualTerrariumId
+                ? (terrariumThumb[actualTerrariumId] || FALLBACK_IMG)
+                : FALLBACK_IMG;
 
-            const accThumb = e.accessoryId ? (accessoryThumb[e.accessoryId] || FALLBACK_IMG) : null;
-            const imgSrc = accThumb || terrariumImage || FALLBACK_IMG;
+              const list = actualTerrariumId ? (variantsMap[actualTerrariumId] || []) : [];
+              const currentVariant = isVariant
+                ? list.find((v: any) => v.terrariumVariantId === e.terrariumVariantId)
+                : null;
 
-            return (
-              <div key={e.cartItemId} className="p-3 sm:p-4 flex items-start gap-3">
-                <img
-                  src={imgSrc}
-                  alt={displayName}
-                  className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
-                  onClick={() =>
-                    isVariant && actualTerrariumId
-                      ? navigate(`/terrarium/${actualTerrariumId}`)
-                      : e.accessoryId
-                      ? navigate(`/accessory/${e.accessoryId}`)
-                      : undefined
-                  }
-                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                />
+              const displayName =
+                isVariant && terrariumDisplayName
+                  ? terrariumDisplayName
+                  : e.accessoryId
+                  ? (accessoryName[e.accessoryId] || `Phụ kiện #${e.accessoryId}`)
+                  : 'Sản phẩm';
 
-                <div className="flex-1 min-w-0">
-                  <div
-                    className="font-medium text-gray-800 cursor-pointer hover:underline mb-1"
+              const accThumb = e.accessoryId ? (accessoryThumb[e.accessoryId] || FALLBACK_IMG) : null;
+              const imgSrc = accThumb || terrariumImage || FALLBACK_IMG;
+
+              return (
+                <div key={e.cartItemId} className="p-3 sm:p-4 flex items-start gap-3">
+                  <img
+                    src={imgSrc}
+                    alt={displayName}
+                    className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
                     onClick={() =>
                       isVariant && actualTerrariumId
                         ? navigate(`/terrarium/${actualTerrariumId}`)
@@ -933,64 +921,77 @@ const Checkout: React.FC = () => {
                         ? navigate(`/accessory/${e.accessoryId}`)
                         : undefined
                     }
-                    title={displayName}
-                  >
-                    {displayName}
-                  </div>
+                    onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                  />
 
-                  {isVariant && (
-                    <div className="text-xs sm:text-sm text-gray-500 mb-1">
-                      Phân loại hàng:{' '}
-                      <span className="font-medium text-gray-700">
-                        {currentVariant?.variantName || `Variant #${e.terrariumVariantId}`}
-                      </span>
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="font-medium text-gray-800 cursor-pointer hover:underline mb-1"
+                      onClick={() =>
+                        isVariant && actualTerrariumId
+                          ? navigate(`/terrarium/${actualTerrariumId}`)
+                          : e.accessoryId
+                          ? navigate(`/accessory/${e.accessoryId}`)
+                          : undefined
+                      }
+                      title={displayName}
+                    >
+                      {displayName}
                     </div>
-                  )}
 
-                  <div className="text-sm text-gray-600">
-                    {currency(unitPriceOf(e))} × {qtyOf(e)}
+                    {isVariant && (
+                      <div className="text-xs sm:text-sm text-gray-500 mb-1">
+                        Phân loại hàng:{' '}
+                        <span className="font-medium text-gray-700">
+                          {currentVariant?.variantName || `Variant #${e.terrariumVariantId}`}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="text-sm text-gray-600">
+                      {currency(unitPriceOf(e))} × {qtyOf(e)}
+                    </div>
+                  </div>
+
+                  <div className="w-32 text-right font-semibold text-gray-800">
+                    {currency(e.totalCartPrice || 0)}
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
+      {/* Fallback local (khi chưa lấy được apiCart) */}
+      {!apiCart && (
+        <div className="rounded-lg border">
+          <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm</div>
+          <div className="divide-y">
+            {localSimple.map((item) => (
+              <div key={item.id} className="p-3 sm:p-4 flex items-center gap-3">
+                <img
+                  src={item.image || FALLBACK_IMG}
+                  alt={item.name}
+                  className="w-14 h-14 object-cover rounded border bg-white"
+                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-800 truncate">{item.name}</div>
+                  <div className="text-sm text-gray-600">
+                    {currency(item.price)} × {item.quantity}
+                  </div>
+                </div>
                 <div className="w-32 text-right font-semibold text-gray-800">
-                  {currency(e.totalCartPrice || 0)}
+                  {currency(item.price * item.quantity)}
                 </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
-      </div>
-    )}
-
-    {/* Fallback local (khi chưa lấy được apiCart) */}
-    {!apiCart && (
-      <div className="rounded-lg border">
-        <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm</div>
-        <div className="divide-y">
-          {localSimple.map((item) => (
-            <div key={item.id} className="p-3 sm:p-4 flex items-center gap-3">
-              <img
-                src={item.image || FALLBACK_IMG}
-                alt={item.name}
-                className="w-14 h-14 object-cover rounded border bg-white"
-                onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-800 truncate">{item.name}</div>
-                <div className="text-sm text-gray-600">
-                  {currency(item.price)} × {item.quantity}
-                </div>
-              </div>
-              <div className="w-32 text-right font-semibold text-gray-800">
-                {currency(item.price * item.quantity)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
 
   return (
     <>

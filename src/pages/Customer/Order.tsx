@@ -4,9 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight, RotateCcw, RefreshCw } from 'lucide-react';
 
-// Đồng bộ theo barrel file mới
 import { createMoMoPayment, getOrdersByUser, cancelOrder, getOrderById } from '@/api';
-import type { Order, OrderItem,  } from '@/types/order';
+import type { Order, OrderItem } from '@/types/order';
 
 import {
   orderStatusToVi,
@@ -23,7 +22,7 @@ import { requestRefund as apiRequestRefund } from '@/api/refund';
 const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
 const PER_PAGE = 5;
 
-/** Star rating (★) – nhấp để chọn, hover để xem trước */
+/** Star rating (★) */
 const StarRating: React.FC<{
   value: number;
   onChange: (n: number) => void;
@@ -49,13 +48,7 @@ const StarRating: React.FC<{
             onClick={() => onChange(n)}
             className="leading-none focus:outline-none"
           >
-            <span
-              className={`${starSize} ${
-                active ? 'text-amber-400' : 'text-gray-300'
-              }`}
-            >
-              ★
-            </span>
+            <span className={`${starSize} ${active ? 'text-amber-400' : 'text-gray-300'}`}>★</span>
           </button>
         );
       })}
@@ -78,7 +71,6 @@ const OrderPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  // dùng kiểu an toàn trình duyệt thay vì NodeJS.Timeout
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // pagination
@@ -124,16 +116,11 @@ const OrderPage: React.FC = () => {
   // Setup real-time polling
   useEffect(() => {
     load();
-
-    // Poll every 10 seconds for real-time updates
     intervalRef.current = setInterval(() => {
-      load(false); // Don't show loading spinner for background updates
+      load(false);
     }, 10000);
-
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -145,37 +132,50 @@ const OrderPage: React.FC = () => {
 
   // ——— ACTIONS ———
   const payWithMoMo = async (o: Order) => {
-    try {
-      // Số tiền còn phải trả = totalAmount - deposit (nếu đã cọc)
-      const outstanding = Math.max(0, (o.totalAmount ?? 0) - (o.deposit ?? 0));
-      if (outstanding === 0) {
-        toast.info('Đơn này đã được thanh toán đủ.');
-        return;
-      }
+  try {
+    // ✅ LẤY ĐƠN MỚI NHẤT TRƯỚC KHI TẠO THANH TOÁN (tránh dùng state cũ sau khi back từ MoMo)
+    const fresh = await getOrderById(o.orderId);
 
-      // voucherId có thể không nằm trong type cũ → fallback qua any
-      const voucherId = (o as any)?.voucherId ?? 0;
-
-      const { payUrl } = await createMoMoPayment({
-        orderId: o.orderId,
-        orderInfo: `Thanh toán đơn #${o.orderId}`,
-        finalAmount: outstanding,     // ✅ API mới yêu cầu
-        voucherId,                    // ✅ API mới yêu cầu
-        // Nếu chưa đặt cọc thì đây là thanh toán toàn bộ; ngược lại là phần còn lại
-        payAll: (o.deposit ?? 0) === 0,
-      } as any);
-      window.location.href = payUrl;
-    } catch (err) {
-      console.error(err);
-      toast.error('Không tạo được giao dịch MoMo.');
+    if (!fresh) {
+      toast.error('Không lấy được thông tin đơn hàng mới nhất.');
+      return;
     }
-  };
 
+    // Ép kiểu/đề phòng dữ liệu string
+    const totalAmount = Math.max(0, Number(fresh.totalAmount ?? 0));
+    const deposit = Math.max(0, Number(fresh.deposit ?? 0));
+    const isDepositOrder = deposit > 0;
+
+    // ✅ ĐƠN CỌC → gửi đúng TIỀN CỌC; ĐƠN FULL → gửi TỔNG TIỀN
+    // (Không dùng “phần còn lại”, tránh nhầm khi back/refresh)
+    const amountToPay = isDepositOrder ? deposit : totalAmount;
+
+    if (!Number.isFinite(amountToPay) || amountToPay <= 0) {
+      toast.info('Không có số tiền cần thanh toán.');
+      return;
+    }
+
+    const voucherId = (fresh as any)?.voucherId ?? 0;
+
+    // console.log('[MoMo][OrderPage] payload', { orderId: fresh.orderId, amountToPay, deposit, totalAmount, isDepositOrder, voucherId });
+
+    const { payUrl } = await createMoMoPayment({
+      orderId: fresh.orderId,
+      orderInfo: `Thanh toán đơn #${fresh.orderId}`,
+      finalAmount: amountToPay,     // ✅ chỉ gửi deposit hoặc totalAmount
+      voucherId,
+      payAll: !isDepositOrder,      // ✅ deposit => false, full => true
+    } as any);
+
+    window.location.href = payUrl;
+  } catch (err) {
+    console.error(err);
+    toast.error('Không tạo được giao dịch MoMo.');
+  }
+};
   const handleCancel = async (o: Order) => {
-    // xin lý do nhanh (tùy chọn)
     const reason = window.prompt('Lý do hủy (tùy chọn):', 'Khách hàng yêu cầu hủy');
     if (reason === null) return;
-
     try {
       await cancelOrder(o.orderId, userId, {
         cancelReason: reason || 'Khách hàng yêu cầu hủy',
@@ -189,15 +189,12 @@ const OrderPage: React.FC = () => {
     }
   };
 
-  // ✅ NEW: gửi yêu cầu hoàn tiền theo API mới
   const handleRequestRefund = async (o: Order) => {
     try {
       if (!isCompleted(o.status)) {
         toast.info('Chỉ có thể yêu cầu hoàn hàng/hoàn tiền cho đơn đã hoàn thành.');
         return;
       }
-
-      // Lý do (giữ UI: prompt)
       const reason = window.prompt('Lý do hoàn hàng/hoàn tiền:', 'không còn nhu cầu sử dụng');
       if (reason === null) return;
       const trimmed = (reason || '').trim();
@@ -205,61 +202,42 @@ const OrderPage: React.FC = () => {
         toast.info('Vui lòng nhập lý do.');
         return;
       }
+      const imgStr = window.prompt('Dán URL ảnh (Cloudinary). Có thể để trống hoặc nhiều URL cách nhau bằng dấu phẩy:', '');
+      const images = (imgStr || '').split(',').map(s => s.trim()).filter(Boolean);
 
-      // Ảnh minh chứng (Cloudinary URLs, optional) — vẫn dùng prompt
-      const imgStr = window.prompt(
-        'Dán URL ảnh (Cloudinary). Có thể để trống hoặc nhiều URL cách nhau bằng dấu phẩy:',
-        ''
-      );
-      const images = (imgStr || '')
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean);
-
-      // Call API
-      const res = await apiRequestRefund({
-        orderId: o.orderId,
-        userId,
-        reason: trimmed,
-        images,
-      });
-
+      const res = await apiRequestRefund({ orderId: o.orderId, userId, reason: trimmed, images });
       const msg = res?.message || 'Yêu cầu hoàn tiền đã được gửi thành công!';
       toast.success(msg);
       await load(false);
     } catch (err: any) {
       console.error('[Refund] error', err?.response?.status, err?.response?.data || err);
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data ||
-        'Gửi yêu cầu hoàn tiền thất bại.';
+      const msg = err?.response?.data?.message || err?.response?.data || 'Gửi yêu cầu hoàn tiền thất bại.';
       toast.error(String(msg));
     }
   };
 
   const openReview = async (o: Order) => {
-  try {
-    const full = await getOrderById(o.orderId);
-    const items = full?.orderItems ?? [];
-    if (items.length === 0) {
-      toast.info('Đơn hàng không có sản phẩm để đánh giá.');
-      return;
+    try {
+      const full = await getOrderById(o.orderId);
+      const items = full?.orderItems ?? [];
+      if (items.length === 0) {
+        toast.info('Đơn hàng không có sản phẩm để đánh giá.');
+        return;
+      }
+      const firstItemId = items[0]?.orderItemId ?? null;
+      setReview({
+        open: true,
+        order: full as any,
+        orderItemId: firstItemId,
+        rating: 5,
+        comment: '',
+        file: null,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error('Không tải được chi tiết đơn hàng.');
     }
-    const firstItemId = items[0]?.orderItemId ?? null;
-    setReview({
-      open: true,
-      order: full as any,      // lưu bản đầy đủ có orderItems
-      orderItemId: firstItemId,
-      rating: 5,
-      comment: '',
-      file: null,
-    });
-  } catch (err) {
-    console.error(err);
-    toast.error('Không tải được chi tiết đơn hàng.');
-  }
-};
-
+  };
 
   const submitReview = async () => {
     try {
@@ -268,19 +246,9 @@ const OrderPage: React.FC = () => {
         toast.info('Điểm đánh giá từ 1 đến 5.');
         return;
       }
-      const fb = await createFeedback({
-        orderItemId: review.orderItemId,
-        rating: review.rating,
-        comment: review.comment || '',
-      });
-
-      const fid: number =
-        (fb as any)?.feedbackId ?? (fb as any)?.data?.feedbackId ?? (fb as any)?.id ?? (fb as any)?.data?.id;
-
-      if (fid && review.file) {
-        await uploadFeedbackImage(fid, review.file);
-      }
-
+      const fb = await createFeedback({ orderItemId: review.orderItemId, rating: review.rating, comment: review.comment || '' });
+      const fid: number = (fb as any)?.feedbackId ?? (fb as any)?.data?.feedbackId ?? (fb as any)?.id ?? (fb as any)?.data?.id;
+      if (fid && review.file) await uploadFeedbackImage(fid, review.file);
       toast.success('Đã gửi đánh giá. Cảm ơn bạn!');
       setReview((s) => ({ ...s, open: false }));
     } catch (e) {
@@ -290,26 +258,14 @@ const OrderPage: React.FC = () => {
   };
 
   // —— Helpers (hiển thị nút) ——
-
-// ✅ API mới gộp shipping vào status
-  const isShipping = (o: Order) =>
-    String(o.status ?? '').toLowerCase() === 'shipping';
-
-  const isPaymentFailed = (o: Order) =>
-    String(o.paymentStatus ?? '').toLowerCase() === 'failed';
-
+  const isShipping = (o: Order) => String(o.status ?? '').toLowerCase() === 'shipping';
+  const isPaymentFailed = (o: Order) => String(o.paymentStatus ?? '').toLowerCase() === 'failed';
   const canRate = (o: Order) => isCompleted(o.status);
-
-  // ✅ Bổ sung 'rejected' là hủy bởi hệ thống/manager
   const isCanceled = (s: string | number) => {
     const v = String(s).toLowerCase();
     return v === 'cancel' || v === 'cancle' || v === 'canceled' || v === 'cancelled' || v === 'rejected';
   };
-
-  // nút pay: chỉ khi unpaid và KHÔNG bị hủy
   const canPay = (o: Order) => isUnpaid(o.paymentStatus ?? undefined) && !isCanceled(o.status);
-
-  // nút cancel: pending/processing, chưa shipping, chưa canceled, và không phải payment failed
   const canCancel = (o: Order) => {
     const st = String(o.status).toLowerCase();
     const pendingOrProcessing = st === 'pending' || st === 'processing';
@@ -341,9 +297,7 @@ const OrderPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-green-700">
-            Đơn hàng của tôi
-          </h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-green-700">Đơn hàng của tôi</h1>
           <button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
@@ -357,75 +311,49 @@ const OrderPage: React.FC = () => {
 
         {/* Real-time indicator */}
         <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-          <div className={`w-2 h-2 rounded-full ${isRefreshing ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${isRefreshing ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
           {isRefreshing ? 'Đang cập nhật...' : 'Tự động cập nhật mỗi 10 giây'}
         </div>
 
         {loading ? (
           <div className="text-center text-gray-600">Đang tải...</div>
         ) : total === 0 ? (
-          <div className="bg-white p-8 rounded-lg shadow text-center">
-            Chưa có đơn hàng nào.
-          </div>
+          <div className="bg-white p-8 rounded-lg shadow text-center">Chưa có đơn hàng nào.</div>
         ) : (
           <>
             <div className="space-y-4 min-h-0">
               {pagedOrders.map((o) => (
-                <div
-                  key={o.orderId}
-                  className="bg-white rounded-lg shadow border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                >
+                <div key={o.orderId} className="bg-white rounded-lg shadow border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="font-semibold text-gray-800">
-                      Đơn hàng #{o.orderId}
-                    </div>
+                    <div className="font-semibold text-gray-800">Đơn hàng #{o.orderId}</div>
                     <div className="text-sm text-gray-500">
-                      Ngày đặt{' '} 
-                      {o.orderDate
-                        ? new Date(o.orderDate).toLocaleString('vi-VN')
-                        : 'N/A'}
+                      Ngày đặt {o.orderDate ? new Date(o.orderDate).toLocaleString('vi-VN') : 'N/A'}
                     </div>
                     <div className="text-sm">
-                      Tổng tiền{' '}
-                      <span className="font-semibold">{money(o.totalAmount)}</span>
+                      Tổng tiền <span className="font-semibold">{money(o.totalAmount)}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <span
-                        className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(
-                          o.status
-                        )}`}
-                        title={String(o.status)}
-                      >
+                      <span className={`px-2 py-0.5 rounded border text-xs ${orderStatusChip(o.status)}`} title={String(o.status)}>
                         {orderStatusToVi(o.status)}
                       </span>
-                      <span
-                        className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(
-                          o.paymentStatus ?? undefined // ✅ tránh null
-                        )}`}
-                        title={String(o.paymentStatus ?? '')} // ✅ tránh null
-                      >
-                        {paymentStatusToVi(o.paymentStatus ?? undefined) /* ✅ tránh null */}
+                      <span className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(o.paymentStatus ?? undefined)}`} title={String(o.paymentStatus ?? '')}>
+                        {paymentStatusToVi(o.paymentStatus ?? undefined)}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {/* Xem chi tiết: luôn có */}
                     <button
-                      onClick={() =>
-                        navigate(`/customer-dashboard/orders/${o.orderId}`)
-                      }
+                      onClick={() => navigate(`/customer-dashboard/orders/${o.orderId}`)}
                       className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded"
                     >
                       <Eye size={16} />
                       Xem chi tiết
                     </button>
 
-                    {/* Khi payment lỗi: chỉ cho xem chi tiết */}
                     {!isPaymentFailed(o) && (
                       <>
-                        {/* Hủy đơn (pending/processing, chưa shipping) */}
                         {canCancel(o) && (
                           <button
                             onClick={() => handleCancel(o)}
@@ -436,7 +364,6 @@ const OrderPage: React.FC = () => {
                           </button>
                         )}
 
-                        {/* Hoàn hàng/hoàn tiền – khi đã hoàn thành */}
                         {isCompleted(o.status) && (
                           <button
                             onClick={() => handleRequestRefund(o)}
@@ -447,7 +374,6 @@ const OrderPage: React.FC = () => {
                           </button>
                         )}
 
-                        {/* Đánh giá – khi đã hoàn thành */}
                         {isCompleted(o.status) && (
                           <button
                             onClick={() => openReview(o)}
@@ -458,7 +384,6 @@ const OrderPage: React.FC = () => {
                           </button>
                         )}
 
-                        {/* Thanh toán – chỉ khi unpaid và chưa bị hủy */}
                         {canPay(o) && (
                           <button
                             onClick={() => payWithMoMo(o)}
@@ -474,13 +399,8 @@ const OrderPage: React.FC = () => {
                 </div>
               ))}
 
-              {/* giữ layout cao như 5 thẻ để thanh phân trang không "nhảy" */}
-              {Array.from({ length: placeholderCount }).map((_, i) => (
-                <div
-                  key={`ph-${i}`}
-                  className="bg-white rounded-lg shadow border p-4 opacity-0 pointer-events-none select-none"
-                  aria-hidden="true"
-                >
+              {Array.from({ length: Math.max(0, PER_PAGE - pagedOrders.length) }).map((_, i) => (
+                <div key={`ph-${i}`} className="bg-white rounded-lg shadow border p-4 opacity-0 pointer-events-none select-none" aria-hidden="true">
                   placeholder
                 </div>
               ))}
@@ -493,60 +413,27 @@ const OrderPage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={() => goPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50"
-                  aria-label="Trang trước"
-                >
+                <button onClick={() => goPage(currentPage - 1)} disabled={currentPage === 1} className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50" aria-label="Trang trước">
                   <ChevronLeft size={18} />
                 </button>
 
                 {Array.from({ length: Math.max(1, totalPages) }).map((_, idx) => {
                   const p = idx + 1;
-                  const withinWindow =
-                    p === 1 ||
-                    p === totalPages ||
-                    (p >= currentPage - 2 && p <= currentPage + 2);
-
+                  const withinWindow = p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2);
                   if (!withinWindow) {
-                    if (p === 2 && currentPage > 4)
-                      return (
-                        <span key={p} className="px-2">
-                          …
-                        </span>
-                      );
-                    if (p === totalPages - 1 && currentPage < totalPages - 3)
-                      return (
-                        <span key={p} className="px-2">
-                          …
-                        </span>
-                      );
+                    if (p === 2 && currentPage > 4) return <span key={p} className="px-2">…</span>;
+                    if (p === totalPages - 1 && currentPage < totalPages - 3) return <span key={p} className="px-2">…</span>;
                     return null;
                   }
-
                   const active = p === currentPage;
                   return (
-                    <button
-                      key={p}
-                      onClick={() => goPage(p)}
-                      className={`px-3 py-1.5 rounded border ${
-                        active
-                          ? 'bg-green-600 text-white border-green-600'
-                          : 'bg-white hover:bg-gray-50'
-                      }`}
-                    >
+                    <button key={p} onClick={() => goPage(p)} className={`px-3 py-1.5 rounded border ${active ? 'bg-green-600 text-white border-green-600' : 'bg-white hover:bg-gray-50'}`}>
                       {p}
                     </button>
                   );
                 })}
 
-                <button
-                  onClick={() => goPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50"
-                  aria-label="Trang sau"
-                >
+                <button onClick={() => goPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50" aria-label="Trang sau">
                   <ChevronRight size={18} />
                 </button>
               </div>
@@ -555,94 +442,59 @@ const OrderPage: React.FC = () => {
         )}
       </div>
 
-      {/* Modal đánh giá (dùng StarRating) */}
+      {/* Modal đánh giá */}
       {review.open && review.order && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
-            <div className="px-5 py-3 border-b font-semibold">
-              Đánh giá sản phẩm
-            </div>
+            <div className="px-5 py-3 border-b font-semibold">Đánh giá sản phẩm</div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">
-                    Điểm (1–5)
-                  </label>
-                  <StarRating
-                    value={review.rating}
-                    onChange={(n) => setReview((s) => ({ ...s, rating: n }))}
-                  />
+                  <label className="block text-sm text-gray-600 mb-1">Điểm (1–5)</label>
+                  <StarRating value={review.rating} onChange={(n) => setReview((s) => ({ ...s, rating: n }))} />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">
-                    Ảnh (tùy chọn)
-                  </label>
+                  <label className="block text-sm text-gray-600 mb-1">Ảnh (tùy chọn)</label>
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) =>
-                      setReview((s) => ({
-                        ...s,
-                        file: e.target.files?.[0] ?? null,
-                      }))
-                    }
+                    onChange={(e) => setReview((s) => ({ ...s, file: e.target.files?.[0] ?? null }))}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-1">
-                  Chọn sản phẩm trong đơn
-                </label>
+                <label className="block text-sm text-gray-600 mb-1">Chọn sản phẩm trong đơn</label>
                 <select
-                      className="w-full border rounded px-3 py-2"
-                      value={review.orderItemId ?? ''}
-                      onChange={(e) =>
-                        setReview((s) => ({
-                          ...s,
-                          orderItemId: e.target.value ? Number(e.target.value) : null,
-                        }))
-                      }
-                    >
-                      {(review.order?.orderItems ?? []).map((it: OrderItem) => (
-                        <option key={it.orderItemId} value={it.orderItemId}>
-                          #{it.orderItemId} •{' '}
-                          {it.accessoryId
-                            ? `Phụ kiện ${it.accessoryId}`
-                            : `Variant ${it.terrariumVariantId}`}
-                          {' · '}SL {it.quantity}
-                        </option>
-                      ))}
-                    </select>
+                  className="w-full border rounded px-3 py-2"
+                  value={review.orderItemId ?? ''}
+                  onChange={(e) => setReview((s) => ({ ...s, orderItemId: e.target.value ? Number(e.target.value) : null }))}
+                >
+                  {(review.order?.orderItems ?? []).map((it: OrderItem) => (
+                    <option key={it.orderItemId} value={it.orderItemId}>
+                      #{it.orderItemId} • {it.accessoryId ? `Phụ kiện ${it.accessoryId}` : `Variant ${it.terrariumVariantId}`} · SL {it.quantity}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-1">
-                  Nhận xét
-                </label>
+                <label className="block text-sm text-gray-600 mb-1">Nhận xét</label>
                 <textarea
                   className="w-full border rounded px-3 py-2"
                   rows={4}
                   value={review.comment}
-                  onChange={(e) =>
-                    setReview((s) => ({ ...s, comment: e.target.value }))
-                  }
+                  onChange={(e) => setReview((s) => ({ ...s, comment: e.target.value }))}
                 />
               </div>
             </div>
 
             <div className="px-5 py-3 border-t flex justify-end gap-2">
-              <button
-                onClick={() => setReview((s) => ({ ...s, open: false }))}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
-              >
+              <button onClick={() => setReview((s) => ({ ...s, open: false }))} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded">
                 Đóng
               </button>
-              <button
-                onClick={submitReview}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
-              >
+              <button onClick={submitReview} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded">
                 Gửi đánh giá
               </button>
             </div>
