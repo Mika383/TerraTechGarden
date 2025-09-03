@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Eye, Star, Wallet, XCircle, ChevronLeft, ChevronRight, RotateCcw, RefreshCw } from 'lucide-react';
 
-import { createMoMoPayment, getOrdersByUser, cancelOrder } from '@/api/order';
-import type { Order, OrderItem } from '@/types/order';
+// Đồng bộ theo barrel file mới
+import { createMoMoPayment, getOrdersByUser, cancelOrder, getOrderById } from '@/api';
+import type { Order, OrderItem,  } from '@/types/order';
 
 import {
   orderStatusToVi,
@@ -72,12 +73,13 @@ type ReviewState = {
   file?: File | null;
 };
 
-const Order: React.FC = () => {
+const OrderPage: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // dùng kiểu an toàn trình duyệt thay vì NodeJS.Timeout
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // pagination
   const [page, setPage] = useState(1);
@@ -102,7 +104,7 @@ const Order: React.FC = () => {
     try {
       if (showLoading) setLoading(true);
       setIsRefreshing(true);
-      
+
       const data = await getOrdersByUser(userId);
       const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => {
         const ta = new Date(a.orderDate ?? '').getTime();
@@ -122,8 +124,8 @@ const Order: React.FC = () => {
   // Setup real-time polling
   useEffect(() => {
     load();
-    
-    // Poll every 30 seconds for real-time updates
+
+    // Poll every 10 seconds for real-time updates
     intervalRef.current = setInterval(() => {
       load(false); // Don't show loading spinner for background updates
     }, 10000);
@@ -144,11 +146,24 @@ const Order: React.FC = () => {
   // ——— ACTIONS ———
   const payWithMoMo = async (o: Order) => {
     try {
+      // Số tiền còn phải trả = totalAmount - deposit (nếu đã cọc)
+      const outstanding = Math.max(0, (o.totalAmount ?? 0) - (o.deposit ?? 0));
+      if (outstanding === 0) {
+        toast.info('Đơn này đã được thanh toán đủ.');
+        return;
+      }
+
+      // voucherId có thể không nằm trong type cũ → fallback qua any
+      const voucherId = (o as any)?.voucherId ?? 0;
+
       const { payUrl } = await createMoMoPayment({
         orderId: o.orderId,
-        orderInfo: `Đơn hàng #${o.orderId}`,
-        payAll: true,
-      });
+        orderInfo: `Thanh toán đơn #${o.orderId}`,
+        finalAmount: outstanding,     // ✅ API mới yêu cầu
+        voucherId,                    // ✅ API mới yêu cầu
+        // Nếu chưa đặt cọc thì đây là thanh toán toàn bộ; ngược lại là phần còn lại
+        payAll: (o.deposit ?? 0) === 0,
+      } as any);
       window.location.href = payUrl;
     } catch (err) {
       console.error(err);
@@ -222,17 +237,29 @@ const Order: React.FC = () => {
     }
   };
 
-  const openReview = (o: Order) => {
-    const firstItem = o.orderItems?.[0]?.orderItemId ?? null;
+  const openReview = async (o: Order) => {
+  try {
+    const full = await getOrderById(o.orderId);
+    const items = full?.orderItems ?? [];
+    if (items.length === 0) {
+      toast.info('Đơn hàng không có sản phẩm để đánh giá.');
+      return;
+    }
+    const firstItemId = items[0]?.orderItemId ?? null;
     setReview({
       open: true,
-      order: o,
-      orderItemId: firstItem,
+      order: full as any,      // lưu bản đầy đủ có orderItems
+      orderItemId: firstItemId,
       rating: 5,
       comment: '',
       file: null,
     });
-  };
+  } catch (err) {
+    console.error(err);
+    toast.error('Không tải được chi tiết đơn hàng.');
+  }
+};
+
 
   const submitReview = async () => {
     try {
@@ -248,7 +275,7 @@ const Order: React.FC = () => {
       });
 
       const fid: number =
-        fb?.feedbackId ?? fb?.data?.feedbackId ?? fb?.id ?? fb?.data?.id;
+        (fb as any)?.feedbackId ?? (fb as any)?.data?.feedbackId ?? (fb as any)?.id ?? (fb as any)?.data?.id;
 
       if (fid && review.file) {
         await uploadFeedbackImage(fid, review.file);
@@ -263,19 +290,25 @@ const Order: React.FC = () => {
   };
 
   // —— Helpers (hiển thị nút) ——
-  const isCanceled = (s: string | number) => {
-    const v = String(s).toLowerCase();
-    return v === 'cancel' || v === 'cancle';
-  };
+
+// ✅ API mới gộp shipping vào status
   const isShipping = (o: Order) =>
-    String(o.status).toLowerCase() === 'shipping' ||
-    String(o.shippingStatus ?? '').toLowerCase() === 'shipping';
+    String(o.status ?? '').toLowerCase() === 'shipping';
+
   const isPaymentFailed = (o: Order) =>
     String(o.paymentStatus ?? '').toLowerCase() === 'failed';
 
   const canRate = (o: Order) => isCompleted(o.status);
+
+  // ✅ Bổ sung 'rejected' là hủy bởi hệ thống/manager
+  const isCanceled = (s: string | number) => {
+    const v = String(s).toLowerCase();
+    return v === 'cancel' || v === 'cancle' || v === 'canceled' || v === 'cancelled' || v === 'rejected';
+  };
+
   // nút pay: chỉ khi unpaid và KHÔNG bị hủy
-  const canPay = (o: Order) => isUnpaid(o.paymentStatus) && !isCanceled(o.status);
+  const canPay = (o: Order) => isUnpaid(o.paymentStatus ?? undefined) && !isCanceled(o.status);
+
   // nút cancel: pending/processing, chưa shipping, chưa canceled, và không phải payment failed
   const canCancel = (o: Order) => {
     const st = String(o.status).toLowerCase();
@@ -347,13 +380,13 @@ const Order: React.FC = () => {
                       Đơn hàng #{o.orderId}
                     </div>
                     <div className="text-sm text-gray-500">
-                      Ngày đặt:{' '}
+                      Ngày đặt{' '} 
                       {o.orderDate
                         ? new Date(o.orderDate).toLocaleString('vi-VN')
                         : 'N/A'}
                     </div>
                     <div className="text-sm">
-                      Tổng tiền:{' '}
+                      Tổng tiền{' '}
                       <span className="font-semibold">{money(o.totalAmount)}</span>
                     </div>
 
@@ -368,11 +401,11 @@ const Order: React.FC = () => {
                       </span>
                       <span
                         className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(
-                          o.paymentStatus
+                          o.paymentStatus ?? undefined // ✅ tránh null
                         )}`}
-                        title={String(o.paymentStatus)}
+                        title={String(o.paymentStatus ?? '')} // ✅ tránh null
                       >
-                        {paymentStatusToVi(o.paymentStatus)}
+                        {paymentStatusToVi(o.paymentStatus ?? undefined) /* ✅ tránh null */}
                       </span>
                     </div>
                   </div>
@@ -563,25 +596,25 @@ const Order: React.FC = () => {
                   Chọn sản phẩm trong đơn
                 </label>
                 <select
-                  className="w-full border rounded px-3 py-2"
-                  value={review.orderItemId ?? undefined}
-                  onChange={(e) =>
-                    setReview((s) => ({
-                      ...s,
-                      orderItemId: Number(e.target.value),
-                    }))
-                  }
-                >
-                  {review.order.orderItems.map((it: OrderItem) => (
-                    <option key={it.orderItemId} value={it.orderItemId}>
-                      #{it.orderItemId} •{' '}
-                      {it.accessoryId
-                        ? `Phụ kiện ${it.accessoryId}`
-                        : `Variant ${it.terrariumVariantId}`}
-                      {' · '}SL {it.quantity}
-                    </option>
-                  ))}
-                </select>
+                      className="w-full border rounded px-3 py-2"
+                      value={review.orderItemId ?? ''}
+                      onChange={(e) =>
+                        setReview((s) => ({
+                          ...s,
+                          orderItemId: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    >
+                      {(review.order?.orderItems ?? []).map((it: OrderItem) => (
+                        <option key={it.orderItemId} value={it.orderItemId}>
+                          #{it.orderItemId} •{' '}
+                          {it.accessoryId
+                            ? `Phụ kiện ${it.accessoryId}`
+                            : `Variant ${it.terrariumVariantId}`}
+                          {' · '}SL {it.quantity}
+                        </option>
+                      ))}
+                    </select>
               </div>
 
               <div>
@@ -620,4 +653,4 @@ const Order: React.FC = () => {
   );
 };
 
-export default Order;
+export default OrderPage;

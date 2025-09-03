@@ -107,3 +107,61 @@ export interface Terrarium {
   feedbackCount?: number | null;
   purchaseCount?: number | null;
 }
+
+/* =======================
+   BỔ SUNG CHO LUỒNG AI & LAYOUT
+   ======================= */
+
+/** Yêu cầu gọi AI generate */
+export interface AutoGenerateRequest {
+  environmentId: number;
+  shapeId: number;
+  tankMethodId: number;
+  accessoryId?: number; // optional nếu BE hỗ trợ
+}
+
+/** Kết quả AI trả về (nguồn để hiển thị & tạo terrarium) */
+export interface GeneratedTerrarium {
+  environmentId: number;
+  shapeId: number;
+  tankMethodId: number;
+  terrariumName: string;
+  terrariumImages: string[];
+  stock: number;
+  minPrice: number;
+  maxPrice: number;
+  description: string;
+  status: string;
+  bodyHTML: string;
+  accessoryNames?: string[]; // BE có thể trả, FE không gửi khi tạo
+}
+
+/** Payload tạo terrarium bằng AI — THEO SCHEMA YÊU CẦU */
+export interface AddTerrariumByAIRequest {
+  environmentId: number;
+  shapeId: number;
+  tankMethodId: number;
+  terrariumName: string;
+  terrariumImages: string[];
+  stock: number;
+  minPrice: number;
+  maxPrice: number;
+  description: string;
+  status: string;
+  bodyHTML: string;
+}
+
+export interface CreatedTerrarium {
+  terrariumId: number;
+  terrariumName?: string;
+}
+
+export interface CreateLayoutRequest {
+  userId: number;
+  layoutName: string;
+  terrariumId: number;
+}
+
+export interface CreatedLayout {
+  layoutId: number;
+}

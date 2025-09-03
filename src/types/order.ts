@@ -1,74 +1,119 @@
 // src/types/order.ts
 
-// Phân loại item theo chuẩn BE mới
-export type OrderItemType = 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
+// Phân loại item theo chuẩn BE (gồm COMBO)
+export type OrderItemType = 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM' | 'COMBO';
 
-// ----- Items trong đơn đã tạo (response) -----
+/**
+ * Item trong đơn hàng (RESPONSE)
+ * childItems là đệ quy để hỗ trợ combo gói nhiều dòng con.
+ */
 export interface OrderItem {
   orderItemId: number;
-  itemType: string;
+
+  itemType: OrderItemType | string;
+
+  // Tham chiếu sản phẩm
   terrariumId?: number | null;
   terrariumVariantId?: number | null;
   accessoryId?: number | null;
+
+  // Số lượng theo loại
+  accessoryQuantity?: number | null;
+  terrariumVariantQuantity?: number | null;
+
+  // COMBO
   comboId?: number | null;
-  accessoryQuantity?: number;
-  terrariumVariantQuantity?: number;
-  quantity?: number;
-  unitPrice?: number;
-  totalPrice?: number;
+  comboQuantity?: number | null;
+
+  // Tổng quát
+  quantity?: number | null;
+  unitPrice?: number | null;
+  totalPrice?: number | null;
+
+  // Phân cấp/quan hệ
+  parentOrderItemId?: number | null;
+  childItems?: OrderItem[];
+
+  // Thông tin hiển thị
+  productName?: string | null;
+  imageUrl?: string | null;
 }
 
-
-// ----- Đơn hàng (response) -----
+/**
+ * Đơn hàng (RESPONSE)
+ * Lưu ý: API get-all-by-userid KHÔNG còn trả orderItems.
+ */
 export interface Order {
   orderId: number;
   userId: number;
 
+  voucherId?: number | null;
   addressId?: number | null;
 
-  // Tổng tiền của đơn (mới: BE có totalAmount trong payload tạo đơn)
+  // Tổng tiền
   totalAmount: number;
-
   deposit: number;
+  originalAmount?: number | null;
   discountAmount?: number | null;
 
+  // Trạng thái & thanh toán
   orderDate: string;
-  status: string | number;
-
-  paymentStatus?: string;
-  shippingStatus?: string;
-
+  status: string;
+  paymentStatus?: string | null;
+  paymentMethod?: string | null;
   transactionId?: string | null;
-  paymentMethod?: string;
 
-  orderItems: OrderItem[];
+  // Danh sách item — có ở /Order/{id}, vắng ở /get-all-by-userid
+  orderItems?: OrderItem[];
 }
 
-// ----- Voucher -----
-export interface Voucher {
+/* ------------------------- VOUCHER (tham chiếu) ------------------------- */
+export interface VoucherRef {
   voucherId: number;
-  code: string;
-  description: string;
-  discountAmount: number;
-  validFrom: string;
-  validTo: string;
-  status: 'active' | 'inactive' | 'expired';
+  code?: string;
 }
 
+/* --------------------- CREATE ORDER ------------------ */
+// Dùng cho API tạo đơn (payload FE -> BE).
 export interface CreateOrderItem {
-  itemType: 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
-  terrariumId?: number;                     // ✅ thêm
-  accessoryId: number;
-  terrariumVariantId: number;
-  accessoryQuantity: number;
-  terrariumVariantQuantity: number;
+  itemType: OrderItemType;
+
+  // COMBO
+  comboId?: number;
+  comboQuantity?: number;
+
+  // BUNDLE_ACCESSORY
+  /** ⚠️ BE mới: KHÔNG dùng terrariumId cho bundle, luôn để = 0 khi gửi */
+  terrariumId?: number;
+  terrariumVariantId?: number;
+  accessoryId?: number;
+  accessoryQuantity?: number;
+
+  // MAIN_ITEM
+  terrariumVariantQuantity?: number;
 }
 
 export interface CreateOrderRequest {
-  voucherId: number;
-  deposit: number;
+  voucherId: number;        // 0 nếu không có
+  deposit: number;          // 0 nếu full
   addressId: number;
-  comboId: number;
-  totalAmount: number;
+
   items: CreateOrderItem[];
+
+  totalAmountOld: number;
+  totalAmountNew: number;
+}
+
+/* --------------------- MOMO PAYMENT ------------------ */
+export interface CreateMoMoPaymentRequest {
+  orderId: number;
+  orderInfo: string;
+  finalAmount: number;
+  voucherId: number;
+  payAll: boolean;
+}
+
+export interface CreateMoMoPaymentResponse {
+  payUrl: string;
+  qrImageBase64?: string;
 }

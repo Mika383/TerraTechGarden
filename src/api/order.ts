@@ -1,66 +1,132 @@
 // src/api/order.ts
 import axios from 'axios';
-import type { Order, Voucher, CreateOrderRequest } from '@/types/order';
+import type {
+  Order,
+  CreateOrderRequest,
+  CreateOrderItem,
+  CreateMoMoPaymentRequest,
+  CreateMoMoPaymentResponse,
+} from '@/types/order';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authHeader = () => {
   const token = localStorage.getItem('authToken');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
+  return { headers: { Authorization: `Bearer ${token || ''}` } };
 };
 
-// ---- ORDERS (user/admin) ----
+// —— Helpers an toàn với nhiều kiểu bọc dữ liệu khác nhau —— //
+const pickData = <T,>(res: any): T => (res?.data?.data ?? res?.data ?? null) as T;
+
+// =========================== ORDERS =========================== //
+
+/** Lấy tất cả đơn theo user
+ *  ⚠️ Lưu ý: BE đã/đang bỏ `orderItems` trong response này → UI không nên phụ thuộc vào items ở đây.
+ */
 export const getOrdersByUser = async (userId: number): Promise<Order[]> => {
   const res = await axios.get(
     `${BASE_URL}/Order/get-all-by-userid/${userId}?userId=${userId}`,
     authHeader()
   );
-  // hỗ trợ cả response bọc/không bọc
-  return (res.data?.data ?? res.data ?? []) as Order[];
+  return (pickData<Order[] | any>(res) ?? []) as Order[];
 };
 
+/** Lấy tất cả đơn (admin) */
 export const getAllOrdersAdmin = async (): Promise<Order[]> => {
   const res = await axios.get(`${BASE_URL}/Order`, authHeader());
-  return (res.data?.data ?? res.data ?? []) as Order[];
+  return (pickData<Order[] | any>(res) ?? []) as Order[];
 };
 
+/** Lấy 1 đơn theo id (chi tiết có đủ orderItems) */
 export const getOrderById = async (orderId: number): Promise<Order | null> => {
   const res = await axios.get(`${BASE_URL}/Order/${orderId}`, authHeader());
-  return (res.data?.data ?? res.data ?? null) as Order | null;
+  const data = pickData<Order | { order: Order } | null>(res);
+
+  const order: Order | null =
+    (data && (data as any).orderId ? (data as Order) : (data as any)?.order) ?? null;
+
+  return order;
 };
 
-// ---- CREATE ORDER (API MỚI) ----
+// ======================= CREATE ORDER ==================== //
+
 type CreateOrderAPIResponse =
   | { orderId?: number }
   | { data?: { orderId?: number } }
   | { result?: { orderId?: number } }
   | any;
 
+/**
+ * Chuẩn hoá 1 item để gửi lên BE (điền 0 cho field không dùng)
+ * Lưu ý: BUNDLE_ACCESSORY mới → chỉ truyền terrariumVariantId, KHÔNG truyền terrariumId.
+ */
+const normalizeItem = (item: CreateOrderItem) => {
+  const base = {
+    itemType: item.itemType ?? '',
+
+    // ID tổng quát
+    terrariumId: item.terrariumId ?? 0,
+
+    // COMBO
+    comboId: item.comboId ?? 0,
+    comboQuantity: item.comboQuantity ?? 0,
+
+    // Terrarium / Accessory
+    terrariumVariantId: item.terrariumVariantId ?? 0,
+    accessoryId: item.accessoryId ?? 0,
+    accessoryQuantity: item.accessoryQuantity ?? 0,
+
+    terrariumVariantQuantity: item.terrariumVariantQuantity ?? 0,
+  };
+
+  switch (item.itemType) {
+    case 'COMBO':
+      return {
+        ...base,
+        terrariumId: 0,
+        terrariumVariantId: 0,
+        accessoryId: 0,
+        accessoryQuantity: 0,
+        terrariumVariantQuantity: 0,
+      };
+    case 'BUNDLE_ACCESSORY':
+      // ✅ Bundle chỉ gắn theo variant, KHÔNG gửi terrariumId
+      return {
+        ...base,
+        terrariumId: 0,
+        terrariumVariantQuantity: 0, // bundle accessory không dùng số lượng variant
+      };
+    case 'MAIN_ITEM':
+      return {
+        ...base,
+        accessoryId: 0,
+        accessoryQuantity: 0,
+      };
+    case 'SINGLE':
+      return {
+        ...base,
+        terrariumVariantId: 0,
+        terrariumVariantQuantity: 0,
+      };
+    default:
+      return base;
+  }
+};
+
 export const createOrder = async (
   payload: CreateOrderRequest
 ): Promise<{ orderId: number }> => {
-  // ✅ ép payload về dạng chuẩn, các field trống sẽ để = 0
   const normalizedPayload = {
     voucherId: payload.voucherId ?? 0,
     deposit: payload.deposit ?? 0,
     addressId: payload.addressId ?? 0,
-    comboId: payload.comboId ?? 0,
-    totalAmount: payload.totalAmount ?? 0,
-    items: (payload.items || []).map((item) => ({
-        itemType: item.itemType ?? "",
-        terrariumId: (item as any).terrariumId ?? 0,           // ✅ thêm dòng này
-        accessoryId: item.accessoryId ?? 0,
-        terrariumVariantId: item.terrariumVariantId ?? 0,
-        accessoryQuantity: item.accessoryQuantity ?? 0,
-        terrariumVariantQuantity: item.terrariumVariantQuantity ?? 0,
-      })),
 
+    totalAmountOld: payload.totalAmountOld ?? 0,
+    totalAmountNew: payload.totalAmountNew ?? 0,
+
+    items: (payload.items || []).map(normalizeItem),
   };
-                        
+
   const res = await axios.post<CreateOrderAPIResponse>(
     `${BASE_URL}/Order`,
     normalizedPayload,
@@ -72,45 +138,20 @@ export const createOrder = async (
     body.orderId ?? body?.data?.orderId ?? body?.result?.orderId;
 
   if (!orderId) {
-    const err: any = new Error("ORDER_ID_MISSING");
+    const err: any = new Error('ORDER_ID_MISSING');
     err.response = { data: body };
     throw err;
   }
   return { orderId };
 };
 
+// ============================ WALLET ========================== //
 
-// ---- VOUCHER ----
-export const validateVoucher = async (code: string): Promise<any> => {
-  const res = await axios.get(`${BASE_URL}/Voucher/validate/${code}`, authHeader());
-  return res.data;
-};
-
-export const getVoucherByCode = async (code: string): Promise<Voucher | null> => {
-  const res = await axios.get(`${BASE_URL}/Voucher/get-by-code/${code}`, authHeader());
-  // hỗ trợ cả `data` hoặc trả thẳng object
-  return (res.data?.data ?? res.data ?? null) as Voucher | null;
-};
-
-export const createVoucher = async (data: Omit<Voucher, 'voucherId'>): Promise<Voucher> => {
-  const res = await axios.post(`${BASE_URL}/Voucher`, data, authHeader());
-  return (res.data?.data ?? res.data) as Voucher;
-};
-
-export const updateVoucher = async (id: number, data: Omit<Voucher, 'voucherId'>): Promise<Voucher> => {
-  const res = await axios.put(`${BASE_URL}/Voucher/update-voucher/${id}`, data, authHeader());
-  return (res.data?.data ?? res.data) as Voucher;
-};
-
-export const deleteVoucher = async (id: number): Promise<any> => {
-  const res = await axios.delete(`${BASE_URL}/Voucher/delete-voucher/${id}`, authHeader());
-  return res.data;
-};
-
-// ---- WALLET ----
 export const getWalletBalance = async (userId: number): Promise<number> => {
   const res = await axios.get(`${BASE_URL}/Wallet/balance?userId=${userId}`, authHeader());
-  return (res.data?.data ?? res.data ?? 0) as number;
+  const data = pickData<number | { balance: number }>(res);
+  if (typeof data === 'number') return data;
+  return (data as any)?.balance ?? 0;
 };
 
 export const useWalletForPayment = async (payload: {
@@ -122,25 +163,24 @@ export const useWalletForPayment = async (payload: {
   return res.data;
 };
 
-// ---- MoMo PAYMENT (giữ lại duy nhất) ----
+// ============================ PAYMENT ========================= //
+
 /**
- * Expect response:
- * { payUrl: string; qrImageBase64?: string }
+ * POST /api/Payment/momo/create
+ * Spec: { orderId, orderInfo, finalAmount, voucherId, payAll }
  */
+// src/api/order.ts
 export const createMoMoPayment = async (payload: {
   orderId: number;
   orderInfo: string;
+  finalAmount: number;   // ✅ mới
+  voucherId: number;     // ✅ mới
   payAll: boolean;
 }): Promise<{ payUrl: string; qrImageBase64: string }> => {
   const res = await axios.post(`${BASE_URL}/Payment/momo/create`, payload, authHeader());
-
-  // hỗ trợ nhiều dạng trả về
   const raw = res?.data ?? {};
-  const payUrl: string =
-    raw?.payUrl ?? raw?.data?.payUrl ?? raw?.url ?? '';
-  const qrImageBase64: string =
-    raw?.qrImageBase64 ?? raw?.data?.qrImageBase64 ?? '';
-
+  const payUrl: string = raw?.payUrl ?? raw?.data?.payUrl ?? raw?.url ?? '';
+  const qrImageBase64: string = raw?.qrImageBase64 ?? raw?.data?.qrImageBase64 ?? '';
   if (!payUrl) {
     const err: any = new Error('MOMO_PAYMENT_URL_NOT_FOUND');
     err.response = { data: raw };
@@ -149,6 +189,9 @@ export const createMoMoPayment = async (payload: {
   return { payUrl, qrImageBase64 };
 };
 
+
+// ============================ CANCEL ========================== //
+
 export const cancelOrder = async (
   orderId: number,
   userId: number,
@@ -156,10 +199,7 @@ export const cancelOrder = async (
 ): Promise<any> => {
   const res = await axios.put(
     `${BASE_URL}/Order/${orderId}/cancel?userId=${userId}`,
-    {
-      cancelReason: body.cancelReason,
-      additionalNotes: body.additionalNotes ?? '',
-    },
+    { cancelReason: body.cancelReason, additionalNotes: body.additionalNotes ?? '' },
     authHeader()
   );
   return res.data;

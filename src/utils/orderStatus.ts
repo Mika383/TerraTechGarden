@@ -3,15 +3,18 @@
 
 export const VI_ORDER_STATUS: Record<string, string> = {
   failed: 'Thất bại',
-  cancle: 'Đã hủy',
+  cancle: 'Đã hủy',        // (BE có thể trả sai chính tả)
   cancel: 'Đã hủy',
+  canceled: 'Đã hủy',
+  cancelled: 'Đã hủy',
+  rejected: 'Bị từ chối', // ✅ rõ nghĩa bạn yêu cầu
   pending: 'Chờ xử lý',
   confirmed: 'Đã xác nhận',
   processing: 'Đang xử lý',
   shipping: 'Đang vận chuyển',
   completed: 'Hoàn thành',
   requestrefund: 'Yêu cầu hoàn tiền',
-  refuning: 'Đang hoàn tiền',
+  refuning: 'Đang hoàn tiền', // (nếu BE trả "refuning")
   refunded: 'Đã hoàn tiền',
 };
 
@@ -48,6 +51,9 @@ export const orderStatusChip = (s: string | number): string => {
     case 'failed':
     case 'cancle':
     case 'cancel':
+    case 'canceled':
+    case 'cancelled':
+    case 'rejected': // ✅ coi như huỷ bởi hệ thống/manager
       return 'bg-red-50 text-red-700 border-red-200';
     case 'refunded':
       return 'bg-gray-100 text-gray-700 border-gray-200';
@@ -69,22 +75,29 @@ export const paymentStatusChip = (s?: string | number): string => {
   }
 };
 
+// ===== Helpers nhanh theo ngữ nghĩa =====
 export const isCompleted = (s: string | number) =>
   String(s).toLowerCase() === 'completed';
+
 export const isPending = (s: string | number) =>
   String(s).toLowerCase() === 'pending';
+
 export const isProcessing = (s: string | number) =>
   String(s).toLowerCase() === 'processing';
+
+export const isRejected = (s: string | number) =>
+  String(s).toLowerCase() === 'rejected'; // ✅ bị hủy bởi hệ thống/manager khi còn pending/processing
+
 export const isUnpaid = (s?: string | number) =>
   String(s ?? '').toLowerCase() === 'unpaid';
 
-// 👉 Thêm các helper còn thiếu
+// 👉 Các trạng thái coi như "đã huỷ" → không cho thanh toán/cập nhật
 export const isCancelled = (s: string | number) => {
   const key = String(s).toLowerCase();
-  return key === 'cancel' || key === 'cancle' || key === 'failed';
+  return ['cancel', 'cancle', 'canceled', 'cancelled', 'failed', 'rejected'].includes(key);
 };
 
-// Cho phép thanh toán nếu: chưa thanh toán & chưa bị hủy/failed
+// Cho phép thanh toán nếu: chưa thanh toán & chưa bị huỷ/rejected/failed
 export const canPay = (o: { status: string | number; paymentStatus?: string | number }) => {
   return isUnpaid(o.paymentStatus) && !isCancelled(o.status);
 };

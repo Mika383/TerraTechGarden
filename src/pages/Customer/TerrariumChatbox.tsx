@@ -1,42 +1,38 @@
+// src/pages/Customer/TerrariumChatbox.tsx
 import React, { useMemo, useState } from 'react';
-import { Check, ChevronRight, Loader2, Sparkles, ImageIcon, Heart, Leaf } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Image } from 'antd';
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  Sparkles,
+  ImageIcon,
+  Heart,
+  Leaf,
+  ArrowLeft
+} from 'lucide-react';
 
-// ✅ Thêm MembershipGate
+// ✅ Membership gate
 import MembershipGate from '@/components/common/MembershipGate';
 
-// ===== Types =====
-type Environment = {
-  environmentId: number;
-  environmentName: string;
-  environmentDescription: string;
-};
-type Shape = {
-  shapeId: number;
-  shapeName: string;
-  shapeDescription: string;
-  shapeMaterial: string;
-};
-type TankMethod = {
-  tankMethodId: number;
-  tankMethodType: string;
-  tankMethodDescription: string;
-};
-type GeneratedTerrarium = {
-  environmentId: number;
-  shapeId: number;
-  tankMethodId: number;
-  accessoryNames: string[];
-  terrariumName: string;
-  terrariumImages: string[];
-  stock: number;
-  minPrice: number;
-  maxPrice: number;
-  description: string;
-  status: string;
-  bodyHTML: string;
-};
+// ✅ API đã có sẵn trong src/api/terrarium.ts
+import {
+  getAllEnvironments,
+  getAllShapes,
+  getAllTankMethods,
+  autoGenerateTerrarium as apiAutoGenerate,
+  addTerrariumByAI,
+  createTerrariumLayout,
+  isAuthError
+} from '@/api/terrarium';
+
+import type {
+  Environment,
+  Shape,
+  TankMethod,
+  GeneratedTerrarium
+} from '@/types/terrarium';
 
 // ===== Helpers =====
 const getCurrentUser = () => {
@@ -47,21 +43,23 @@ const getCurrentUser = () => {
     'Người dùng';
   return { id, name };
 };
-const currency = (v: number) => (v || 0).toLocaleString('vi-VN') + ' ₫';
-
-// ✅ headers có kèm Authorization
-const authHeaders = () => {
-  const token = localStorage.getItem('authToken');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-};
 
 // ===== Component =====
 const TerrariumChatbox: React.FC = () => {
   const navigate = useNavigate();
   const user = useMemo(getCurrentUser, []);
-  const [step, setStep] = useState<'idle' | 'env' | 'shape' | 'tank' | 'generate' | 'pickImage' | 'created' | 'saved'>('idle');
+
+  type Step =
+    | 'idle'
+    | 'env'
+    | 'shape'
+    | 'tank'
+    | 'generate'
+    | 'pickImage'
+    | 'created'
+    | 'saved';
+
+  const [step, setStep] = useState<Step>('idle');
 
   // selections
   const [environmentId, setEnvironmentId] = useState<number | null>(null);
@@ -82,16 +80,26 @@ const TerrariumChatbox: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // ------- Common error handler -------
+  const handleAuthOrThrow = (e: unknown) => {
+    if (isAuthError(e)) {
+      setErr('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return true;
+    }
+    return false;
+  };
+
   // ------- Fetchers -------
   const fetchEnvironments = async () => {
     setErr(null);
     try {
       setLoading(true);
-      const res = await fetch('https://terarium.shop/api/Environment/get-all');
-      const data = await res.json();
-      setEnvironments(data?.data || []);
+      const data = await getAllEnvironments();
+      setEnvironments(data || []);
       setStep('env');
-    } catch {
+    } catch (e) {
+      if (handleAuthOrThrow(e)) return;
       setErr('Không tải được danh sách môi trường.');
     } finally {
       setLoading(false);
@@ -102,11 +110,11 @@ const TerrariumChatbox: React.FC = () => {
     setErr(null);
     try {
       setLoading(true);
-      const res = await fetch('https://terarium.shop/api/Shape/get-all');
-      const data = await res.json();
-      setShapes(data?.data || []);
+      const data = await getAllShapes();
+      setShapes(data || []);
       setStep('shape');
-    } catch {
+    } catch (e) {
+      if (handleAuthOrThrow(e)) return;
       setErr('Không tải được danh sách hình dạng bể.');
     } finally {
       setLoading(false);
@@ -117,20 +125,15 @@ const TerrariumChatbox: React.FC = () => {
     setErr(null);
     try {
       setLoading(true);
-      const res = await fetch('https://terarium.shop/api/TankMethod/get-all');
-      const data = await res.json();
-      setTankMethods(data?.data || []);
+      const data = await getAllTankMethods();
+      setTankMethods(data || []);
       setStep('tank');
-    } catch {
+    } catch (e) {
+      if (handleAuthOrThrow(e)) return;
       setErr('Không tải được danh sách loại bể.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handle401 = () => {
-    setErr('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-    navigate('/login');
   };
 
   const autoGenerate = async () => {
@@ -139,27 +142,27 @@ const TerrariumChatbox: React.FC = () => {
     try {
       setLoading(true);
       setStep('generate');
-      const res = await fetch('https://terarium.shop/api/AI/auto-generate', {
-        method: 'POST',
-        headers: authHeaders(), // ✅ thêm token (phòng BE yêu cầu)
-        body: JSON.stringify({
-          environmentId,
-          shapeId,
-          tankMethodId,
-          accessoryId: 0,
-        }),
+      const data = await apiAutoGenerate({
+        environmentId,
+        shapeId,
+        tankMethodId,
+        accessoryId: 0
       });
-
-      if (res.status === 401) return handle401();
-
-      const data = await res.json();
       setGen(data);
       setStep('pickImage');
-    } catch {
+    } catch (e) {
+      if (handleAuthOrThrow(e)) return;
       setErr('Tạo mẫu thất bại, vui lòng thử lại.');
+      setStep('tank'); // quay lại bước trước nếu lỗi
     } finally {
       setLoading(false);
     }
+  };
+
+  const regenerateSimilar = async () => {
+    // Tạo lại với cùng lựa chọn hiện tại
+    if (!environmentId || !shapeId || !tankMethodId) return;
+    await autoGenerate();
   };
 
   const createTerrarium = async (imageUrl: string) => {
@@ -167,37 +170,26 @@ const TerrariumChatbox: React.FC = () => {
     setErr(null);
     try {
       setLoading(true);
+      // ✅ YÊU CẦU #4: Khi tạo terrarium AI → giá & stock = 0
       const payload = {
         environmentId: gen.environmentId,
         shapeId: gen.shapeId,
         tankMethodId: gen.tankMethodId,
-        accessoryNames: [],
         terrariumName: `${gen.terrariumName} của ${user.name}`,
         terrariumImages: [imageUrl],
-        stock: 99,
-        minPrice: gen.minPrice,
-        maxPrice: gen.maxPrice,
+        stock: 0,
+        minPrice: 0,
+        maxPrice: 0,
         description: gen.description,
         status: 'Active',
-        bodyHTML: gen.bodyHTML,
+        bodyHTML: gen.bodyHTML
       };
 
-      const res = await fetch('https://terarium.shop/api/Terrarium/add-terrariumbyai', {
-        method: 'POST',
-        headers: authHeaders(), // ✅ BẮT BUỘC
-        body: JSON.stringify(payload),
-      });
-
-      if (res.status === 401) return handle401();
-
-      const result = await res.json();
-      if (result?.status === 201) {
-        setCreatedTerrariumId(result?.data?.terrariumId);
-        setStep('created');
-      } else {
-        setErr(result?.message || 'Tạo terrarium thất bại.');
-      }
-    } catch {
+      const created = await addTerrariumByAI(payload);
+      setCreatedTerrariumId(created.terrariumId);
+      setStep('created');
+    } catch (e) {
+      if (handleAuthOrThrow(e)) return;
       setErr('Tạo terrarium thất bại.');
     } finally {
       setLoading(false);
@@ -209,25 +201,19 @@ const TerrariumChatbox: React.FC = () => {
     setErr(null);
     try {
       setLoading(true);
-      const res = await fetch('https://terarium.shop/api/TerrariumLayout/create', {
-        method: 'POST',
-        headers: authHeaders(), // ✅ BẮT BUỘC
-        body: JSON.stringify({
-          userId: Number(localStorage.getItem('userId') || user.id),
-          layoutName: `${gen.terrariumName} của ${user.name}`,
-          terrariumId: createdTerrariumId,
-        }),
+      const data = await createTerrariumLayout({
+        userId: Number(localStorage.getItem('userId') || user.id),
+        layoutName: `${gen.terrariumName} của ${user.name}`,
+        terrariumId: createdTerrariumId
       });
 
-      if (res.status === 401) return handle401();
-
-      const data = await res.json();
       if (data?.layoutId) {
         setStep('saved');
       } else {
-        setErr(data?.message || 'Lưu layout thất bại.');
+        setErr('Lưu layout thất bại.');
       }
-    } catch {
+    } catch (e) {
+      if (handleAuthOrThrow(e)) return;
       setErr('Lưu layout thất bại.');
     } finally {
       setLoading(false);
@@ -278,8 +264,12 @@ const TerrariumChatbox: React.FC = () => {
   };
 
   // ------- UI blocks -------
+  const Card = ({ children }: { children: React.ReactNode }) => (
+    <div className="bg-white rounded-xl shadow p-5">{children}</div>
+  );
+
   const Stepper = () => {
-    const active = (s: typeof step) =>
+    const active = (s: Step) =>
       step === s ||
       (s === 'env' && ['shape', 'tank', 'generate', 'pickImage', 'created', 'saved'].includes(step)) ||
       (s === 'shape' && ['tank', 'generate', 'pickImage', 'created', 'saved'].includes(step)) ||
@@ -288,7 +278,7 @@ const TerrariumChatbox: React.FC = () => {
       (s === 'pickImage' && ['created', 'saved'].includes(step)) ||
       (s === 'created' && ['saved'].includes(step));
 
-    const Dot = ({ label, s }: { label: string; s: typeof step }) => (
+    const Dot = ({ label, s }: { label: string; s: Step }) => (
       <div className="flex items-center">
         <div
           className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
@@ -317,20 +307,15 @@ const TerrariumChatbox: React.FC = () => {
     );
   };
 
-  const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="bg-white rounded-xl shadow p-5">{children}</div>
-  );
-
-  // ====== Toàn bộ UI chính bên trong MembershipGate + fix full-height ======
+  // ====== Main UI ======
   return (
     <MembershipGate message="Bạn cần là thành viên để sử dụng trình tạo Layout bằng AI.">
-      {/* Spacer tránh header fixed đè lên nội dung — đổi 64px nếu header cao khác */}
+      {/* Spacer tránh header fixed đè lên nội dung */}
       <div className="h-[64px]" aria-hidden />
 
-      {/* Luôn chiếm đủ viewport trừ chiều cao header */}
       <div className="min-h-[calc(100vh-64px)]">
         <div className="container mx-auto px-4 py-8 font-roboto">
-          {/* Hiện lỗi nếu có */}
+          {/* Error */}
           {err && (
             <div className="mb-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">{err}</div>
           )}
@@ -345,7 +330,7 @@ const TerrariumChatbox: React.FC = () => {
             </p>
           </div>
 
-          {/* CTA lúc nhàn rỗi */}
+          {/* Idle CTA */}
           {step === 'idle' && (
             <Card>
               <div className="text-center py-10">
@@ -362,7 +347,7 @@ const TerrariumChatbox: React.FC = () => {
             </Card>
           )}
 
-          {/* Thanh bước */}
+          {/* Stepper */}
           {step !== 'idle' && (
             <Card>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -372,7 +357,7 @@ const TerrariumChatbox: React.FC = () => {
             </Card>
           )}
 
-          {/* Bước: chọn môi trường */}
+          {/* Step: Environment */}
           {step === 'env' && (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               {environments.map((e) => (
@@ -395,54 +380,76 @@ const TerrariumChatbox: React.FC = () => {
             </div>
           )}
 
-          {/* Bước: chọn hình dạng */}
+          {/* Step: Shape (✅ có nút Quay lại) */}
           {step === 'shape' && (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {shapes.map((s) => (
-                <Card key={s.shapeId}>
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded bg-blue-600/10 border border-blue-200" />
-                    <div className="flex-1">
-                      <h3 className="font-bold text-blue-700">{s.shapeName}</h3>
-                      <p className="text-gray-600 text-sm">{s.shapeDescription}</p>
-                      <p className="text-xs text-blue-500 mt-1">Chất liệu: {s.shapeMaterial}</p>
-                      <button
-                        onClick={() => onPickShape(s.shapeId)}
-                        className="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                      >
-                        Chọn hình dạng này
-                      </button>
+            <>
+              <div className="mt-4">
+                <button
+                  onClick={() => setStep('env')}
+                  className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900 px-3 py-2"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Quay lại
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {shapes.map((s) => (
+                  <Card key={s.shapeId}>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded bg-blue-600/10 border border-blue-200" />
+                      <div className="flex-1">
+                        <h3 className="font-bold text-blue-700">{s.shapeName}</h3>
+                        <p className="text-gray-600 text-sm">{s.shapeDescription}</p>
+                        {s.shapeMaterial && (
+                          <p className="text-xs text-blue-500 mt-1">Chất liệu: {s.shapeMaterial}</p>
+                        )}
+                        <button
+                          onClick={() => onPickShape(s.shapeId)}
+                          className="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                        >
+                          Chọn hình dạng này
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
 
-          {/* Bước: chọn loại bể */}
+          {/* Step: Tank (✅ có nút Quay lại) */}
           {step === 'tank' && (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {tankMethods.map((t) => (
-                <Card key={t.tankMethodId}>
-                  <div className="flex items-start gap-3">
-                    <ImageIcon className="w-10 h-10 text-purple-600" />
-                    <div className="flex-1">
-                      <h3 className="font-bold text-purple-700">{t.tankMethodType}</h3>
-                      <p className="text-gray-600 text-sm">{t.tankMethodDescription}</p>
-                      <button
-                        onClick={() => onPickTank(t.tankMethodId)}
-                        className="mt-3 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
-                      >
-                        Chọn loại bể này
-                      </button>
+            <>
+              <div className="mt-4">
+                <button
+                  onClick={() => setStep('shape')}
+                  className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900 px-3 py-2"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Quay lại
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tankMethods.map((t) => (
+                  <Card key={t.tankMethodId}>
+                    <div className="flex items-start gap-3">
+                      <ImageIcon className="w-10 h-10 text-purple-600" />
+                      <div className="flex-1">
+                        <h3 className="font-bold text-purple-700">{t.tankMethodType || t.tankMethodName}</h3>
+                        <p className="text-gray-600 text-sm">{t.tankMethodDescription}</p>
+                        <button
+                          onClick={() => onPickTank(t.tankMethodId)}
+                          className="mt-3 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
+                        >
+                          Chọn loại bể này
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
 
-          {/* Bước: tạo mẫu */}
+          {/* Step: Generate (loading) */}
           {step === 'generate' && (
             <div className="mt-6">
               <Card>
@@ -454,16 +461,12 @@ const TerrariumChatbox: React.FC = () => {
             </div>
           )}
 
-          {/* Bước: chọn 1 trong 4 ảnh */}
+          {/* Step: Pick Image (✅ không hiển thị giá & tồn; ✅ có 2 nút tạo lại) */}
           {step === 'pickImage' && gen && (
             <div className="mt-6 grid grid-cols-1 gap-4">
               <Card>
                 <h3 className="text-lg font-bold text-green-700">{gen.terrariumName}</h3>
                 <p className="text-gray-700 mt-1">{gen.description}</p>
-                <div className="flex flex-wrap gap-4 text-sm text-green-700 mt-2">
-                  <span>Giá: <b>{currency(gen.minPrice)} - {currency(gen.maxPrice)}</b></span>
-                  <span>Tồn: <b>{gen.stock}</b></span>
-                </div>
               </Card>
 
               <Image.PreviewGroup>
@@ -491,10 +494,26 @@ const TerrariumChatbox: React.FC = () => {
                   ))}
                 </div>
               </Image.PreviewGroup>
+
+              {/* ✅ Hai nút phía dưới */}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={regenerateSimilar}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded"
+                >
+                  Tạo lại tương tự
+                </button>
+                <button
+                  onClick={restart}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
+                >
+                  Tạo lại từ đầu
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Bước: đã tạo terrarium thành công */}
+          {/* Step: Created */}
           {step === 'created' && (
             <div className="mt-6">
               <Card>
@@ -531,14 +550,16 @@ const TerrariumChatbox: React.FC = () => {
             </div>
           )}
 
-          {/* Bước: đã lưu layout */}
+          {/* Step: Saved */}
           {step === 'saved' && (
             <div className="mt-6">
               <Card>
                 <div className="text-center py-8">
                   <Heart className="w-10 h-10 text-pink-600 mx-auto mb-2" />
                   <h3 className="text-lg font-bold text-green-700">Đã lưu layout thành công!</h3>
-                  <p className="text-gray-600 mt-1">Bạn có thể xem lại trong mục <b>“Layout của tôi”</b>.</p>
+                  <p className="text-gray-600 mt-1">
+                    Bạn có thể xem lại trong mục <b>“Layout của tôi”</b>.
+                  </p>
                   <div className="flex gap-3 justify-center mt-5">
                     <button
                       onClick={() => navigate('/customer-dashboard/my-layouts')}

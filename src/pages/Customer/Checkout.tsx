@@ -3,63 +3,66 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { Wallet, CreditCard } from 'lucide-react';
 import AddressSelector from '@/components/customer/Layout/AddressSelector';
 import { Address } from '@/types/profile';
 import {
   createOrder,
   getVoucherByCode,
-  getWalletBalance,
-  useWalletForPayment,
+  
   createMoMoPayment
-} from '@/api/order';
+} from '@/api';
 import { getCart, deleteCartItem } from '@/api/cart';
 import { getTerrariumById, getVariantsByTerrariumId, getTerrariumVariantById } from '@/api/terrarium';
+import { getWalletBalance, useWalletForPayment } from '@/api';
+import { payWithWallet, payWithWalletNoBearerPrefix } from '@/api/wallet';  
 import { getAccessoryById } from '@/api/accessory';
 import { getComboById } from '@/api/combo';
-import type { Voucher } from '@/types/order';
+import type { Voucher, CreateOrderItem } from '@/types';
 import type { CartResponseNew, CartBundle, RawCartEntry } from '@/types/cart';
-import { useAuth } from '@/hooks/useAuth'; // ✅ dùng userId từ useAuth
+import { useAuth } from '@/hooks/useAuth';
 
-// ✅ placeholder logo nền trắng
 const FALLBACK_IMG = '/TerraTechLogo.png';
 
 // ===== Helpers & currency =====
 const currency = (v: number) => (v || 0).toLocaleString('vi-VN') + ' VND';
 const keyOfEntry = (e: RawCartEntry) => `ci_${e.cartItemId}`;
-const keyOfBundle = (b: CartBundle) => `b_${b.mainItem.terrariumId ?? 'x'}`;
+const keyOfBundle = (b: CartBundle) =>
+  `b_${b.mainItem.terrariumVariantId ?? b.mainItem.terrariumId ?? 'x'}`;
 const keyOfCombo = (e: RawCartEntry) => `combo_${e.cartItemId}`;
+
 const unitPriceOf = (e: RawCartEntry) => {
+  const explicit =
+    Array.isArray(e.item) && e.item[0] && typeof e.item[0].price === 'number'
+      ? e.item[0].price
+      : undefined;
+  if (typeof explicit === 'number') return explicit;
   const qty = e.totalCartQuantity || 0;
-  return qty > 0 ? e.totalCartPrice / qty : 0;
+  return qty > 0 ? (e.totalCartPrice || 0) / qty : 0;
 };
 
-// ===== Small logger (gói gọn, dễ tắt/bật) =====
+const qtyOf = (e: RawCartEntry) => {
+  const q =
+    Array.isArray(e.item) && e.item[0] && typeof e.item[0].quantity === 'number'
+      ? e.item[0].quantity
+      : e.totalCartQuantity;
+  return Math.max(1, q || 1);
+};
+
+const calcBundleQty = (b: CartBundle) =>
+  (b.bundleAccessories || []).reduce((sum, it) => sum + qtyOf(it), 0);
+
+// ===== Small logger =====
 const isDev = typeof import.meta !== 'undefined' ? import.meta.env.MODE !== 'production' : true;
 const log = {
-  group(title: string) {
-    if (!isDev) return;
-    try { console.groupCollapsed(`%c${title}`, 'color:#16a34a;font-weight:600;'); } catch {}
-  },
-  end() {
-    if (!isDev) return;
-    try { console.groupEnd(); } catch {}
-  },
-  info(...args: any[]) {
-    if (!isDev) return;
-    // @ts-ignore
-    console.log('%c[Checkout]', 'color:#16a34a', ...args);
-  },
-  table(data: any, title?: string) {
-    if (!isDev) return;
-    if (title) this.info(title);
-    try { console.table(data); } catch { console.log(data); }
-  }
+  group(title: string) { if (!isDev) return; try { console.groupCollapsed(`%c${title}`, 'color:#16a34a;font-weight:600;'); } catch {} },
+  end() { if (!isDev) return; try { console.groupEnd(); } catch {} },
+  info(...args: any[]) { if (!isDev) return; console.log('%c[Checkout]', 'color:#16a34a', ...args); },
+  table(data: any, title?: string) { if (!isDev) return; if (title) this.info(title); try { console.table(data); } catch { console.log(data); } }
 };
 
-// ===== Thêm API wrapper gửi thông báo web (giữ ngay trong file theo yêu cầu nhanh gọn) =====
+// ===== Web notification =====
 const sendWebNotification = async (userId: number, title: string, description: string) => {
-  // API: https://terarium.shop/api/Notification/web/create
-  // Nếu bạn muốn tách ra /api/notification.ts mình có thể tách ở bước sau.
   await axios.post('https://terarium.shop/api/Notification/web/create', {
     userId,
     title,
@@ -68,18 +71,7 @@ const sendWebNotification = async (userId: number, title: string, description: s
   });
 };
 
-// ===== Order payload item (API mới) =====
-// ✅ BỔ SUNG terrariumId để truyền cho BUNDLE_ACCESSORY
-type NewOrderItemPayload = {
-  itemType: 'BUNDLE_ACCESSORY' | 'SINGLE' | 'MAIN_ITEM';
-  terrariumId?: number;             // <-- thêm
-  accessoryId: number;
-  terrariumVariantId: number;
-  accessoryQuantity: number;
-  terrariumVariantQuantity: number;
-};
-
-// ===== Simple item for local fallback =====
+// ===== Local fallback item for summary =====
 interface SimpleCartItem {
   id: string;
   name: string;
@@ -89,32 +81,34 @@ interface SimpleCartItem {
   selected: boolean;
   accessoryId?: number | null;
   variantId?: number | null;
-  comboId?: number | null; // để hiển thị trong Summary khi user chọn combo từ Cart
+  comboId?: number | null;
 }
+
+// ===== Local type: allow COMBO + comboId/comboQuantity =====
+type CreateOrderItemWithCombo = CreateOrderItem & {
+  itemType: CreateOrderItem['itemType'] | 'COMBO';
+  comboId?: number;
+  comboQuantity?: number;
+};
 
 const Checkout: React.FC = () => {
   const navigate = useNavigate();
-  const { userId } = useAuth(); // ✅ lấy userId từ hook
+  const { userId } = useAuth();
 
   // --- State chính ---
   const [address, setAddress] = useState<Address | null>(null);
   const [paymentOption, setPaymentOption] = useState<'deposit' | 'full'>('deposit');
+  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'wallet'>('momo');
   const [discountCode, setDiscountCode] = useState('');
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [voucherError, setVoucherError] = useState('');
   const [customerNote, setCustomerNote] = useState('');
 
   // Ví
-  const [useWallet, setUseWallet] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
 
-  // MoMo QR
-  const [showMoMoQR, setShowMoMoQR] = useState(false);
-  const [momoQRCode, setMoMoQRCode] = useState<string | null>(null);
-  const [momoPayUrl, setMoMoPayUrl] = useState<string | null>(null);
-
-  // Dữ liệu hiển thị kiểu Cart
+  // Dữ liệu cart/API
   const [apiCart, setApiCart] = useState<CartResponseNew | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -128,13 +122,14 @@ const Checkout: React.FC = () => {
   const [variantsMap, setVariantsMap] = useState<Record<number, any[]>>({});
   const [variantToTerrariumMap, setVariantToTerrariumMap] = useState<Record<number, number>>({});
 
-  // Combo meta (để show item trong combo)
+  // Combo meta
   const [comboMeta, setComboMeta] = useState<Record<number, { name: string; image: string; items: any[] }>>({});
-  const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({}); // UI toggle trong phần Sản phẩm
+  const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({});
+  const [bundleOpen, setBundleOpen] = useState<Record<string, boolean>>({});
 
   // Fallback local + Summary toggle
   const [localSimple, setLocalSimple] = useState<SimpleCartItem[]>([]);
-  const [summaryItemsOpen, setSummaryItemsOpen] = useState(false); // ✅ mặc định đóng
+  const [summaryItemsOpen, setSummaryItemsOpen] = useState(false);
 
   // Load selected & cart
   useEffect(() => {
@@ -144,23 +139,14 @@ const Checkout: React.FC = () => {
       toast.warn('Không có sản phẩm nào để thanh toán!');
       return;
     }
-
     const ids = new Set<string>(raw.map((it) => it.id));
     setSelectedIds(ids);
     setLocalSimple(raw);
-
-    log.group('Checkout ▶ Selected (localStorage)');
-    log.info('checkoutItems (localSimple):', raw);
-    log.info('selectedIds:', [...ids]);
-    log.end();
 
     (async () => {
       try {
         const res = await getCart();
         setApiCart(res);
-        log.group('Checkout ▶ API Cart loaded');
-        log.info('apiCart:', res);
-        log.end();
       } catch {
         // silent
       }
@@ -175,10 +161,6 @@ const Checkout: React.FC = () => {
         setWalletLoading(true);
         const balance = await getWalletBalance(userId);
         setWalletBalance(balance);
-        log.group('Checkout ▶ Wallet');
-        log.info('userId:', userId);
-        log.info('walletBalance:', balance);
-        log.end();
       } catch {
         setWalletBalance(0);
       } finally {
@@ -187,84 +169,39 @@ const Checkout: React.FC = () => {
     })();
   }, [userId]);
 
-  // TERRARIUM meta
+  // ACCESSORY meta (same as original)
   useEffect(() => {
     (async () => {
       if (!apiCart) return;
       const ids = new Set<number>();
-      for (const b of apiCart.bundleItems || []) {
-        const tid = b.mainItem.terrariumId ?? b.bundleAccessories[0]?.terrariumId ?? 0;
-        if (tid) ids.add(tid);
-      }
-      for (const e of apiCart.singleItems || []) {
-        if (e.terrariumId) ids.add(e.terrariumId);
-      }
-      const missing = [...ids].filter((id) => !terrariumName[id] || !terrariumThumb[id]);
-      if (!missing.length) return;
+      for (const b of apiCart.bundleItems || []) for (const e of b.bundleAccessories || []) e.accessoryId && ids.add(e.accessoryId);
+      for (const e of apiCart.singleItems || []) e.accessoryId && ids.add(e.accessoryId);
 
-      const pairs = await Promise.all(
-        missing.map(async (id) => {
-          try {
-            const t = await getTerrariumById(id);
-            return {
-              id,
-              name: t?.terrariumName || `Bể terrarium #${id}`,
-              thumb: t?.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG
-            };
-          } catch {
-            return { id, name: `Bể terrarium #${id}`, thumb: FALLBACK_IMG };
-          }
-        })
-      );
-
-      setTerrariumName((m) => Object.assign({}, m, ...pairs.map(p => ({ [p.id]: p.name }))));
-      setTerrariumThumb((m) => Object.assign({}, m, ...pairs.map(p => ({ [p.id]: p.thumb }))));
-      log.group('Checkout ▶ Terrarium meta');
-      log.table(pairs, 'terrarium pairs');
-      log.end();
-    })();
-  }, [apiCart, terrariumName, terrariumThumb]);
-
-  // ACCESSORY meta
-  useEffect(() => {
-    (async () => {
-      if (!apiCart) return;
-      const ids = new Set<number>();
-      for (const b of apiCart.bundleItems || []) {
-        for (const e of b.bundleAccessories || []) {
-          if (e.accessoryId) ids.add(e.accessoryId);
-        }
-      }
-      for (const e of apiCart.singleItems || []) {
-        if (e.accessoryId) ids.add(e.accessoryId);
-      }
       const missing = [...ids].filter((id) => !accessoryName[id] || !accessoryThumb[id]);
       if (!missing.length) return;
 
-      const pairs = await Promise.all(
+      const pairs = await Promise.allSettled(
         missing.map(async (id) => {
-          try {
-            const a = await getAccessoryById(id);
-            return {
-              id,
-              name: a?.name || `Phụ kiện #${id}`,
-              thumb: a?.accessoryImages?.[0]?.imageUrl || FALLBACK_IMG
-            };
-          } catch {
-            return { id, name: `Phụ kiện #${id}`, thumb: FALLBACK_IMG };
-          }
+          const a = await getAccessoryById(id);
+          return { id, name: a?.name || `Phụ kiện #${id}`, thumb: a?.accessoryImages?.[0]?.imageUrl || FALLBACK_IMG };
         })
       );
-
-      setAccessoryName((m) => Object.assign({}, m, ...pairs.map(p => ({ [p.id]: p.name }))));
-      setAccessoryThumb((m) => Object.assign({}, m, ...pairs.map(p => ({ [p.id]: p.thumb }))));
-      log.group('Checkout ▶ Accessory meta');
-      log.table(pairs, 'accessory pairs');
-      log.end();
+      const nameAdd: Record<number, string> = {};
+      const thumbAdd: Record<number, string> = {};
+      pairs.forEach((r) => {
+        if (r.status === 'fulfilled') {
+          nameAdd[r.value.id] = r.value.name;
+          thumbAdd[r.value.id] = r.value.thumb;
+        }
+      });
+      if (Object.keys(nameAdd).length) {
+        setAccessoryName((m) => ({ ...m, ...nameAdd }));
+        setAccessoryThumb((m) => ({ ...m, ...thumbAdd }));
+      }
     })();
   }, [apiCart, accessoryName, accessoryThumb]);
 
-  // === Chọn theo Cart: tách combos, singles, bundles ===
+  // === Chọn theo Cart: tách combos, singles, bundles (same as original) ===
   const allSingles = apiCart?.singleItems || [];
   const combosSelected = useMemo(() => {
     const src = allSingles.filter(e => !!e.comboId);
@@ -280,11 +217,6 @@ const Checkout: React.FC = () => {
         return { ...b, bundleAccessories: filteredAcc };
       })
       .filter((b) => (b.bundleAccessories?.length || 0) > 0);
-
-    log.group('Checkout ▶ Bundles (selected)');
-    log.info('bundlesAll.count:', out.length);
-    log.end();
-
     return out;
   }, [apiCart, selectedIds]);
 
@@ -299,131 +231,156 @@ const Checkout: React.FC = () => {
 
   const mergedSingles = useMemo<RawCartEntry[]>(() => {
     const singles = (apiCart?.singleItems || [])
-      .filter((e) => !e.comboId) // loại combo ra khỏi singles
+      .filter((e) => !e.comboId)
       .filter((e) => selectedIds.has(keyOfEntry(e)));
     return [...variantSinglesFromBundles, ...singles];
   }, [apiCart, selectedIds, variantSinglesFromBundles]);
 
-  // Prefetch variant names (read-only)
+  // === Resolve variant → terrarium (same as original) ===
   useEffect(() => {
     const run = async () => {
-      const targets = mergedSingles.filter((e) => !!e.terrariumVariantId);
-      if (!targets.length) return;
+      const variantIds = new Set<number>();
+      mergedSingles.forEach((e) => e.terrariumVariantId && variantIds.add(e.terrariumVariantId));
+      (apiCart?.bundleItems || []).forEach((b) => {
+        b.mainItem?.terrariumVariantId && variantIds.add(b.mainItem.terrariumVariantId);
+        (b.bundleAccessories || []).forEach((ba) => ba.terrariumVariantId && variantIds.add(ba.terrariumVariantId));
+      });
 
-      const variantIds = [...new Set(targets.map((e) => e.terrariumVariantId!).filter(Boolean))];
-      const missing = variantIds.filter((vid) => !variantToTerrariumMap[vid]);
+      const missing = [...variantIds].filter((vid) => !variantToTerrariumMap[vid]);
       if (!missing.length) return;
 
-      try {
-        const possibleTerrariumIds = [
-          ...new Set(
-            targets.map((e) => e.terrariumId).filter((x): x is number => typeof x === 'number' && x > 0)
-          )
-        ];
-        if (!possibleTerrariumIds.length) possibleTerrariumIds.push(22, 24, 25, 26, 27, 28);
+      const results = await Promise.allSettled(
+        missing.map(async (vid) => {
+          const v = await getTerrariumVariantById(vid);
+          return { vid, tid: v?.terrariumId as number | undefined };
+        })
+      );
 
-        const map: Record<number, number> = {};
-        for (const tid of possibleTerrariumIds) {
-          try {
-            const variants = await getVariantsByTerrariumId(tid);
-            setVariantsMap((prev) => ({ ...prev, [tid]: variants }));
-            for (const v of variants) {
-              if (variantIds.includes(v.terrariumVariantId)) map[v.terrariumVariantId] = tid;
-            }
-          } catch {}
+      const newMap: Record<number, number> = {};
+      const terrariumIdsToFetch = new Set<number>();
+      results.forEach((r) => {
+        if (r.status === 'fulfilled' && r.value?.tid) {
+          newMap[r.value.vid] = r.value.tid;
+          terrariumIdsToFetch.add(r.value.tid);
         }
-        setVariantToTerrariumMap((prev) => ({ ...prev, ...map }));
+      });
+      if (Object.keys(newMap).length) setVariantToTerrariumMap((prev) => ({ ...prev, ...newMap }));
 
-        log.group('Checkout ▶ Variant mapping');
-        log.info('variantIds:', variantIds);
-        log.info('variantToTerrariumMap (delta):', map);
-        log.end();
-      } catch (err) {
-        console.error('fetch variants error:', err);
+      if (terrariumIdsToFetch.size) {
+        const toFetch = [...terrariumIdsToFetch].filter((tid) => !variantsMap[tid]);
+        if (toFetch.length) {
+          const fetched = await Promise.allSettled(
+            toFetch.map(async (tid) => {
+              const list = await getVariantsByTerrariumId(tid);
+              return { tid, list };
+            })
+          );
+          const add: Record<number, any[]> = {};
+          fetched.forEach((r) => {
+            if (r.status === 'fulfilled') add[r.value.tid] = r.value.list || [];
+          });
+          if (Object.keys(add).length) setVariantsMap((prev) => ({ ...prev, ...add }));
+        }
+      }
+
+      if (terrariumIdsToFetch.size) {
+        const needMeta = [...terrariumIdsToFetch].filter((tid) => !terrariumName[tid] || !terrariumThumb[tid]);
+        if (needMeta.length) {
+          const meta = await Promise.allSettled(
+            needMeta.map(async (tid) => {
+              const t = await getTerrariumById(tid);
+              return {
+                tid,
+                name: t?.terrariumName || `Bộ terrarium #${tid}`,
+                thumb: t?.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG,
+              };
+            })
+          );
+          const nameAdd: Record<number, string> = {};
+          const thumbAdd: Record<number, string> = {};
+          meta.forEach((r) => {
+            if (r.status === 'fulfilled') {
+              nameAdd[r.value.tid] = r.value.name;
+              thumbAdd[r.value.tid] = r.value.thumb;
+            }
+          });
+          if (Object.keys(nameAdd).length) {
+            setTerrariumName((prev) => ({ ...prev, ...nameAdd }));
+            setTerrariumThumb((prev) => ({ ...prev, ...thumbAdd }));
+          }
+        }
       }
     };
     run();
-  }, [mergedSingles, variantToTerrariumMap]);
+  }, [apiCart, mergedSingles, variantsMap, terrariumName, terrariumThumb, variantToTerrariumMap]);
 
-  // === Fetch combo meta giống Cart (để show item trong combo) ===
+  // === Fetch combo meta (same as original) ===
   useEffect(() => {
     const fetchComboMeta = async () => {
       if (!combosSelected.length) return;
       const missingIds = [...new Set(combosSelected.map(e => e.comboId!))].filter(id => !comboMeta[id]);
-
       if (!missingIds.length) return;
 
-      const comboDataPromises = missingIds.map(async (comboId) => {
+      const results = await Promise.all(missingIds.map(async (comboId) => {
         try {
           const comboData = await getComboById(comboId);
-
-          const itemDetailsPromises = comboData.items.map(async (item: any) => {
-            if (item.accessoryId) {
-              try {
-                const accessory = await getAccessoryById(item.accessoryId);
-                return {
-                  ...item,
-                  name: accessory?.name || `Phụ kiện #${item.accessoryId}`,
-                  image: accessory?.accessoryImages?.[0]?.imageUrl || FALLBACK_IMG,
-                  type: 'accessory'
-                };
-              } catch {
-                return { ...item, name: `Phụ kiện #${item.accessoryId}`, image: FALLBACK_IMG, type: 'accessory' };
-              }
-            } else if (item.terrariumVariantId) {
-              try {
-                const variant = await getTerrariumVariantById(item.terrariumVariantId);
-                if (!variant) {
+          const itemDetails = await Promise.all(
+            (comboData.items || []).map(async (item: any) => {
+              if (item.accessoryId) {
+                try {
+                  const acc = await getAccessoryById(item.accessoryId);
+                  return {
+                    ...item,
+                    name: acc?.name || `Phụ kiện #${item.accessoryId}`,
+                    image: acc?.accessoryImages?.[0]?.imageUrl || FALLBACK_IMG,
+                    type: 'accessory'
+                  };
+                } catch {
+                  return { ...item, name: `Phụ kiện #${item.accessoryId}`, image: FALLBACK_IMG, type: 'accessory' };
+                }
+              } else if (item.terrariumVariantId) {
+                try {
+                  const variant = await getTerrariumVariantById(item.terrariumVariantId);
+                  const terr = variant ? await getTerrariumById(variant.terrariumId) : null;
+                  return {
+                    ...item,
+                    name: terr?.terrariumName || variant?.variantName || `Terrarium #${variant?.terrariumId}`,
+                    image: variant?.urlImage || terr?.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG,
+                    type: 'terrarium',
+                    variantName: variant?.variantName
+                  };
+                } catch {
                   return { ...item, name: `Terrarium variant #${item.terrariumVariantId}`, image: FALLBACK_IMG, type: 'terrarium' };
                 }
-                const terrarium = await getTerrariumById(variant.terrariumId);
-                return {
-                  ...item,
-                  name: terrarium?.terrariumName || variant.variantName || `Terrarium #${variant.terrariumId}`,
-                  image: variant.urlImage || terrarium?.terrariumImages?.[0]?.imageUrl || FALLBACK_IMG,
-                  type: 'terrarium',
-                  variantName: variant.variantName
-                };
-              } catch {
-                return { ...item, name: `Terrarium variant #${item.terrariumVariantId}`, image: FALLBACK_IMG, type: 'terrarium' };
               }
-            }
-            return item;
-          });
+              return item;
+            })
+          );
 
-          const itemDetails = await Promise.all(itemDetailsPromises);
-
-          return {
-            comboId,
-            name: comboData.name,
-            image: comboData.imageUrl || FALLBACK_IMG,
-            items: itemDetails
-          };
+          return { comboId, name: comboData.name, image: comboData.imageUrl || FALLBACK_IMG, items: itemDetails };
         } catch (error) {
           console.error(`Error fetching combo ${comboId}:`, error);
           return { comboId, name: `Combo #${comboId}`, image: FALLBACK_IMG, items: [] };
         }
-      });
+      }));
 
-      const results = await Promise.all(comboDataPromises);
       setComboMeta((prev) => {
         const n = { ...prev };
-        results.forEach(c => { n[c.comboId] = c; });
+        results.forEach((c) => { n[c.comboId] = c; });
         return n;
       });
     };
-
     fetchComboMeta();
   }, [combosSelected, comboMeta]);
 
-  // ====== TÍNH TIỀN (CỘNG CẢ COMBO) ======
+  // ====== TÍNH TIỀN ======
   const subtotalFromAPI = useMemo(() => {
     const sumSingles = mergedSingles.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
     const sumBundles = bundlesAll.reduce(
       (s, b) => s + b.bundleAccessories.reduce((ss, e) => ss + (e.totalCartPrice || 0), 0),
       0
     );
-    const sumCombos = combosSelected.reduce((s, e) => s + (e.totalCartPrice || 0), 0); // ✅ cộng combo
+    const sumCombos = combosSelected.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
     return sumSingles + sumBundles + sumCombos;
   }, [mergedSingles, bundlesAll, combosSelected]);
 
@@ -433,39 +390,82 @@ const Checkout: React.FC = () => {
   );
 
   const subtotal = apiCart ? subtotalFromAPI : subtotalLocal;
-  const shippingFee = 0;
-  const discountFromVoucher = voucher ? voucher.discountAmount : 0;
-  const discountFromFull = paymentOption === 'full' ? (subtotal - discountFromVoucher) * 0.1 : 0;
-  const totalBeforeWallet = Math.max(
-    0,
-    Math.round(subtotal - discountFromVoucher - discountFromFull + shippingFee)
-  );
+
+  // Voucher calculation
+  const voucherApplicable = useMemo(() => {
+    if (!voucher) return false;
+    const now = new Date();
+    const validDate = new Date(voucher.validFrom) <= now && now <= new Date(voucher.validTo);
+    const minOK = (voucher.minOrderAmount ?? 0) <= subtotal;
+    const status = String(voucher.status || '').toLowerCase();
+    return status === 'active' && validDate && minOK;
+  }, [voucher, subtotal]);
+
+  const discountFromVoucher = useMemo(() => {
+    if (!voucher || !voucherApplicable) return 0;
+    const percent = voucher.discountPercent ?? 0;
+    const byPercent = Math.floor((subtotal * percent) / 100);
+    const byAmount = voucher.discountAmount ?? 0;
+    return Math.min(subtotal, Math.max(byPercent, byAmount));
+  }, [voucher, voucherApplicable, subtotal]);
+
+  // Shipping: free if subtotal >= 500k, else 30k
+  const shippingFee = useMemo(() => {
+    return subtotal >= 500_000 ? 0 : 30_000;
+  }, [subtotal]);
+
+  /**
+   * NEW 10% logic (full payment):
+   * - Tính trên tổng sau voucher + phí ship
+   *   base = (subtotal - discountFromVoucher) + shippingFee
+   *   discountFromFull = 10% * base
+   */
+  const discountFromFull = useMemo(() => {
+    if (paymentOption !== 'full') return 0;
+    const base = Math.max(0, subtotal - discountFromVoucher + shippingFee);
+    return Math.floor(base * 0.10);
+  }, [paymentOption, subtotal, discountFromVoucher, shippingFee]);
+
+  // Totals
+  const totalAmountOld = Math.max(0, subtotal + shippingFee);
+  // final total = (subtotal - voucher + ship) - fullDiscount
+  const totalAmountNew = Math.max(0, subtotal - discountFromVoucher + shippingFee - discountFromFull);
+
+  // Payment amount
   const actualPaymentAmount =
     paymentOption === 'deposit'
-      ? Math.max(0, Math.round((subtotal - discountFromVoucher) * 0.3 + shippingFee))
-      : totalBeforeWallet;
+      ? Math.max(0, Math.round((Math.max(0, subtotal - discountFromVoucher + shippingFee)) * 0.3 ))
+      : totalAmountNew;
 
-  const walletUsageAmount = useWallet ? Math.min(walletBalance, actualPaymentAmount) : 0;
-  const remainingPaymentAmount = Math.max(0, actualPaymentAmount - walletUsageAmount);
+  // Check if wallet has enough balance
+  const walletCanPayFull = walletBalance >= actualPaymentAmount;
 
-  // Voucher
+  // Apply voucher
   const applyVoucher = async () => {
     setVoucherError('');
     if (!discountCode.trim()) return;
     try {
       const res = await getVoucherByCode(discountCode.trim());
-      if (!res || (res as any).status !== 'active') {
+      if (!res) {
         setVoucher(null);
-        setVoucherError('Mã không tồn tại hoặc đã hết hạn!');
+        setVoucherError('Mã không hợp lệ!');
         return;
       }
       const now = new Date();
-      if (new Date((res as any).validFrom) > now || new Date((res as any).validTo) < now) {
+      const validDate = new Date(res.validFrom) <= now && now <= new Date(res.validTo);
+      const statusOK = String(res.status || '').toLowerCase() === 'active';
+      if (!statusOK || !validDate) {
         setVoucher(null);
         setVoucherError('Mã đã hết hạn hoặc chưa được áp dụng!');
         return;
       }
-      setVoucher(res as Voucher);
+      if ((res.minOrderAmount ?? 0) > subtotal) {
+        setVoucher(res);
+        setVoucherError(`Áp dụng cho đơn từ ${(res.minOrderAmount || 0).toLocaleString('vi-VN')} VND (tạm tính chưa đạt).`);
+        toast.warn('Tạm tính chưa đạt mức tối thiểu để áp voucher.');
+        return;
+      }
+      setVoucher(res);
       toast.success('Áp dụng voucher thành công!');
     } catch {
       setVoucher(null);
@@ -473,123 +473,97 @@ const Checkout: React.FC = () => {
     }
   };
 
-  // ===== Dựng items cho API Order MỚI, giữ semantics bundle/single (chưa gửi combo) =====
-  // ✅ BỔ SUNG terrariumId cho BUNDLE_ACCESSORY
-  const buildOrderItems = (): NewOrderItemPayload[] => {
-    const items: NewOrderItemPayload[] = [];
+  // Build order items (same as original)
+  const buildOrderItems = (): CreateOrderItemWithCombo[] => {
+    const items: CreateOrderItemWithCombo[] = [];
 
-    if (apiCart) {
-      // 1) Accessories thuộc bundle
-      for (const b of bundlesAll) {
-        for (const e of b.bundleAccessories) {
-          items.push({
-            itemType: 'BUNDLE_ACCESSORY',
-            terrariumId: e.terrariumId ?? b.mainItem.terrariumId ?? 0, // ✅ thêm terrariumId
-            accessoryId: e.accessoryId ?? 0,
-            terrariumVariantId: 0,
-            accessoryQuantity: e.totalCartQuantity ?? 0,
-            terrariumVariantQuantity: 0
-          });
-        }
+    // Bundles
+    for (const b of bundlesAll) {
+      const variantFromMain = b?.mainItem?.terrariumVariantId ?? 0;
+      const variantFromAnyAcc =
+        (b?.bundleAccessories || []).find(x => !!x.terrariumVariantId)?.terrariumVariantId ?? 0;
+
+      const bundleVariantId = variantFromMain || variantFromAnyAcc || 0;
+
+      if (!bundleVariantId) {
+        console.warn('[Checkout] ❗Thiếu terrariumVariantId cho bundle:', {
+          mainItem: b?.mainItem,
+          accessories: b?.bundleAccessories
+        });
+        toast.error('Không xác định được biến thể (variant) cho một bộ phụ kiện. Vui lòng mở lại trang/ chọn đúng biến thể.');
+        continue;
       }
 
+      for (const e of b.bundleAccessories) {
+        if (!e.accessoryId) continue;
+        const qty = e.totalCartQuantity ?? qtyOf(e);
 
-      // 2) Singles & main items
-      for (const e of mergedSingles) {
-        if (e.terrariumVariantId != null) {
-          items.push({
-            itemType: 'MAIN_ITEM',
-            accessoryId: 0,
-            terrariumVariantId: e.terrariumVariantId,
-            accessoryQuantity: 0,
-            terrariumVariantQuantity: e.totalCartQuantity ?? 0
-          });
-        } else if (e.accessoryId != null) {
-          items.push({
-            itemType: 'SINGLE',
-            accessoryId: e.accessoryId,
-            terrariumVariantId: 0,
-            accessoryQuantity: e.totalCartQuantity ?? 0,
-            terrariumVariantQuantity: 0
-          });
-        }
+        items.push({
+          itemType: 'BUNDLE_ACCESSORY',
+          terrariumId: 0,
+          terrariumVariantId: bundleVariantId,
+          terrariumVariantQuantity: 0,
+          accessoryId: e.accessoryId,
+          accessoryQuantity: qty,
+          comboId: 0,
+          comboQuantity: 0,
+        });
       }
-      return items;
     }
 
-    // Fallback local
-    for (const it of localSimple) {
-      if (it.accessoryId != null) {
-        items.push({
-          itemType: 'SINGLE',
-          accessoryId: it.accessoryId,
-          terrariumVariantId: 0,
-          accessoryQuantity: it.quantity,
-          terrariumVariantQuantity: 0
-        });
-      } else if (it.variantId != null) {
+    // Singles & main items
+    for (const e of mergedSingles) {
+      const qty = e.totalCartQuantity ?? qtyOf(e);
+
+      if (e.terrariumVariantId != null) {
         items.push({
           itemType: 'MAIN_ITEM',
+          terrariumId: 0,
+          terrariumVariantId: e.terrariumVariantId,
+          terrariumVariantQuantity: qty,
           accessoryId: 0,
-          terrariumVariantId: it.variantId,
           accessoryQuantity: 0,
-          terrariumVariantQuantity: it.quantity
+          comboId: 0,
+          comboQuantity: 0,
+        });
+      } else if (e.accessoryId != null) {
+        items.push({
+          itemType: 'SINGLE',
+          terrariumId: 0,
+          terrariumVariantId: 0,
+          terrariumVariantQuantity: 0,
+          accessoryId: e.accessoryId,
+          accessoryQuantity: qty,
+          comboId: 0,
+          comboQuantity: 0,
         });
       }
     }
+
+    // COMBOs
+    for (const ce of combosSelected) {
+      const qty = ce.totalCartQuantity ?? qtyOf(ce);
+      items.push({
+        itemType: 'COMBO',
+        comboId: ce.comboId ?? 0,
+        comboQuantity: qty,
+        terrariumId: 0,
+        terrariumVariantId: 0,
+        terrariumVariantQuantity: 0,
+        accessoryId: 0,
+        accessoryQuantity: 0,
+      } as CreateOrderItemWithCombo);
+    }
+
     return items;
   };
 
-  // ===== Phân rã combo thành items (khi có nhiều combo/pha trộn) =====
-  const explodeCombosToItems = async (selectedCombos: RawCartEntry[]): Promise<NewOrderItemPayload[]> => {
-    const out: NewOrderItemPayload[] = [];
-    for (const ce of selectedCombos) {
-      const comboId = ce.comboId!;
-      // ưu tiên dùng comboMeta đã fetch để giữ đúng name/image/variantName
-      let cItems: any[] | undefined = comboMeta[comboId]?.items;
-      if (!cItems) {
-        try {
-          const c = await getComboById(comboId);
-          cItems = c.items || [];
-        } catch {
-          cItems = [];
-        }
-      }
-      const comboQty = ce.totalCartQuantity || 1;
-      for (const it of cItems) {
-        const q = (it.quantity || 1) * comboQty;
-        if (it.accessoryId) {
-          out.push({
-            itemType: 'SINGLE',
-            accessoryId: it.accessoryId,
-            terrariumVariantId: 0,
-            accessoryQuantity: q,
-            terrariumVariantQuantity: 0
-          });
-        } else if (it.terrariumVariantId) {
-          out.push({
-            itemType: 'MAIN_ITEM',
-            accessoryId: 0,
-            terrariumVariantId: it.terrariumVariantId,
-            accessoryQuantity: 0,
-            terrariumVariantQuantity: q
-          });
-        }
-      }
-    }
-    return out;
-  };
-
-  // ======= CLEANUP CART ITEMS =======
-  const cleanupCartItems = async (orderItems: NewOrderItemPayload[], selectedCombos: RawCartEntry[]) => {
+  // Cleanup cart (same as original)
+  const cleanupCartItems = async (orderItems: CreateOrderItemWithCombo[], selectedCombos: RawCartEntry[]) => {
     try {
       const cartData = await getCart();
-
-      // chuẩn hóa danh sách items trong cart (API mới)
-      const singles = Array.isArray((cartData as any)?.singleItems)
-        ? (cartData as any).singleItems : [];
-      const bundles = Array.isArray((cartData as any)?.bundleItems)
-        ? (cartData as any).bundleItems : [];
+      const singles = Array.isArray((cartData as any)?.singleItems) ? (cartData as any).singleItems : [];
+      const bundles = Array.isArray((cartData as any)?.bundleItems) ? (cartData as any).bundleItems : [];
       const fromBundles = bundles.flatMap((b: any) => {
         const accs = Array.isArray(b.bundleAccessories) ? b.bundleAccessories : [];
         if (accs.length > 0) return accs;
@@ -599,7 +573,6 @@ const Checkout: React.FC = () => {
 
       const itemsToDelete: number[] = [];
 
-      // match accessory/variant
       for (const orderItem of orderItems) {
         const matchingCartItem = cartItemsFromAPI.find((cartItem: any) => {
           if (orderItem.terrariumVariantId && cartItem.terrariumVariantId) {
@@ -613,7 +586,6 @@ const Checkout: React.FC = () => {
         if (matchingCartItem?.cartItemId) itemsToDelete.push(matchingCartItem.cartItemId);
       }
 
-      // xóa combo (nếu combo được chọn)
       const selectedComboIds = selectedCombos.map(c => c.comboId!);
       for (const ci of singles) {
         if (ci.comboId && selectedComboIds.includes(ci.comboId) && ci.cartItemId) {
@@ -631,14 +603,10 @@ const Checkout: React.FC = () => {
     }
   };
 
-  // ===== Đặt hàng & thanh toán (chỉ MoMo) =====
+  // Handle place order
   const handlePlaceOrder = async () => {
     if (!address?.id) {
       toast.error('Vui lòng chọn địa chỉ giao hàng!');
-      return;
-    }
-    if (localSimple.length === 0) {
-      toast.error('Giỏ hàng trống!');
       return;
     }
     if (!userId) {
@@ -646,116 +614,80 @@ const Checkout: React.FC = () => {
       return;
     }
 
+    // Check wallet balance if wallet payment is selected
+    if (paymentMethod === 'wallet' && !walletCanPayFull) {
+      toast.error('Số dư ví không đủ để thanh toán!');
+      return;
+    }
+
     try {
-      // 1) Base items (không gồm combo)
-      const itemsBase = buildOrderItems();
-
-      // 2) Quyết định gửi combo thế nào
-      const hasCombos = combosSelected.length > 0;
-      const comboOnly = hasCombos && bundlesAll.length === 0 && mergedSingles.length === 0;
-
-      let comboIdToSend = 0;
-      let itemsToSend = [...itemsBase];
-
-      if (hasCombos) {
-        if (comboOnly && combosSelected.length === 1) {
-          // ✅ BE hỗ trợ: đúng 1 combo và không kèm sản phẩm khác
-          comboIdToSend = combosSelected[0].comboId!;
-        } else {
-          // ⚠️ Nhiều combo hoặc pha trộn → phân rã thành items
-          const exploded = await explodeCombosToItems(combosSelected);
-          itemsToSend = [...itemsToSend, ...exploded];
-          comboIdToSend = 0;
-        }
-      }
-
-      if (!itemsToSend.length && comboIdToSend === 0) {
+      const items = buildOrderItems();
+      if (!items.length) {
         toast.error('Không có sản phẩm hợp lệ để tạo đơn!');
         return;
       }
 
-      // 3) Payload tạo đơn (totalAmount đã tính gồm combo)
       const payload = {
-        voucherId: voucher?.voucherId ?? 0,
+        voucherId: voucherApplicable ? voucher!.voucherId : 0,
         deposit: paymentOption === 'deposit' ? actualPaymentAmount : 0,
         addressId: (address as any).id,
-        comboId: comboIdToSend,
-        items: itemsToSend,
-        totalAmount: totalBeforeWallet
-      } as any;
+        items,
+        totalAmountOld,
+        totalAmountNew
+      } as const;
 
-      // debug
-      // @ts-ignore
-      window.__lastOrderItems = itemsToSend;
-      // @ts-ignore
-      window.__lastOrderPayload = payload;
-
-      const { orderId } = await createOrder(payload);
+      const { orderId } = await createOrder(payload as any);
       if (!orderId) {
         toast.error('Tạo đơn hàng thất bại!');
         return;
       }
 
-      // ✅ Gửi thông báo web sau khi tạo đơn thành công (KHÔNG chặn luồng nếu lỗi)
+      // Send web notification
       try {
         await sendWebNotification(
           userId,
           `Đặt hàng thành công #${orderId}`,
-          `Đơn hàng #${orderId} đã được tạo. Tổng tiền: ${totalBeforeWallet.toLocaleString('vi-VN')} VND`
+          `Đơn hàng #${orderId} đã được tạo. Tổng tiền: ${totalAmountNew.toLocaleString('vi-VN')} VND`
         );
       } catch (e) {
         console.warn('[Checkout] Gửi thông báo web thất bại:', e);
       }
 
-      // 4) Cleanup cart
-      await cleanupCartItems(itemsToSend, combosSelected);
+      // Cleanup cart
+      await cleanupCartItems(items, combosSelected);
 
-      // 5) Thanh toán ví/MoMo
-      if (useWallet && walletUsageAmount > 0) {
+      if (paymentMethod === 'wallet') {
+        // Use wallet for payment
         try {
-          await useWalletForPayment({ userId, amount: walletUsageAmount, orderId });
+          await useWalletForPayment({ userId, amount: actualPaymentAmount, orderId});
+          toast.success('Thanh toán thành công bằng ví!');
+          localStorage.removeItem('cartItems');
+          localStorage.removeItem('checkoutItems');
+
+          // ★ Điều hướng sang trang PaymentWalletSuccess (route: /wallet-success/:orderId)
+          navigate(`/wallet-success/${orderId}`);
         } catch (error) {
           console.error('Error using wallet:', error);
           toast.error('Lỗi khi sử dụng ví, vui lòng thử lại!');
           return;
         }
-      }
-
-      if (remainingPaymentAmount === 0) {
-        toast.success('Thanh toán thành công bằng ví!');
-        localStorage.removeItem('cartItems');
-        localStorage.removeItem('checkoutItems');
-        navigate(`/thank-you/${orderId}`);
-        return;
-      }
-
-      // MoMo
-      const momoPayload = {
-        orderId,
-        orderInfo: customerNote || `Đơn hàng #${orderId}`,
-        payAll: paymentOption === 'full'
-      };
-
-      try {
-        const { payUrl, qrImageBase64 } = await createMoMoPayment(momoPayload);
-
-        if (qrImageBase64) {
-          setMoMoQRCode(qrImageBase64);
-          setMoMoPayUrl(payUrl);
-          setShowMoMoQR(true);
-          setTimeout(() => {
-            localStorage.removeItem('cartItems');
-            localStorage.removeItem('checkoutItems');
-            window.location.href = payUrl;
-          }, 10000);
-        } else {
+      } else {
+        // MoMo payment
+        try {
+          const { payUrl } = await createMoMoPayment({
+            orderId,
+            orderInfo: customerNote || `Đơn hàng #${orderId}`,
+            finalAmount: actualPaymentAmount,
+            voucherId: voucherApplicable ? voucher!.voucherId : 0,
+            payAll: paymentOption === 'full'
+          } as any);
           localStorage.removeItem('cartItems');
           localStorage.removeItem('checkoutItems');
           window.location.href = payUrl;
+        } catch (error: any) {
+          console.error('MoMo payment error:', error?.response?.data || error);
+          toast.error('Không lấy được link thanh toán MoMo!');
         }
-      } catch (error: any) {
-        console.error('MoMo payment error:', error?.response?.data || error);
-        toast.error('Không lấy được link thanh toán MoMo!');
       }
     } catch (err: any) {
       log.group('Checkout ▶ ERROR createOrder');
@@ -774,242 +706,226 @@ const Checkout: React.FC = () => {
     }
   };
 
-  // ============ UI ============
+  const ProductSectionAPI = (
+  <div className="bg-white p-4 sm:p-5 rounded-lg shadow space-y-4">
+    <h2 className="text-base sm:text-lg md:text-xl font-semibold">Sản phẩm</h2>
 
-  const MomoModal = showMoMoQR && momoQRCode && (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full text-center">
-        <div className="flex items-center justify-center mb-4">
-          <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-red-500 rounded-lg flex items-center justify-center mr-3">
-            <span className="text-white font-bold text-xl">M</span>
+    {/* COMBOS */}
+    {combosSelected.map((e) => {
+      const comboKey = keyOfCombo(e);
+      const isOpen = comboOpen[comboKey] ?? false;
+      const data = e.comboId ? comboMeta[e.comboId] : undefined;
+
+      return (
+        <div key={e.cartItemId} className="rounded-lg border">
+          <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-purple-50">
+            <div className="flex items-center gap-3">
+              <img
+                src={data?.image || FALLBACK_IMG}
+                alt= {data?.name || `Combo #${e.comboId}`}
+                className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
+                onClick={() => navigate(`/combo/${e.comboId}`)}
+                onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+              />
+              <div className="font-semibold">
+                <button onClick={() => navigate(`/combo/${e.comboId}`)} className="text-purple-700 hover:underline">
+                  Combo {data?.name || `Combo #${e.comboId}`}
+                </button>
+                <div className="text-sm text-gray-600">SL: <b>{e.totalCartQuantity || qtyOf(e)}</b></div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 text-sm">
+              <div className="text-purple-700 font-semibold">{currency(e.totalCartPrice || 0)}</div>
+              <button
+                onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                {isOpen ? 'Thu gọn' : 'Mở rộng'}
+              </button>
+            </div>
           </div>
-          <h2 className="text-xl font-bold text-pink-600">Thanh toán MoMo</h2>
+
+          {isOpen && data?.items && (
+            <div className="divide-y bg-gray-50">
+              <div className="px-4 py-2 text-sm text-gray-600 font-medium bg-purple-50 border-b">
+                Sản phẩm trong combo:
+              </div>
+              {data.items.map((it: any, idx: number) => (
+                <div key={`combo-item-${idx}`} className="p-3 sm:p-4 flex items-center gap-3">
+                  <img
+                    src={it.image || FALLBACK_IMG}
+                    alt={it.name || 'Sản phẩm'}
+                    className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
+                    onClick={() => {
+                      if (it.type === 'accessory' && it.accessoryId) {
+                        navigate(`/accessory/${it.accessoryId}`);
+                      } else if (it.type === 'terrarium') {
+                        navigate(`/terrarium/${it.terrariumId ?? ''}`);
+                      }
+                    }}
+                    onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{it.name || 'Sản phẩm'}</div>
+                    {it.variantName && (
+                      <div className="text-xs sm:text-sm text-gray-500">Phân loại: {it.variantName}</div>
+                    )}
+                    <div className="text-sm text-gray-600">
+                      {currency(it.unitPrice || 0)} × {it.quantity}
+                    </div>
+                  </div>
+                  <div className="w-32 text-right font-semibold text-gray-800">
+                    {currency(it.totalPrice || 0)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <p className="text-gray-600 mb-4">Quét mã QR bằng ứng dụng MoMo để thanh toán</p>
-        <div className="flex justify-center mb-4">
+      );
+    })}
+
+    {/* BUNDLES — có nút Thu gọn/Mở rộng */}
+{bundlesAll.map((b) => {
+  const mainVariantId = b?.mainItem?.terrariumVariantId || 0;
+  const resolvedTidFromMain = mainVariantId ? variantToTerrariumMap[mainVariantId] : 0;
+  let tid = resolvedTidFromMain;
+  if (!tid) {
+    const firstAccVariantId = b.bundleAccessories?.[0]?.terrariumVariantId || 0;
+    if (firstAccVariantId) tid = variantToTerrariumMap[firstAccVariantId] || 0;
+  }
+
+  const bundleKey = keyOfBundle(b);
+  const isOpen = bundleOpen[bundleKey] ?? false;
+
+  const name = tid ? (terrariumName[tid] || `Bộ terrarium #${tid}`) : 'Bộ phụ kiện theo biến thể';
+  const thumb = tid ? (terrariumThumb[tid] || FALLBACK_IMG) : FALLBACK_IMG;
+
+  const totalQty = calcBundleQty(b);
+  const totalPrice = b.bundleAccessories.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
+
+  return (
+    <div key={bundleKey} className="rounded-lg border">
+      <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-gray-50">
+        <div className="flex items-center gap-2">
           <img
-            src={`data:image/png;base64,${momoQRCode}`}
-            alt="MoMo QR Code"
-            className="w-64 h-64 border border-gray-300 rounded-lg bg-white"
+            src={thumb}
+            alt={name}
+            className="w-8 h-8 rounded border bg-white object-cover"
+            onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
           />
+          <div className="font-semibold">
+            Bộ phụ kiện của{' '}
+            {tid ? (
+              <button onClick={() => navigate(`/terrarium/${tid}`)} className="text-green-700 hover:underline">
+                {name}
+              </button>
+            ) : (
+              <span className="text-gray-700">biến thể #{mainVariantId}</span>
+            )}
+          </div>
         </div>
-        <p className="text-sm text-gray-500 mb-4">Trang sẽ tự động chuyển hướng sau 10 giây...</p>
-        <div className="flex gap-3 justify-center">
+
+        <div className="flex items-center gap-3 text-sm">
+          <div>SL: <b>{totalQty}</b></div>
+          <div className="text-green-700 font-semibold">{currency(totalPrice)}</div>
           <button
-            onClick={() => {
-              localStorage.removeItem('cartItems');
-              localStorage.removeItem('checkoutItems');
-              window.location.href = momoPayUrl || '#';
-            }}
-            className="bg-pink-500 text-white px-6 py-2 rounded hover:bg-pink-600 font-medium"
+            onClick={() => setBundleOpen((m) => ({ ...m, [bundleKey]: !isOpen }))}
+            className="text-gray-600 hover:text-gray-800"
           >
-            Mở ứng dụng MoMo
-          </button>
-          <button
-            onClick={() => {
-              setShowMoMoQR(false);
-              setMoMoQRCode(null);
-              setMoMoPayUrl(null);
-            }}
-            className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600 font-medium"
-          >
-            Đóng
+            {isOpen ? 'Thu gọn' : 'Mở rộng'}
           </button>
         </div>
       </div>
-    </div>
-  );
 
-  // ====== SẢN PHẨM (hiển thị giống Cart — bổ sung COMBO) ======
-  const ProductSectionAPI = (
-    <div className="bg-white p-4 sm:p-5 rounded-lg shadow space-y-4">
-      <h2 className="text-base sm:text-lg md:text-xl font-semibold">Sản phẩm</h2>
+      {isOpen && (
+        <div className="divide-y">
+          {b.bundleAccessories.map((e) => {
+            const aId = e.accessoryId || 0;
+            const aName = aId ? (accessoryName[aId] || e.item?.[0]?.productName || `Phụ kiện #${aId}`) : 'Phụ kiện';
+            const aThumb = aId ? (accessoryThumb[aId] || e.item?.[0]?.imageUrl || FALLBACK_IMG) : FALLBACK_IMG;
 
-      {/* COMBOS (mới thêm) */}
-      {combosSelected.map((e) => {
-        const comboKey = keyOfCombo(e);
-        const isOpen = comboOpen[comboKey] ?? true; // mở mặc định để người dùng kiểm tra
-        const data = e.comboId ? comboMeta[e.comboId] : undefined;
-
-        return (
-          <div key={e.cartItemId} className="rounded-lg border">
-            <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-purple-50">
-              <div className="flex items-center gap-3">
+            return (
+              <div key={e.cartItemId} className="p-3 sm:p-4 flex items-center gap-3">
                 <img
-                  src={data?.image || FALLBACK_IMG}
-                  alt={data?.name || `Combo #${e.comboId}`}
-                  className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
-                  onClick={() => navigate(`/combo/${e.comboId}`)}
+                  src={aThumb}
+                  alt={aName}
+                  className="w-14 h-14 object-cover rounded border bg-white"
                   onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
                 />
-                <div className="font-semibold">
-                  <button
-                    onClick={() => navigate(`/combo/${e.comboId}`)}
-                    className="text-purple-700 hover:underline"
-                  >
-                    {data?.name || `Combo #${e.comboId}`}
-                  </button>
-                  <div className="text-sm text-gray-600">SL: <b>{e.totalCartQuantity || 1}</b></div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 text-sm">
-                <div className="text-purple-700 font-semibold">{currency(e.totalCartPrice || 0)}</div>
-                <button
-                  onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))}
-                  className="text-gray-600 hover:text-gray-800"
-                >
-                  {isOpen ? 'Thu gọn' : 'Mở rộng'}
-                </button>
-              </div>
-            </div>
-
-            {isOpen && data?.items && (
-              <div className="divide-y bg-gray-50">
-                <div className="px-4 py-2 text-sm text-gray-600 font-medium bg-purple-50 border-b">
-                  Sản phẩm trong combo:
-                </div>
-                {data.items.map((it: any, idx: number) => (
-                  <div key={`combo-item-${idx}`} className="p-3 sm:p-4 flex items-center gap-3">
-                    <img
-                      src={it.image || FALLBACK_IMG}
-                      alt={it.name || 'Sản phẩm'}
-                      className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
-                      onClick={() => {
-                        if (it.type === 'accessory' && it.accessoryId) {
-                          navigate(`/accessory/${it.accessoryId}`);
-                        } else if (it.type === 'terrarium') {
-                          navigate(`/terrarium/${it.id ?? it.terrariumId ?? ''}`);
-                        }
-                      }}
-                      onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-800 truncate">{it.name || 'Sản phẩm'}</div>
-                      {it.variantName && (
-                        <div className="text-xs sm:text-sm text-gray-500">Phân loại: {it.variantName}</div>
-                      )}
-                      <div className="text-sm text-gray-600">
-                        {currency(it.unitPrice || 0)} × {it.quantity}
-                      </div>
-                    </div>
-                    <div className="w-32 text-right font-semibold text-gray-800">
-                      {currency(it.totalPrice || 0)}
-                    </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-800 truncate">{aName}</div>
+                  <div className="text-sm text-gray-600">
+                    {currency(unitPriceOf(e))} × {qtyOf(e)}
                   </div>
-                ))}
+                </div>
+                <div className="w-32 text-right font-semibold text-gray-800">
+                  {currency(e.totalCartPrice || 0)}
+                </div>
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+})}
 
-      {/* Bundles */}
-      {bundlesAll.map((b) => {
-        const tid = b.mainItem.terrariumId ?? b.bundleAccessories[0]?.terrariumId ?? 0;
-        const name = tid ? terrariumName[tid] || `Bể terrarium #${tid}` : 'Bể terrarium';
-        const thumb = tid ? terrariumThumb[tid] || FALLBACK_IMG : FALLBACK_IMG;
-        const bundleId = keyOfBundle(b);
 
-        const totalQty = b.bundleAccessories.reduce((s, e) => s + (e.totalCartQuantity || 0), 0);
-        const totalPrice = b.bundleAccessories.reduce((s, e) => s + (e.totalCartPrice || 0), 0);
+    {/* Singles + main items */}
+    {mergedSingles.length > 0 && (
+      <div className="rounded-lg border">
+        <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm lẻ</div>
+        <div className="divide-y">
+          {mergedSingles.map((e) => {
+            const isVariant = !!e.terrariumVariantId;
+            const actualTerrariumId = isVariant
+              ? (variantToTerrariumMap[e.terrariumVariantId!] || e.terrariumId)
+              : e.terrariumId;
 
-        return (
-          <div key={bundleId} className="rounded-lg border">
-            <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-gray-50">
-              <div className="flex items-center gap-2">
+            const terrariumDisplayName = actualTerrariumId
+              ? (terrariumName[actualTerrariumId] || `Bể terrarium #${actualTerrariumId}`)
+              : '';
+
+            const terrariumImage = actualTerrariumId
+              ? (terrariumThumb[actualTerrariumId] || FALLBACK_IMG)
+              : FALLBACK_IMG;
+
+            const list = actualTerrariumId ? (variantsMap[actualTerrariumId] || []) : [];
+            const currentVariant = isVariant
+              ? list.find((v: any) => v.terrariumVariantId === e.terrariumVariantId)
+              : null;
+
+            const displayName =
+              isVariant && terrariumDisplayName
+                ? terrariumDisplayName
+                : e.accessoryId
+                ? (accessoryName[e.accessoryId] || `Phụ kiện #${e.accessoryId}`)
+                : 'Sản phẩm';
+
+            const accThumb = e.accessoryId ? (accessoryThumb[e.accessoryId] || FALLBACK_IMG) : null;
+            const imgSrc = accThumb || terrariumImage || FALLBACK_IMG;
+
+            return (
+              <div key={e.cartItemId} className="p-3 sm:p-4 flex items-start gap-3">
                 <img
-                  src={thumb}
-                  alt={name}
-                  className="w-8 h-8 rounded border bg-white object-cover"
-                  onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+                  src={imgSrc}
+                  alt={displayName}
+                  className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
+                  onClick={() =>
+                    isVariant && actualTerrariumId
+                      ? navigate(`/terrarium/${actualTerrariumId}`)
+                      : e.accessoryId
+                      ? navigate(`/accessory/${e.accessoryId}`)
+                      : undefined
+                  }
+                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
                 />
-                <div className="font-semibold">
-                  Bộ phụ kiện của{' '}
-                  <button
-                    onClick={() => tid && navigate(`/terrarium/${tid}`)}
-                    className="text-green-700 hover:underline"
-                  >
-                    {name}
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <div>
-                  SL: <b>{totalQty}</b>
-                </div>
-                <div className="text-green-700 font-semibold">{currency(totalPrice)}</div>
-              </div>
-            </div>
-            <div className="divide-y">
-              {b.bundleAccessories.map((e) => {
-                const aId = e.accessoryId || 0;
-                const aName = aId ? accessoryName[aId] || `Phụ kiện #${aId}` : 'Phụ kiện';
-                const aThumb = aId ? accessoryThumb[aId] || FALLBACK_IMG : FALLBACK_IMG;
 
-                return (
-                  <div key={e.cartItemId} className="p-3 sm:p-4 flex items-center gap-3">
-                    <img
-                      src={aThumb}
-                      alt={aName}
-                      className="w-14 h-14 object-cover rounded border bg-white"
-                      onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-800 truncate">{aName}</div>
-                      <div className="text-sm text-gray-600">
-                        {currency(unitPriceOf(e))} × {e.totalCartQuantity ?? 1}
-                      </div>
-                    </div>
-                    <div className="w-32 text-right font-semibold text-gray-800">
-                      {currency(e.totalCartPrice || 0)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Singles + main items */}
-      {mergedSingles.length > 0 && (
-        <div className="rounded-lg border">
-          <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm lẻ</div>
-          <div className="divide-y">
-            {mergedSingles.map((e) => {
-              const isVariant = !!e.terrariumVariantId;
-              const actualTerrariumId = isVariant
-                ? (variantToTerrariumMap[e.terrariumVariantId!] || e.terrariumId)
-                : e.terrariumId;
-              const terrariumDisplayName = actualTerrariumId
-                ? terrariumName[actualTerrariumId] || `Bể terrarium #${actualTerrariumId}`
-                : '';
-              const terrariumImage = actualTerrariumId
-                ? (terrariumThumb[actualTerrariumId] || FALLBACK_IMG)
-                : FALLBACK_IMG;
-
-              const list = actualTerrariumId ? variantsMap[actualTerrariumId] || [] : [];
-              const currentVariant = isVariant
-                ? list.find((v: any) => v.terrariumVariantId === e.terrariumVariantId)
-                : null;
-
-              const displayName =
-                isVariant && terrariumDisplayName
-                  ? terrariumDisplayName
-                  : e.accessoryId
-                  ? accessoryName[e.accessoryId] || `Phụ kiện #${e.accessoryId}`
-                  : 'Sản phẩm';
-
-              const accThumb = e.accessoryId ? (accessoryThumb[e.accessoryId] || FALLBACK_IMG) : null;
-              const imgSrc = accThumb || terrariumImage || FALLBACK_IMG;
-
-              return (
-                <div key={e.cartItemId} className="p-3 sm:p-4 flex items-start gap-3">
-                  <img
-                    src={imgSrc}
-                    alt={displayName}
-                    className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="font-medium text-gray-800 cursor-pointer hover:underline mb-1"
                     onClick={() =>
                       isVariant && actualTerrariumId
                         ? navigate(`/terrarium/${actualTerrariumId}`)
@@ -1017,91 +933,82 @@ const Checkout: React.FC = () => {
                         ? navigate(`/accessory/${e.accessoryId}`)
                         : undefined
                     }
-                    onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                  />
-
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="font-medium text-gray-800 cursor-pointer hover:underline mb-1"
-                      onClick={() =>
-                        isVariant && actualTerrariumId
-                          ? navigate(`/terrarium/${actualTerrariumId}`)
-                          : e.accessoryId
-                          ? navigate(`/accessory/${e.accessoryId}`)
-                          : undefined
-                      }
-                      title={displayName}
-                    >
-                      {displayName}
-                    </div>
-
-                    {isVariant && (
-                      <div className="text-xs sm:text-sm text-gray-500 mb-1">
-                        Phân loại hàng:{' '}
-                        <span className="font-medium text-gray-700">
-                          {currentVariant?.variantName || `Variant #${e.terrariumVariantId}`}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="text-sm text-gray-600">
-                      {currency(unitPriceOf(e))} × {e.totalCartQuantity ?? 1}
-                    </div>
+                    title={displayName}
+                  >
+                    {displayName}
                   </div>
 
-                  <div className="w-32 text-right font-semibold text-gray-800">
-                    {currency(e.totalCartPrice || 0)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                  {isVariant && (
+                    <div className="text-xs sm:text-sm text-gray-500 mb-1">
+                      Phân loại hàng:{' '}
+                      <span className="font-medium text-gray-700">
+                        {currentVariant?.variantName || `Variant #${e.terrariumVariantId}`}
+                      </span>
+                    </div>
+                  )}
 
-      {/* Fallback local */}
-      {!apiCart && (
-        <div className="rounded-lg border">
-          <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm</div>
-          <div className="divide-y">
-            {localSimple.map((item) => (
-              <div key={item.id} className="p-3 sm:p-4 flex items-center gap-3">
-                <img
-                  src={item.image || FALLBACK_IMG}
-                  alt={item.name}
-                  className="w-14 h-14 object-cover rounded border bg-white"
-                  onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-800 truncate">{item.name}</div>
                   <div className="text-sm text-gray-600">
-                    {currency(item.price)} × {item.quantity}
+                    {currency(unitPriceOf(e))} × {qtyOf(e)}
                   </div>
                 </div>
+
                 <div className="w-32 text-right font-semibold text-gray-800">
-                  {currency(item.price * item.quantity)}
+                  {currency(e.totalCartPrice || 0)}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+
+    {/* Fallback local (khi chưa lấy được apiCart) */}
+    {!apiCart && (
+      <div className="rounded-lg border">
+        <div className="p-3 sm:p-4 border-b font-semibold bg-gray-50">Sản phẩm</div>
+        <div className="divide-y">
+          {localSimple.map((item) => (
+            <div key={item.id} className="p-3 sm:p-4 flex items-center gap-3">
+              <img
+                src={item.image || FALLBACK_IMG}
+                alt={item.name}
+                className="w-14 h-14 object-cover rounded border bg-white"
+                onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-gray-800 truncate">{item.name}</div>
+                <div className="text-sm text-gray-600">
+                  {currency(item.price)} × {item.quantity}
+                </div>
+              </div>
+              <div className="w-32 text-right font-semibold text-gray-800">
+                {currency(item.price * item.quantity)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
 
   return (
     <>
-      {MomoModal}
-
       <div className="min-h-screen bg-gray-50 py-6 sm:py-8 md:py-10">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-green-700">Thanh Toán</h1>
 
-            {/* Sản phẩm — hiển thị giống Cart + COMBO */}
+            {/* Sản phẩm */}
             {ProductSectionAPI}
 
-            <AddressSelector userId={userId || 0} onSelect={(addr) => setAddress(addr)} />
+            {/* Địa chỉ */}
+            <div className="relative">
+              <AddressSelector userId={userId || 0} onSelect={(addr) => setAddress(addr)} />
+              <div className="absolute top-2 right-2 text-xs text-gray-500" title="Hiện chỉ hỗ trợ giao nội thành TP.HCM">
+                TP.HCM nội thành
+              </div>
+            </div>
 
             {/* Loại thanh toán */}
             <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
@@ -1127,7 +1034,7 @@ const Checkout: React.FC = () => {
                     </span>
                   </label>
                   <div className="mt-2 text-xs sm:text-sm text-gray-700">
-                    Đặt cọc 30% để đảm bảo đơn hàng, hỗ trợ vận chuyển & giảm rủi ro sản phẩm dễ vỡ.
+                    Đặt cọc 30% để đảm bảo đơn hàng; phí ship được tính kèm lần thanh toán này.
                   </div>
                 </div>
 
@@ -1151,66 +1058,79 @@ const Checkout: React.FC = () => {
                     </span>
                   </label>
                   <div className="mt-2 text-xs sm:text-sm text-gray-700">
-                    Giảm ngay <b>10%</b> giá trị đơn hàng, ưu tiên xử lý trước.
+                    Giảm ngay <b>10%</b> giá trị sản phẩm sau khi áp voucher.
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Ví điện tử */}
+            {/* Phương thức thanh toán */}
             <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
-              <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-4">Ví điện tử</h2>
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="useWallet"
-                    checked={useWallet}
-                    onChange={(e) => setUseWallet(e.target.checked)}
-                    className="h-4 w-4 sm:h-5 sm:w-5 mr-3"
-                  />
-                  <label htmlFor="useWallet" className="text-sm sm:text-base md:text-lg font-medium">
-                    Sử dụng số dư ví
+              <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-4">Phương thức thanh toán</h2>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <div
+                  className={`flex-1 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    paymentMethod === 'momo' ? 'border-pink-500 bg-pink-50' : 'border-gray-300 bg-white'
+                  } hover:border-pink-500`}
+                  onClick={() => setPaymentMethod('momo')}
+                >
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="momo"
+                      checked={paymentMethod === 'momo'}
+                      onChange={() => setPaymentMethod('momo')}
+                      className="mr-2 h-4 w-4 sm:h-5 sm:w-5"
+                    />
+                    <CreditCard className="w-5 h-5 mr-2 text-pink-600" />
+                    <span className="font-bold text-pink-700 text-sm sm:text-base md:text-lg">
+                      MoMo
+                    </span>
                   </label>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm sm:text-base font-semibold text-green-600">
-                    {walletLoading ? 'Đang tải...' : `${walletBalance.toLocaleString('vi-VN')} VND`}
+                  <div className="mt-2 text-xs sm:text-sm text-gray-700">
+                    Thanh toán qua ví điện tử MoMo
                   </div>
-                  {useWallet && walletUsageAmount > 0 && (
-                    <div className="text-xs sm:text-sm text-gray-600">
-                      Sử dụng: {walletUsageAmount.toLocaleString('vi-VN')} VND
-                    </div>
-                  )}
                 </div>
-              </div>
-              {useWallet && walletBalance === 0 && (
-                <div className="mt-2 text-yellow-600 text-sm">Số dư ví không đủ để thanh toán.</div>
-              )}
-            </div>
 
-            {/* Hình thức thanh toán: chỉ MoMo */}
-            {remainingPaymentAmount > 0 ? (
-              <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
-                <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-4">Hình thức thanh toán</h2>
-                <div className="flex items-center gap-3 border-2 rounded-lg p-4 bg-pink-50 border-pink-500">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-pink-500 to-red-500 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-xs sm:text-sm">M</span>
+                <div
+                  className={`flex-1 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    paymentMethod === 'wallet' 
+                      ? walletCanPayFull 
+                        ? 'border-purple-500 bg-purple-50' 
+                        : 'border-red-500 bg-red-50'
+                      : 'border-gray-300 bg-white'
+                  } hover:border-purple-500 ${!walletCanPayFull ? 'opacity-60' : ''}`}
+                  onClick={() => walletCanPayFull && setPaymentMethod('wallet')}
+                >
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="wallet"
+                      checked={paymentMethod === 'wallet'}
+                      onChange={() => setPaymentMethod('wallet')}
+                      disabled={!walletCanPayFull}
+                      className="mr-2 h-4 w-4 sm:h-5 sm:w-5"
+                    />
+                    <Wallet className="w-5 h-5 mr-2 text-purple-600" />
+                    <span className="font-bold text-purple-700 text-sm sm:text-base md:text-lg">
+                      Ví điện tử
+                    </span>
+                  </label>
+                  <div className="mt-2 text-xs sm:text-sm">
+                    <div className={walletCanPayFull ? 'text-gray-700' : 'text-red-600'}>
+                      Số dư: {walletLoading ? 'Đang tải...' : currency(walletBalance)}
+                    </div>
+                    {!walletCanPayFull && (
+                      <div className="text-red-600">
+                        Không đủ số dư (cần {currency(actualPaymentAmount)})
+                      </div>
+                    )}
                   </div>
-                  <span className="font-semibold text-pink-700 text-sm sm:text-base">MoMo</span>
-                  <span className="ml-auto text-xs text-pink-700 bg-white border border-pink-200 px-2 py-1 rounded">
-                    Mặc định
-                  </span>
                 </div>
               </div>
-            ) : (
-              <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
-                <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-2">Hình thức thanh toán</h2>
-                <div className="text-center text-green-600 font-medium p-4 bg-green-50 rounded-lg">
-                  Đơn hàng sẽ được thanh toán hoàn toàn bằng ví điện tử
-                </div>
-              </div>
-            )}
+            </div>
 
             {/* Voucher + Ghi chú */}
             <div className="flex flex-col md:flex-row gap-4 sm:gap-6 w-full">
@@ -1235,15 +1155,17 @@ const Checkout: React.FC = () => {
                   {voucherError && <div className="text-red-500 text-sm sm:text-base">{voucherError}</div>}
                   {voucher && (
                     <div className="border-2 border-green-600 rounded p-4 bg-green-50 text-green-700 text-sm sm:text-base font-medium space-y-1 mt-1">
+                      <div><b>{voucher.description}</b></div>
+                      {voucher.minOrderAmount ? (
+                        <div>Áp dụng cho đơn từ <b>{voucher.minOrderAmount.toLocaleString('vi-VN')} VND</b></div>
+                      ) : null}
                       <div>
-                        <b>{voucher.description}</b>
+                        {voucher.discountPercent && voucher.discountPercent > 0
+                          ? <>Giảm: <b>{voucher.discountPercent}%</b></>
+                          : <>Giảm: <b>{(voucher.discountAmount || 0).toLocaleString('vi-VN')} VND</b></>}
                       </div>
                       <div>
-                        Giảm: <b>{voucher.discountAmount.toLocaleString('vi-VN')} VND</b>
-                      </div>
-                      <div>
-                        Hiệu lực: {new Date(voucher.validFrom).toLocaleDateString()} -{' '}
-                        {new Date(voucher.validTo).toLocaleDateString()}
+                        Hiệu lực: {new Date(voucher.validFrom).toLocaleDateString()} - {new Date(voucher.validTo).toLocaleDateString()}
                       </div>
                     </div>
                   )}
@@ -1288,7 +1210,6 @@ const Checkout: React.FC = () => {
             <div className="bg-white border border-gray-200 rounded-lg shadow p-4 sm:p-5 sticky top-4 sm:top-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base sm:text-lg md:text-xl font-bold text-green-700">Tổng kết đơn hàng</h2>
-                {/* ✅ Nút thu gọn danh sách sản phẩm (mặc định đóng) */}
                 <button
                   onClick={() => setSummaryItemsOpen((v) => !v)}
                   className="text-sm text-gray-600 hover:text-gray-800 underline"
@@ -1297,7 +1218,6 @@ const Checkout: React.FC = () => {
                 </button>
               </div>
 
-              {/* ✅ Danh sách sản phẩm trong tổng kết — chỉ hiển thị khi mở */}
               {summaryItemsOpen && (
                 <div className="space-y-2 text-sm sm:text-base mb-2">
                   {localSimple.map((item) => (
@@ -1322,56 +1242,63 @@ const Checkout: React.FC = () => {
                 </div>
               )}
 
-              {/* ✅ Các dòng giá luôn hiển thị (không bị thu gọn) */}
               <div className="space-y-2 text-sm sm:text-base">
                 <div className="flex justify-between">
                   <span>Tạm tính</span>
                   <span>{subtotal.toLocaleString('vi-VN')} VND</span>
                 </div>
-                {discountFromVoucher > 0 && (
-                  <div className="flex justify-between text-yellow-600">
+
+                {voucher && (
+                  <div className={`flex justify-between ${voucherApplicable ? 'text-yellow-600' : 'text-gray-400'}`}>
                     <span>Giảm giá voucher</span>
                     <span>-{discountFromVoucher.toLocaleString('vi-VN')} VND</span>
                   </div>
                 )}
-                {paymentOption === 'full' && discountFromFull > 0 && (
+
+                {paymentOption === 'full' && (
                   <div className="flex justify-between text-green-600">
                     <span>Ưu đãi thanh toán toàn bộ</span>
                     <span>-{discountFromFull.toLocaleString('vi-VN')} VND</span>
                   </div>
                 )}
+
                 <div className="flex justify-between">
                   <span>Phí ship</span>
                   <span>{shippingFee.toLocaleString('vi-VN')} VND</span>
                 </div>
+
                 <hr className="my-2" />
+
                 <div className="flex justify-between font-bold text-base sm:text-lg text-green-700">
-                  <span>Tổng cộng</span>
-                  <span>{totalBeforeWallet.toLocaleString('vi-VN')} VND</span>
-                </div>
-                <div className="flex justify-between font-medium text-blue-700">
-                  <span>Số tiền cần thanh toán</span>
+                  <span>Cần thanh toán</span>
                   <span>{actualPaymentAmount.toLocaleString('vi-VN')} VND</span>
                 </div>
-                {useWallet && walletUsageAmount > 0 && (
-                  <div className="flex justify-between text-purple-600">
-                    <span>Thanh toán bằng ví</span>
-                    <span>-{walletUsageAmount.toLocaleString('vi-VN')} VND</span>
-                  </div>
-                )}
-                {remainingPaymentAmount > 0 && (
-                  <div className="flex justify-between font-bold text-red-600">
-                    <span>Còn lại cần thanh toán</span>
-                    <span>{remainingPaymentAmount.toLocaleString('vi-VN')} VND</span>
+
+                {paymentOption === 'deposit' && (
+                  <div className="flex justify-between text-red-600">
+                    <span>Thanh toán khi nhận hàng</span>
+                    <span>{(totalAmountNew - actualPaymentAmount).toLocaleString('vi-VN')} VND</span>
                   </div>
                 )}
               </div>
 
               <button
                 onClick={handlePlaceOrder}
-                className="mt-4 sm:mt-6 w-full bg-green-600 text-white py-2 sm:py-3 rounded hover:bg-green-700 text-sm sm:text-base"
+                disabled={paymentMethod === 'wallet' && !walletCanPayFull}
+                className={`mt-4 sm:mt-6 w-full py-2 sm:py-3 rounded text-sm sm:text-base font-medium transition-colors ${
+                  paymentMethod === 'wallet' && !walletCanPayFull
+                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                    : paymentMethod === 'wallet'
+                    ? 'bg-purple-600 text-white hover:bg-purple-700'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
               >
-                {remainingPaymentAmount === 0 ? 'Thanh toán bằng ví' : 'Thanh toán với MoMo'}
+                {paymentMethod === 'wallet' 
+                  ? walletCanPayFull 
+                    ? 'Thanh toán bằng ví' 
+                    : 'Số dư ví không đủ'
+                  : 'Thanh toán với MoMo'
+                }
               </button>
             </div>
           </div>
