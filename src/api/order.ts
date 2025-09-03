@@ -6,29 +6,42 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authHeader = () => {
   const token = localStorage.getItem('authToken');
-  return { headers: { Authorization: `Bearer ${token}` } };
+  return { headers: { Authorization: `Bearer ${token || ''}` } };
 };
 
-// ---- ORDERS (user/admin) ----
+// —— Helpers an toàn với nhiều kiểu bọc dữ liệu khác nhau —— //
+const pickData = <T,>(res: any): T => (res?.data?.data ?? res?.data ?? null) as T;
+
+// =========================== ORDERS =========================== //
+
+/** Lấy tất cả đơn theo user */
 export const getOrdersByUser = async (userId: number): Promise<Order[]> => {
   const res = await axios.get(
     `${BASE_URL}/Order/get-all-by-userid/${userId}?userId=${userId}`,
     authHeader()
   );
-  return (res.data?.data ?? res.data ?? []) as Order[];
+  return (pickData<Order[] | any>(res) ?? []) as Order[];
 };
 
+/** Lấy tất cả đơn (admin) */
 export const getAllOrdersAdmin = async (): Promise<Order[]> => {
   const res = await axios.get(`${BASE_URL}/Order`, authHeader());
-  return (res.data?.data ?? res.data ?? []) as Order[];
+  return (pickData<Order[] | any>(res) ?? []) as Order[];
 };
 
+/** Lấy 1 đơn theo id */
 export const getOrderById = async (orderId: number): Promise<Order | null> => {
   const res = await axios.get(`${BASE_URL}/Order/${orderId}`, authHeader());
-  return (res.data?.data ?? res.data ?? null) as Order | null;
+  const data = pickData<Order | { order: Order } | null>(res);
+
+  const order: Order | null =
+    (data && (data as any).orderId ? (data as Order) : (data as any)?.order) ?? null;
+
+  return order;
 };
 
-// ---- CREATE ORDER (API MỚI) ----
+// ======================= CREATE ORDER ==================== //
+
 type CreateOrderAPIResponse =
   | { orderId?: number }
   | { data?: { orderId?: number } }
@@ -44,50 +57,38 @@ const normalizeItem = (item: CreateOrderItem) => {
     comboId: item.comboId ?? 0,
     comboQuantity: item.comboQuantity ?? 0,
 
-    // BUNDLE_ACCESSORY
-    terrariumId: item.terrariumId ?? 0,
+    // Terrarium / Accessory
+    terrariumVariantId: item.terrariumVariantId ?? 0,
     accessoryId: item.accessoryId ?? 0,
     accessoryQuantity: item.accessoryQuantity ?? 0,
 
-    // MAIN_ITEM
-    terrariumVariantId: item.terrariumVariantId ?? 0,
     terrariumVariantQuantity: item.terrariumVariantQuantity ?? 0,
   };
 
-  // đảm bảo đúng semantics một chút (không bắt buộc, chỉ để payload gọn hơn)
   switch (item.itemType) {
     case 'COMBO':
       return {
         ...base,
-        terrariumId: 0,
+        terrariumVariantId: 0,
         accessoryId: 0,
         accessoryQuantity: 0,
-        terrariumVariantId: 0,
         terrariumVariantQuantity: 0,
       };
     case 'BUNDLE_ACCESSORY':
+      // Không truyền terrariumId nữa, chỉ gắn theo variant + accessory
       return {
         ...base,
-        comboId: 0,
-        comboQuantity: 0,
-        terrariumVariantId: 0,
         terrariumVariantQuantity: 0,
       };
     case 'MAIN_ITEM':
       return {
         ...base,
-        comboId: 0,
-        comboQuantity: 0,
-        terrariumId: 0,
         accessoryId: 0,
         accessoryQuantity: 0,
       };
     case 'SINGLE':
       return {
         ...base,
-        comboId: 0,
-        comboQuantity: 0,
-        terrariumId: 0,
         terrariumVariantId: 0,
         terrariumVariantQuantity: 0,
       };
@@ -99,20 +100,14 @@ const normalizeItem = (item: CreateOrderItem) => {
 export const createOrder = async (
   payload: CreateOrderRequest
 ): Promise<{ orderId: number }> => {
-  // ✅ Chuẩn hoá payload theo BE mới
   const normalizedPayload = {
     voucherId: payload.voucherId ?? 0,
     deposit: payload.deposit ?? 0,
     addressId: payload.addressId ?? 0,
 
-    // BE mới: KHÔNG dùng comboId top-level; vẫn gửi nếu phía BE cũ còn nhận
-    comboId: payload.comboId ?? 0, // deprecated, giữ để không gây lỗi BE cũ
-
-    // FE tính & truyền
     totalAmountOld: payload.totalAmountOld ?? 0,
     totalAmountNew: payload.totalAmountNew ?? 0,
 
-    // Items (gồm cả COMBO)
     items: (payload.items || []).map(normalizeItem),
   };
 
@@ -134,7 +129,8 @@ export const createOrder = async (
   return { orderId };
 };
 
-// ---- VOUCHER ----
+// ============================ VOUCHER ========================= //
+
 export const validateVoucher = async (code: string): Promise<any> => {
   const res = await axios.get(`${BASE_URL}/Voucher/validate/${code}`, authHeader());
   return res.data;
@@ -142,17 +138,17 @@ export const validateVoucher = async (code: string): Promise<any> => {
 
 export const getVoucherByCode = async (code: string): Promise<Voucher | null> => {
   const res = await axios.get(`${BASE_URL}/Voucher/get-by-code/${code}`, authHeader());
-  return (res.data?.data ?? res.data ?? null) as Voucher | null;
+  return (pickData<Voucher | null>(res) as any) ?? null;
 };
 
 export const createVoucher = async (data: Omit<Voucher, 'voucherId'>): Promise<Voucher> => {
   const res = await axios.post(`${BASE_URL}/Voucher`, data, authHeader());
-  return (res.data?.data ?? res.data) as Voucher;
+  return pickData<Voucher>(res);
 };
 
 export const updateVoucher = async (id: number, data: Omit<Voucher, 'voucherId'>): Promise<Voucher> => {
   const res = await axios.put(`${BASE_URL}/Voucher/update-voucher/${id}`, data, authHeader());
-  return (res.data?.data ?? res.data) as Voucher;
+  return pickData<Voucher>(res);
 };
 
 export const deleteVoucher = async (id: number): Promise<any> => {
@@ -160,10 +156,13 @@ export const deleteVoucher = async (id: number): Promise<any> => {
   return res.data;
 };
 
-// ---- WALLET ----
+// ============================ WALLET ========================== //
+
 export const getWalletBalance = async (userId: number): Promise<number> => {
   const res = await axios.get(`${BASE_URL}/Wallet/balance?userId=${userId}`, authHeader());
-  return (res.data?.data ?? res.data ?? 0) as number;
+  const data = pickData<number | { balance: number }>(res);
+  if (typeof data === 'number') return data;
+  return (data as any)?.balance ?? 0;
 };
 
 export const useWalletForPayment = async (payload: {
@@ -175,7 +174,8 @@ export const useWalletForPayment = async (payload: {
   return res.data;
 };
 
-// ---- MoMo PAYMENT (redirect thẳng) ----
+// ============================ PAYMENT ========================= //
+
 /** Expect response: { payUrl: string; qrImageBase64?: string } */
 export const createMoMoPayment = async (payload: {
   orderId: number;
@@ -193,6 +193,8 @@ export const createMoMoPayment = async (payload: {
   }
   return { payUrl, qrImageBase64 };
 };
+
+// ============================ CANCEL ========================== //
 
 export const cancelOrder = async (
   orderId: number,
