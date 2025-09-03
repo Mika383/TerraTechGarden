@@ -1,3 +1,4 @@
+// src/pages/Customer/OrderDetail.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -100,7 +101,7 @@ const OrderDetail: React.FC = () => {
   const canCancel = !!(
     order &&
     (isPending(order.status) || isProcessing(order.status)) &&
-    isUnpaid(order.paymentStatus)
+    isUnpaid(order.paymentStatus ?? undefined) // ✅ tránh null
   );
 
   const payNow = async () => {
@@ -120,7 +121,7 @@ const OrderDetail: React.FC = () => {
 
   const reorder = () => {
     if (!order?.orderItems?.length) return;
-    
+
     // Transform order items to checkout format
     const payload = order.orderItems.map((it) => ({
       id: `oid_${it.orderItemId}`,
@@ -133,7 +134,7 @@ const OrderDetail: React.FC = () => {
       variantId: it.terrariumVariantId ?? undefined,
       comboId: it.comboId ?? undefined,
     }));
-    
+
     localStorage.setItem('checkoutItems', JSON.stringify(payload));
     toast.success('Đã đưa sản phẩm vào thanh toán.');
     navigate('/checkout');
@@ -196,10 +197,10 @@ const OrderDetail: React.FC = () => {
               {orderStatusToVi(order.status)}
             </span>
             <span
-              className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(order.paymentStatus)}`}
-              title={String(order.paymentStatus)}
+              className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(order.paymentStatus ?? undefined)}`} // ✅ tránh null
+              title={String(order.paymentStatus ?? '')} // ✅ tránh null
             >
-              {paymentStatusToVi(order.paymentStatus)}
+              {paymentStatusToVi(order.paymentStatus ?? undefined) /* ✅ tránh null */}
             </span>
           </div>
         </div>
@@ -228,7 +229,7 @@ const OrderDetail: React.FC = () => {
               Hủy đơn
             </button>
 
-            {isUnpaid(order.paymentStatus) && (
+            {isUnpaid(order.paymentStatus ?? undefined) && ( // ✅ tránh null
               <button
                 onClick={payNow}
                 className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
@@ -266,9 +267,9 @@ const OrderDetail: React.FC = () => {
 
             <div className="bg-white rounded-lg shadow border p-4">
               <div className="font-semibold mb-3">Sản phẩm</div>
-              
+
               {/* Sử dụng OrderItemsDisplay component mới */}
-               <OrderItemsDisplay
+              <OrderItemsDisplay
                 order={order}
                 showActions={isCompleted(order.status)}
                 onReviewItem={(it) => openReview(it)}

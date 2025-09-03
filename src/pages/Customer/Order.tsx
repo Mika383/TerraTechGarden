@@ -77,7 +77,8 @@ const Order: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // dùng kiểu an toàn trình duyệt thay vì NodeJS.Timeout
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // pagination
   const [page, setPage] = useState(1);
@@ -102,7 +103,7 @@ const Order: React.FC = () => {
     try {
       if (showLoading) setLoading(true);
       setIsRefreshing(true);
-      
+
       const data = await getOrdersByUser(userId);
       const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => {
         const ta = new Date(a.orderDate ?? '').getTime();
@@ -122,8 +123,8 @@ const Order: React.FC = () => {
   // Setup real-time polling
   useEffect(() => {
     load();
-    
-    // Poll every 30 seconds for real-time updates
+
+    // Poll every 10 seconds for real-time updates
     intervalRef.current = setInterval(() => {
       load(false); // Don't show loading spinner for background updates
     }, 10000);
@@ -263,19 +264,21 @@ const Order: React.FC = () => {
   };
 
   // —— Helpers (hiển thị nút) ——
-  const isCanceled = (s: string | number) => {
-    const v = String(s).toLowerCase();
-    return v === 'cancel' || v === 'cancle';
-  };
+
+// ✅ API mới gộp shipping vào status
   const isShipping = (o: Order) =>
-    String(o.status).toLowerCase() === 'shipping' ||
-    String(o.shippingStatus ?? '').toLowerCase() === 'shipping';
+    String(o.status ?? '').toLowerCase() === 'shipping';
+
   const isPaymentFailed = (o: Order) =>
     String(o.paymentStatus ?? '').toLowerCase() === 'failed';
 
   const canRate = (o: Order) => isCompleted(o.status);
   // nút pay: chỉ khi unpaid và KHÔNG bị hủy
-  const canPay = (o: Order) => isUnpaid(o.paymentStatus) && !isCanceled(o.status);
+  const isCanceled = (s: string | number) => {
+    const v = String(s).toLowerCase();
+    return v === 'cancel' || v === 'cancle' || v === 'canceled' || v === 'cancelled';
+  };
+  const canPay = (o: Order) => isUnpaid(o.paymentStatus ?? undefined) && !isCanceled(o.status);
   // nút cancel: pending/processing, chưa shipping, chưa canceled, và không phải payment failed
   const canCancel = (o: Order) => {
     const st = String(o.status).toLowerCase();
@@ -368,11 +371,11 @@ const Order: React.FC = () => {
                       </span>
                       <span
                         className={`px-2 py-0.5 rounded border text-xs ${paymentStatusChip(
-                          o.paymentStatus
+                          o.paymentStatus ?? undefined // ✅ tránh null
                         )}`}
-                        title={String(o.paymentStatus)}
+                        title={String(o.paymentStatus ?? '')} // ✅ tránh null
                       >
-                        {paymentStatusToVi(o.paymentStatus)}
+                        {paymentStatusToVi(o.paymentStatus ?? undefined) /* ✅ tránh null */}
                       </span>
                     </div>
                   </div>
@@ -564,11 +567,11 @@ const Order: React.FC = () => {
                 </label>
                 <select
                   className="w-full border rounded px-3 py-2"
-                  value={review.orderItemId ?? undefined}
+                  value={review.orderItemId ?? '' /* ✅ không để null */}
                   onChange={(e) =>
                     setReview((s) => ({
                       ...s,
-                      orderItemId: Number(e.target.value),
+                      orderItemId: e.target.value ? Number(e.target.value) : null, // '' -> null
                     }))
                   }
                 >

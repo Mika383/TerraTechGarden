@@ -473,15 +473,16 @@ const Checkout: React.FC = () => {
   const buildOrderItems = (): CreateOrderItemWithCombo[] => {
     const items: CreateOrderItemWithCombo[] = [];
 
-    // 1) Bundles → BUNDLE_ACCESSORY (accessory theo variant; terrariumId có thể 0)
+    // 1) Bundles → BUNDLE_ACCESSORY (accessory theo variant; terrariumId=0, terrariumVariantId từ mainItem của bundle)
     for (const b of bundlesAll) {
+      const bundleVariantId = b.mainItem.terrariumVariantId ?? 0; // Variant của bundle (mainItem)
       for (const e of b.bundleAccessories) {
         items.push({
           itemType: 'BUNDLE_ACCESSORY',
-          terrariumId: 0, // API mới: bundle gắn theo variant; để 0 là đúng kỳ vọng
+          terrariumId: 0, // Không truyền terrariumId nữa, chỉ variant
           accessoryId: e.accessoryId ?? 0,
           accessoryQuantity: e.totalCartQuantity ?? qtyOf(e),
-          terrariumVariantId: e.terrariumVariantId ?? 0,
+          terrariumVariantId: bundleVariantId,
           terrariumVariantQuantity: 0
         });
       }
