@@ -321,61 +321,70 @@ const OrderDetail: React.FC = () => {
   const singles = useMemo(() => items.filter((x) => x.itemType === 'SINGLE'), [items]);
 
   // Trong phần tính toán thanh toán
-const originalAmount = order?.originalAmount ?? 0;
+  const originalAmount = order?.originalAmount ?? 0;
 
-// Tính voucherDiscount dựa trên voucherUsed
-const voucherUsed = useMemo(() => {
-  if (!order?.voucherId) return undefined;
-  return vouchers.find((v) => v.voucherId === order.voucherId);
-}, [order?.voucherId, vouchers]);
+  // Tính voucherDiscount dựa trên voucherUsed
+  const voucherUsed = useMemo(() => {
+    if (!order?.voucherId) return undefined;
+    return vouchers.find((v) => v.voucherId === order.voucherId);
+  }, [order?.voucherId, vouchers]);
 
-const voucherDiscount = useMemo(() => {
-  if (!voucherUsed) return 0;
-  if (voucherUsed.discountPercent && voucherUsed.discountPercent > 0) {
-    // Tính giảm giá theo phần trăm
-    return (originalAmount * voucherUsed.discountPercent) / 100;
-  } else if (voucherUsed.discountAmount && voucherUsed.discountAmount > 0) {
-    // Sử dụng số tiền giảm cố định
-    return voucherUsed.discountAmount;
-  }
-  return 0;
-}, [voucherUsed, originalAmount]);
+  const voucherDiscount = useMemo(() => {
+    if (!voucherUsed) return 0;
+    if (voucherUsed.discountPercent && voucherUsed.discountPercent > 0) {
+      return (originalAmount * voucherUsed.discountPercent) / 100;
+    } else if (voucherUsed.discountAmount && voucherUsed.discountAmount > 0) {
+      return voucherUsed.discountAmount;
+    }
+    return 0;
+  }, [voucherUsed, originalAmount]);
 
-const totalAmount = order?.totalAmount ?? 0;
-const fullPaymentDiscount = Math.max(0, originalAmount - voucherDiscount - totalAmount);
-const deposit = order?.deposit ?? 0;
+  const totalAmount = order?.totalAmount ?? 0;
+  const fullPaymentDiscount = Math.max(0, originalAmount - voucherDiscount - totalAmount);
+  const deposit = order?.deposit ?? 0;
 
-// Logic tính codAmount (giữ nguyên như bạn yêu cầu)
-let codAmount;
-if (deposit === 0) {
-  // Người dùng chọn thanh toán toàn bộ bằng chuyển khoản, không cần COD
-  codAmount = 0;
-} else if (deposit > 0) {
-  // Người dùng chọn cọc, tính COD là phần còn lại
-  codAmount = Math.max(0, totalAmount - deposit);
-} else {
-  // Trường hợp deposit âm (không nên xảy ra, nhưng phòng thủ)
-  codAmount = totalAmount;
-}
-  
+  // COD = 0 nếu full, COD = phần còn lại nếu đặt cọc
+  let codAmount;
+  if (deposit === 0) codAmount = 0;
+  else if (deposit > 0) codAmount = Math.max(0, totalAmount - deposit);
+  else codAmount = totalAmount;
 
-  
+  // ✅ SỬA: luôn refetch đơn mới nhất trước khi tạo giao dịch, và tách logic cọc/full rõ ràng
   const onPay = async () => {
     try {
       if (!order) return;
-      const outstanding = Math.max(0, (order.totalAmount ?? 0) - (order.deposit ?? 0));
-      if (outstanding === 0) {
-        toast.info('Đơn đã thanh toán đủ.');
+
+      // Lấy đơn “fresh” từ server để tránh state cũ sau khi back từ MoMo
+      const fresh = await getOrderById(order.orderId);
+      if (!fresh) {
+        toast.error('Không lấy được thông tin đơn hàng mới nhất.');
         return;
       }
-      const voucherId = (order as any)?.voucherId ?? 0;
+
+      const total = Math.max(0, Number(fresh.totalAmount ?? 0));
+      const dep = Math.max(0, Number(fresh.deposit ?? 0));
+      const isDepositOrder = dep > 0;
+
+      // ĐƠN CỌC → gửi đúng TIỀN CỌC; ĐƠN FULL → gửi TỔNG TIỀN
+      const amountToPay = isDepositOrder ? dep : total;
+
+      if (!Number.isFinite(amountToPay) || amountToPay <= 0) {
+        toast.info('Không có số tiền cần thanh toán.');
+        return;
+      }
+
+      const voucherId = (fresh as any)?.voucherId ?? 0;
+
+      // console.log('[MoMo][OrderDetail] payload', { orderId: fresh.orderId, amountToPay, dep, total, isDepositOrder, voucherId });
+
       const { payUrl } = await createMoMoPayment({
-        orderId: order.orderId,
-        orderInfo: `Thanh toán đơn #${order.orderId}`,
-        finalAmount: outstanding,
+        orderId: fresh.orderId,
+        orderInfo: `Thanh toán đơn #${fresh.orderId}`,
+        finalAmount: amountToPay,
         voucherId,
-        payAll: (order.deposit ?? 0) === 0,
+        payAll: !isDepositOrder,
       } as any);
+
       window.location.href = payUrl;
     } catch (err) {
       console.error(err);
@@ -836,9 +845,9 @@ if (deposit === 0) {
                   )}
 
                   <div className="flex justify-between text-blue-700">
-                      <span>Đã đặt cọc</span>
-                      <span>-{money(deposit)}</span>
-                    </div>
+                    <span>Đã đặt cọc</span>
+                    <span>-{money(deposit)}</span>
+                  </div>
 
                   <hr />
 
@@ -847,7 +856,7 @@ if (deposit === 0) {
                     <span className="text-green-700">{money(totalAmount)}</span>
                   </div>
 
-                 <div className="flex justify-between text-red-600">
+                  <div className="flex justify-between text-red-600">
                     <span>Thanh toán khi nhận hàng</span>
                     <span>{money(codAmount)}</span>
                   </div>
