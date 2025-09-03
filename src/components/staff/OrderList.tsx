@@ -134,14 +134,47 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// Reject Confirmation Modal Component
+// Enhanced Reject Confirmation Modal Component
 const RejectConfirmModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (rejectReason: string, internalNote: string) => void;
   orderId: number;
   isLoading: boolean;
 }> = ({ isOpen, onClose, onConfirm, orderId, isLoading }) => {
+  const [rejectReason, setRejectReason] = useState('');
+  const [internalNote, setInternalNote] = useState('');
+  const [errors, setErrors] = useState<{rejectReason?: string; internalNote?: string}>({});
+
+  const handleSubmit = () => {
+    const newErrors: {rejectReason?: string; internalNote?: string} = {};
+    
+    if (!rejectReason.trim()) {
+      newErrors.rejectReason = 'Vui lòng nhập lý do từ chối';
+    }
+    
+    if (!internalNote.trim()) {
+      newErrors.internalNote = 'Vui lòng nhập ghi chú nội bộ';
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    
+    setErrors({});
+    onConfirm(rejectReason.trim(), internalNote.trim());
+  };
+
+  const handleClose = () => {
+    if (!isLoading) {
+      setRejectReason('');
+      setInternalNote('');
+      setErrors({});
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -150,7 +183,7 @@ const RejectConfirmModal: React.FC<{
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Xác nhận từ chối đơn hàng</h3>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isLoading}
             className="text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed"
           >
@@ -159,24 +192,77 @@ const RejectConfirmModal: React.FC<{
         </div>
         
         <div className="mb-6">
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-4">
             Bạn có chắc chắn muốn từ chối đơn hàng <span className="font-semibold">#{orderId}</span> không?
           </p>
-          <p className="text-sm text-red-600 mt-2">
+          
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="rejectReason" className="block text-sm font-medium text-gray-700 mb-1">
+                Lý do từ chối <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="rejectReason"
+                value={rejectReason}
+                onChange={(e) => {
+                  setRejectReason(e.target.value);
+                  if (errors.rejectReason) {
+                    setErrors(prev => ({...prev, rejectReason: undefined}));
+                  }
+                }}
+                disabled={isLoading}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed ${
+                  errors.rejectReason ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
+                rows={3}
+                placeholder="Nhập lý do từ chối đơn hàng..."
+              />
+              {errors.rejectReason && (
+                <p className="mt-1 text-sm text-red-600">{errors.rejectReason}</p>
+              )}
+            </div>
+            
+            <div>
+              <label htmlFor="internalNote" className="block text-sm font-medium text-gray-700 mb-1">
+                Ghi chú nội bộ <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="internalNote"
+                value={internalNote}
+                onChange={(e) => {
+                  setInternalNote(e.target.value);
+                  if (errors.internalNote) {
+                    setErrors(prev => ({...prev, internalNote: undefined}));
+                  }
+                }}
+                disabled={isLoading}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed ${
+                  errors.internalNote ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
+                rows={3}
+                placeholder="Nhập ghi chú nội bộ..."
+              />
+              {errors.internalNote && (
+                <p className="mt-1 text-sm text-red-600">{errors.internalNote}</p>
+              )}
+            </div>
+          </div>
+          
+          <p className="text-sm text-red-600 mt-4">
             Hành động này không thể hoàn tác.
           </p>
         </div>
         
         <div className="flex space-x-3 justify-end">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isLoading}
             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Hủy
           </button>
           <button
-            onClick={onConfirm}
+            onClick={handleSubmit}
             disabled={isLoading}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center"
           >
@@ -416,14 +502,57 @@ const OrderList: React.FC = () => {
     setShowRejectModal(true);
   };
 
-  const handleConfirmReject = async () => {
+  const handleConfirmReject = async (rejectReason: string, internalNote: string) => {
     if (!orderToReject) return;
 
     setRejectLoading(true);
-    await handleStatusUpdate(orderToReject, 'Pending', 'Rejected');
-    setRejectLoading(false);
-    setShowRejectModal(false);
-    setOrderToReject(null);
+    
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`https://terarium.shop/api/Order/${orderToReject}/reject`, {
+        method: 'PUT',
+        headers: headers,
+        body: JSON.stringify({
+          rejectReason,
+          internalNote
+        }),
+      });
+
+      if (response.status === 401) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Update the order status in state
+      setOrders(orders.map(order => 
+        order.orderId === orderToReject 
+          ? { ...order, status: 'Rejected' }
+          : order
+      ));
+      
+      toast.success('Đã từ chối đơn hàng thành công');
+      
+    } catch (error) {
+      console.error('Error rejecting order:', error);
+      toast.error('Không thể từ chối đơn hàng');
+    } finally {
+      setRejectLoading(false);
+      setShowRejectModal(false);
+      setOrderToReject(null);
+    }
   };
 
   const handleCloseRejectModal = () => {
@@ -763,7 +892,7 @@ const OrderList: React.FC = () => {
         </div>
       )}
 
-      {/* Reject Confirmation Modal */}
+      {/* Enhanced Reject Confirmation Modal */}
       <RejectConfirmModal
         isOpen={showRejectModal}
         onClose={handleCloseRejectModal}

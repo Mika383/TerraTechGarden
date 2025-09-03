@@ -8,26 +8,40 @@ interface OrderItem {
   comboId: number;
   accessoryId: number | null;
   terrariumVariantId: number | null;
+  terrariumId: number;
   accessoryQuantity: number;
   terrariumVariantQuantity: number;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
   itemType: string | null;
+  parentOrderItemId: number | null;
+  isFeedBack: boolean;
+  childItems: any[];
+  productName: string;
+  imageUrl: string;
 }
 
 interface Order {
   orderId: number;
   userId: number;
+  voucherId: number | null;
   addressId: number | null;
   totalAmount: number;
   deposit: number;
+  originalAmount: number;
   discountAmount: number | null;
   orderDate: string;
   status: string | null;
   paymentStatus: string;
   transactionId: string | null;
   paymentMethod: string;
+  isPayFull: boolean;
+  note: string;
+  refunds: Array<{
+    status: string;
+    reason: string;
+  }>;
   orderItems: OrderItem[];
 }
 
@@ -56,6 +70,116 @@ interface Combo {
   comboPrice: number;
   imageUrl: string;
 }
+
+// Reject Modal Component
+interface RejectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (rejectReason: string, internalNote: string) => void;
+  loading: boolean;
+}
+
+const RejectModal: React.FC<RejectModalProps> = ({ isOpen, onClose, onConfirm, loading }) => {
+  const [rejectReason, setRejectReason] = useState('');
+  const [internalNote, setInternalNote] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectReason.trim()) {
+      toast.error('Vui lòng nhập lý do từ chối');
+      return;
+    }
+    onConfirm(rejectReason.trim(), internalNote.trim());
+  };
+
+  const handleClose = () => {
+    if (!loading) {
+      setRejectReason('');
+      setInternalNote('');
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Từ chối đơn hàng</h3>
+            {!loading && (
+              <button
+                onClick={handleClose}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            )}
+          </div>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="rejectReason" className="block text-sm font-medium text-gray-700 mb-2">
+                Lý do từ chối <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="rejectReason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Nhập lý do từ chối đơn hàng..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                rows={3}
+                disabled={loading}
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="internalNote" className="block text-sm font-medium text-gray-700 mb-2">
+                Ghi chú nội bộ
+              </label>
+              <textarea
+                id="internalNote"
+                value={internalNote}
+                onChange={(e) => setInternalNote(e.target.value)}
+                placeholder="Ghi chú cho nhân viên (không bắt buộc)..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                rows={2}
+                disabled={loading}
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !rejectReason.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Đang xử lý...
+                  </>
+                ) : (
+                  'Từ chối đơn hàng'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Type guards
 const isTerrariumVariant = (item: TerrariumVariant | Accessory | Combo | null): item is TerrariumVariant => {
@@ -119,12 +243,12 @@ const getStatusColor = (status: string | null | undefined, type: 'order' | 'paym
   return 'text-gray-600 bg-gray-50 border-gray-200';
 };
 
-// Get next status for progression - UPDATED
+// Get next status for progression
 const getNextStatus = (currentStatus: string | null): string | null => {
   if (!currentStatus) return null;
   
   switch (currentStatus) {
-    case 'Pending': return 'Confirmed'; // Changed from 'Approved' to 'Confirmed'
+    case 'Pending': return 'Confirmed';
     case 'Confirmed': return 'Processing';
     case 'Processing': return 'Shipping';
     case 'Shipping': return 'Completed';
@@ -132,7 +256,7 @@ const getNextStatus = (currentStatus: string | null): string | null => {
   }
 };
 
-// Get button config for status updates - UPDATED
+// Get button config for status updates
 const getStatusButtonConfig = (status: string | null) => {
   if (!status) return null;
   
@@ -182,6 +306,7 @@ const OrderDetailStaff: React.FC = () => {
   const [itemsDetails, setItemsDetails] = useState<(TerrariumVariant | Accessory | Combo | null)[]>([]);
   const [updating, setUpdating] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
 
   const fetchOrder = async () => {
     try {
@@ -290,7 +415,7 @@ const OrderDetailStaff: React.FC = () => {
     }
   };
 
-  const handleRejectOrder = async () => {
+  const handleRejectOrder = async (rejectReason: string, internalNote: string) => {
     if (!order) return;
     
     setRejecting(true);
@@ -304,10 +429,15 @@ const OrderDetailStaff: React.FC = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`https://terarium.shop/api/Order/${id}/status`, {
+      const requestBody = {
+        rejectReason,
+        internalNote
+      };
+
+      const response = await fetch(`https://terarium.shop/api/Order/${id}/reject`, {
         method: 'PUT',
         headers: headers,
-        body: JSON.stringify('Rejected'),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.status === 401) {
@@ -315,11 +445,13 @@ const OrderDetailStaff: React.FC = () => {
         return;
       }
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
       }
 
       setOrder({ ...order, status: 'Rejected' });
-      toast.success('Đã từ chối đơn hàng');
+      setShowRejectModal(false);
+      toast.success('Đã từ chối đơn hàng thành công');
     } catch (err) {
       console.error('Error rejecting order:', err);
       toast.error('Không thể từ chối đơn hàng');
@@ -404,11 +536,13 @@ const OrderDetailStaff: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-sm">
             <div>
               <div>Tổng tiền: <b>{formatCurrency(order.totalAmount)}</b></div>
+              <div>Tiền gốc: <b>{formatCurrency(order.originalAmount)}</b></div>
               <div>Đặt cọc: <b>{formatCurrency(order.deposit)}</b></div>
             </div>
             <div>
               <div>Mã giao dịch: {order.transactionId || 'N/A'}</div>
-              <div>Phương thức: {order.paymentMethod || 'MoMo'}</div>
+              <div>Phương thức: {order.paymentMethod || 'N/A'}</div>
+              <div>Đã thanh toán đủ: {order.isPayFull ? 'Có' : 'Không'}</div>
             </div>
             <div className="flex gap-2 sm:justify-end">
               {buttonConfig && (
@@ -427,21 +561,51 @@ const OrderDetailStaff: React.FC = () => {
               )}
               {canReject && (
                 <button
-                  onClick={handleRejectOrder}
+                  onClick={() => setShowRejectModal(true)}
                   disabled={updating || rejecting}
                   className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-sm hover:shadow-md"
                 >
-                  {rejecting ? (
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                  ) : (
-                    <X className="w-4 h-4 mr-2" />
-                  )}
-                  {rejecting ? 'Đang từ chối...' : 'Từ chối đơn'}
+                  <X className="w-4 h-4 mr-2" />
+                  Từ chối đơn
                 </button>
               )}
             </div>
           </div>
         </div>
+
+        {/* Refund Information */}
+        {order.refunds && order.refunds.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <h3 className="font-semibold text-orange-800 mb-2">Thông tin hoàn tiền</h3>
+            {order.refunds.map((refund, index) => (
+              <div key={index} className="text-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium">Trạng thái:</span>
+                  <span className={`px-2 py-0.5 rounded text-xs ${
+                    refund.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                    refund.status === 'Approved' ? 'bg-green-100 text-green-800' :
+                    refund.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {refund.status === 'Pending' ? 'Chờ xử lý' :
+                     refund.status === 'Approved' ? 'Đã duyệt' :
+                     refund.status === 'Rejected' ? 'Đã từ chối' :
+                     refund.status}
+                  </span>
+                </div>
+                <div><span className="font-medium">Lý do:</span> {refund.reason}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Note */}
+        {order.note && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-semibold text-blue-800 mb-2">Ghi chú đơn hàng</h3>
+            <p className="text-sm text-blue-700">{order.note}</p>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg shadow border p-4">
           <div className="font-semibold mb-3">Sản phẩm</div>
@@ -464,7 +628,14 @@ const OrderDetailStaff: React.FC = () => {
                       <td className="p-2 border">{index + 1}</td>
                       <td className="p-2 border">
                         <div className="flex items-center gap-3">
-                          {itemDetail && (
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.productName || 'Product'}
+                              className="w-12 h-12 object-cover rounded border bg-white"
+                              onError={(e) => (e.currentTarget.src = '/TerraTechLogo.png')}
+                            />
+                          ) : itemDetail && (
                             <>
                               {isTerrariumVariant(itemDetail) && itemDetail.urlImage ? (
                                 <img
@@ -494,11 +665,21 @@ const OrderDetailStaff: React.FC = () => {
                                   className="w-12 h-12 object-cover rounded border bg-white"
                                 />
                               )}
-                              <span className="text-green-700 hover:underline">
-                                {isTerrariumVariant(itemDetail) ? itemDetail.variantName : itemDetail?.name || `Item #${item.orderItemId}`}
-                              </span>
                             </>
                           )}
+                          <div>
+                            <div className="text-green-700 hover:underline font-medium">
+                              {item.productName || (itemDetail ? (isTerrariumVariant(itemDetail) ? itemDetail.variantName : itemDetail?.name) : `Item #${item.orderItemId}`)}
+                            </div>
+                            {item.itemType && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {item.itemType === 'MAIN_ITEM' ? 'Sản phẩm chính' : 
+                                 item.itemType === 'ACCESSORY' ? 'Phụ kiện' :
+                                 item.itemType === 'COMBO' ? 'Combo' : 
+                                 item.itemType}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="p-2 border">{item.quantity}</td>
@@ -517,6 +698,14 @@ const OrderDetailStaff: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Reject Modal */}
+      <RejectModal
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        onConfirm={handleRejectOrder}
+        loading={rejecting}
+      />
     </div>
   );
 };
