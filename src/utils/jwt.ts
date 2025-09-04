@@ -32,3 +32,14 @@ export const getUserIdFromToken = (): number | null => {
   }
 };
 
+export const getUserNameFromToken = (): string | null => {
+  const token = localStorage.getItem("authToken");
+  if (!token) return null;
+  try {
+    const decoded: any = jwtDecode(token);
+    // Ưu tiên fullName, fallback unique_name
+    return decoded?.fullName || decoded?.unique_name || null;
+  } catch {
+    return null;
+  }
+};
