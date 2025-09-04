@@ -7,6 +7,7 @@ import {
   updateCartItem,
   deleteCartItem,
   changeCartItemVariant,
+  deleteCartItems,
 } from '@/api/cart';
 import {
   getTerrariumById,
@@ -419,15 +420,24 @@ const Cart: React.FC = () => {
     }
   };
   const removeBundle = async (b: CartBundle) => {
-    try {
-      const tasks = b.bundleAccessories.map((e) => deleteCartItem(e.cartItemId));
-      await Promise.all(tasks);
-      await load();
-      toast.success('Đã xoá bộ phụ kiện');
-    } catch {
-      toast.error('Xoá bộ phụ kiện thất bại');
-    }
-  };
+  try {
+    // gom ID: mainItem + toàn bộ bundleAccessories
+    const ids = [
+      b?.mainItem?.cartItemId,
+      ...(b?.bundleAccessories || []).map((e) => e.cartItemId),
+    ].filter(Boolean) as number[];
+
+    // xoá song song để nhanh
+    await deleteCartItems(ids);
+
+    // nạp lại giỏ hàng
+    await load();
+    toast.success('Đã xoá trọn bộ (main + phụ kiện)');
+  } catch {
+    toast.error('Xoá bộ thất bại');
+  }
+};
+
 
   // === Đổi variant ===
   const changeVariant = async (e: RawCartEntry, newVariantId: number) => {

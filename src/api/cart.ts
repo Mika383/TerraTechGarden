@@ -151,3 +151,11 @@ export const deleteAllCartItems = async () => {
   );
   return res.data;
 };
+export const deleteCartItems = async (itemIds: number[]) => {
+  if (!Array.isArray(itemIds) || !itemIds.length) return;
+  await Promise.all(
+    itemIds.map((id) =>
+      axios.delete(`${BASE_URL}/Cart/delete-items/${id}`, authHeader())
+    )
+  );
+};
