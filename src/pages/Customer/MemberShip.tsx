@@ -1,3 +1,4 @@
+// src/pages/MemberShip.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Empty, Badge, Row, Col, Typography, Divider, message, Modal, Space, Radio } from 'antd';
@@ -19,8 +20,9 @@ import {
   createMembershipMomoDirect,
   type CreateMomoDirectResponse
 } from '@/api/membership';
-import { getWalletBalance } from '@/api/wallet'; // Import từ wallet API
-import axios from 'axios';
+import { getWalletBalance } from '@/api/wallet';
+import api from '@/lib/axios/axiosInstance'; // ✅ dùng instance có interceptor
+import axios from 'axios'; // chỉ dùng fallback public
 
 const { Title, Paragraph, Text } = Typography;
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -39,18 +41,13 @@ const getUserIdFromToken = (): number | null => {
   }
 };
 
-/* API call for wallet membership purchase */
+/* API mua membership bằng ví (private → dùng api instance) */
 const purchaseMembershipWithWallet = async (userId: number, packageId: number): Promise<any> => {
-  const response = await axios.post(`${BASE_URL}/Membership/purchase`, {
+  const response = await api.post('/Membership/purchase', {
     userId,
     packageId,
     startDate: new Date().toISOString(),
-    paymentMethod: "Wallet"
-  }, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-      'Content-Type': 'application/json'
-    }
+    paymentMethod: 'Wallet',
   });
   return response.data;
 };
@@ -81,7 +78,7 @@ const FloatingElement: React.FC<{ children: React.ReactNode; delay?: number; cla
   </div>
 );
 
-/* Thank You Modal Component */
+/* Thank You Modal Component (giữ nguyên UI) */
 const ThankYouModal: React.FC<{
   visible: boolean;
   onClose: () => void;
@@ -109,7 +106,7 @@ const ThankYouModal: React.FC<{
       className="thank-you-modal"
     >
       <div className="text-center py-8">
-        {/* Confetti Animation */}
+        {/* Confetti */}
         {confettiAnimation && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
             {Array.from({ length: 20 }).map((_, i) => (
@@ -145,7 +142,7 @@ const ThankYouModal: React.FC<{
           </div>
         </div>
 
-        {/* Thank You Message */}
+        {/* Message */}
         <Title level={2} className="mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-emerald-600">
           🎉 Cảm Ơn Bạn Đã Ủng Hộ! 🎉
         </Title>
@@ -173,7 +170,7 @@ const ThankYouModal: React.FC<{
           </div>
         </div>
 
-        {/* Benefits Reminder */}
+        {/* Benefits */}
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 mb-6">
           <Title level={5} className="text-blue-700 mb-2">
             <GiftOutlined className="mr-2" />
@@ -195,14 +192,7 @@ const ThankYouModal: React.FC<{
           </div>
         </div>
 
-        {/* Thank You Note */}
-        <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-4 mb-6">
-          <Text className="text-gray-700 text-base leading-relaxed">
-            💚 Sự ủng hộ của bạn giúp chúng tôi tiếp tục phát triển và mang đến những trải nghiệm terrarium tuyệt vời hơn!
-          </Text>
-        </div>
-
-        {/* Action Buttons */}
+        {/* Actions */}
         <Space direction="vertical" className="w-full" size="middle">
           <Button
             type="primary"
@@ -213,7 +203,7 @@ const ThankYouModal: React.FC<{
             <RocketOutlined className="mr-2" />
             Bắt Đầu Trải Nghiệm Premium
           </Button>
-          
+
           <Button
             size="large"
             className="w-full h-10 border-green-300 text-green-600 hover:border-green-500 hover:text-green-700 rounded-lg transition-all duration-300"
@@ -416,7 +406,7 @@ const PlanCard: React.FC<PlanCardProps> = ({
         </Card>
       </div>
 
-      {/* Payment Method Selection Modal */}
+      {/* Modal chọn phương thức thanh toán */}
       <Modal
         title="Chọn phương thức thanh toán"
         open={paymentModalOpen}
@@ -546,39 +536,23 @@ const Membership: React.FC = () => {
   const userId = getUserIdFromToken();
   const isLoggedIn = !!userId;
 
-  // Function to refresh auth token
+  // (giữ lại nếu bạn vẫn muốn tươi claim ngay sau mua; interceptor đã lo hầu hết case)
   const refreshAuthToken = async (): Promise<boolean> => {
     try {
       const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        console.warn('No refresh token found');
-        return false;
-      }
-
-      const response = await axios.post(`${BASE_URL}/Users/refresh-token`, {
-        refreshToken: refreshToken
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.data && response.data.token) {
-        // Lưu token mới
+      if (!refreshToken) return false;
+      const response = await axios.post(`${BASE_URL}/Users/refresh-token`, { refreshToken }, { headers: { 'Content-Type': 'application/json' } });
+      if (response?.data?.token) {
         localStorage.setItem('authToken', response.data.token);
-        
-        // Nếu có refresh token mới thì cũng lưu
         if (response.data.refreshToken) {
           localStorage.setItem('refreshToken', response.data.refreshToken);
         }
-        
-        console.log('Token refreshed successfully');
+        // Phát sự kiện để ChatFab/Gate đồng bộ nếu bạn vẫn dùng flow này
+        window.dispatchEvent(new Event('tokenRefreshed'));
         return true;
       }
-      
       return false;
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
+    } catch {
       return false;
     }
   };
@@ -606,6 +580,7 @@ const Membership: React.FC = () => {
         setLoading(true);
         let response: any = await getMembershipPackages().catch(async (error: any) => {
           if (error?.response?.status === 401) {
+            // fallback public
             const fallback = await axios.get(`${BASE_URL}/MembershipPackage`);
             return fallback?.data?.data ?? fallback?.data ?? [];
           }
@@ -633,13 +608,14 @@ const Membership: React.FC = () => {
         setHasMembership(false);
         return;
       }
-
       try {
         setCheckingMembership(true);
         const memberships = await getUserMembership(userId);
         if (!alive) return;
-
-        setHasMembership(memberships.length > 0);
+        const active = memberships.length > 0;
+        setHasMembership(active);
+        // cache để Gate đọc lần đầu
+        localStorage.setItem('hasMembership', active ? '1' : '0');
       } catch (e: any) {
         console.error('Error checking membership:', e);
         if (alive) setHasMembership(false);
@@ -650,7 +626,14 @@ const Membership: React.FC = () => {
     return () => { alive = false; };
   }, [userId]);
 
-  // Re-check membership sau khi thanh toán
+  // Broadcast helper
+  const broadcastMembership = (has: boolean) => {
+    localStorage.setItem('hasMembership', has ? '1' : '0');
+    window.dispatchEvent(new CustomEvent('membershipChanged', { detail: { hasMembership: has } }));
+    window.dispatchEvent(new Event('tokenRefreshed')); // cho ChatFab re-identify ngay
+  };
+
+  // Re-check membership sau khi thanh toán MoMo
   const recheckMembership = async () => {
     if (!userId) return;
     try {
@@ -659,10 +642,7 @@ const Membership: React.FC = () => {
         setHasMembership(true);
         setPayModalOpen(false);
         setPaymentInfo(null);
-        
-        // Refresh token after successful MoMo payment
-        await refreshAuthToken();
-        
+        broadcastMembership(true); // ✅ Gate & ChatFab mở ngay
         message.success('Xác nhận thanh toán thành công!');
         // Refresh wallet balance
         try {
@@ -672,56 +652,52 @@ const Membership: React.FC = () => {
       } else {
         message.info('Chưa ghi nhận thanh toán. Vui lòng thử lại sau ít phút.');
       }
-    } catch (e) {
+    } catch {
       message.error('Không kiểm tra được trạng thái membership.');
     }
   };
 
-  // Mua gói với phương thức được chọn
+  // Mua gói (wallet/MoMo)
   const handlePurchase = async (planId: number, paymentMethod: 'wallet' | 'momo') => {
     if (!isLoggedIn) return navigate('/login');
     if (hasMembership !== false) return; // chỉ cho mua khi CHẮC CHẮN chưa có
 
-    // Find the plan to get its details for thank you modal
     const selectedPlan = plans.find(p => p.id === planId);
 
     try {
       setPurchasingId(planId);
 
       if (paymentMethod === 'wallet') {
-        // Thanh toán bằng ví
         const response = await purchaseMembershipWithWallet(userId as number, planId);
-        
+
         if (response.status === 201) {
-          // Update wallet balance first
+          // Cập nhật số dư ví (nếu server trả newBalance thì dùng luôn)
           if (response.data?.walletPaymentInfo?.newBalance !== undefined) {
             setWalletBalance(response.data.walletPaymentInfo.newBalance);
           } else {
-            // Fetch updated balance
             try {
               const newBalance = await getWalletBalance(userId as number);
               setWalletBalance(newBalance);
             } catch {}
           }
-          
-          // Update membership status
-          setHasMembership(true);
 
-          // Set plan details for thank you modal
+          // Cập nhật & broadcast membership
+          setHasMembership(true);
+          broadcastMembership(true); // ✅ Gate & ChatFab mở ngay
+
+          // Modal cảm ơn
           if (selectedPlan) {
-            setPurchasedPlan({
-              type: selectedPlan.type,
-              price: selectedPlan.price
-            });
+            setPurchasedPlan({ type: selectedPlan.type, price: selectedPlan.price });
           }
-            await refreshAuthToken();
-          // Show thank you modal
           setThankYouModalVisible(true);
+
+          // (tuỳ chọn) Làm tươi token để claim đồng bộ luôn
+          await refreshAuthToken();
         } else {
           message.error('Thanh toán thất bại, vui lòng thử lại.');
         }
       } else {
-        // Thanh toán MoMo (logic cũ)
+        // Thanh toán MoMo
         const nowIso = new Date().toISOString();
         const resp = await createMembershipMomoDirect({
           userId: userId as number,
@@ -736,10 +712,7 @@ const Membership: React.FC = () => {
 
         setPaymentInfo(resp);
         setPayModalOpen(true);
-
-        // Mở tab/thẻ mới đến MoMo
         window.open(resp.payUrl, '_blank', 'noopener,noreferrer');
-
         message.success('Đã tạo phiên thanh toán. Vui lòng hoàn tất trong ứng dụng MoMo hoặc quét QR.');
       }
     } catch (e: any) {
