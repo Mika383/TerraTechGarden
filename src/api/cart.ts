@@ -159,3 +159,13 @@ export const deleteCartItems = async (itemIds: number[]) => {
     )
   );
 };
+
+// Thêm vào src/api/cart.ts
+export const updateComboQuantity = async (comboId: number, newQuantity: number) => {
+  const res = await axios.post(
+    `${BASE_URL}/Cart/update-combo`,
+    { comboId, newQuantity },
+    authHeader()
+  );
+  return res.data;
+};
