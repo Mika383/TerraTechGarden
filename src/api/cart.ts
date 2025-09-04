@@ -160,12 +160,13 @@ export const deleteCartItems = async (itemIds: number[]) => {
   );
 };
 
-// Thêm vào src/api/cart.ts
+// Thay toàn bộ hàm updateComboQuantity cũ
 export const updateComboQuantity = async (comboId: number, newQuantity: number) => {
-  const res = await axios.post(
+  const res = await axios.put(
     `${BASE_URL}/Cart/update-combo`,
     { comboId, newQuantity },
     authHeader()
   );
   return res.data;
 };
+  

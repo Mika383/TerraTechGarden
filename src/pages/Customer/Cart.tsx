@@ -7,9 +7,8 @@ import {
   updateCartItem,
   deleteCartItem,
   changeCartItemVariant,
-  deleteCartItems, // vẫn giữ để dùng nơi khác nếu cần
-  // Nếu bạn đã thêm API update combo ở src/api/cart.ts thì có thể import thêm:
-  // updateComboQuantity,
+  updateComboQuantity,       // ✅ dùng cho ± combo
+  deleteAllCartItems,        // ✅ THÊM: xóa toàn bộ giỏ hàng
 } from '@/api/cart';
 import {
   getTerrariumById,
@@ -28,7 +27,6 @@ const keyOfBundle = (b: CartBundle) =>
   `b_${b.mainItem.terrariumVariantId ?? b.mainItem.terrariumId ?? 'x'}`;
 const keyOfCombo = (e: RawCartEntry) => `combo_${e.cartItemId}`;
 
-// Đơn giá ưu tiên item[0].price, fallback totalCartPrice/qty
 const unitPriceOf = (e: RawCartEntry) => {
   const explicit =
     Array.isArray(e.item) && e.item[0] && typeof e.item[0].price === 'number'
@@ -38,7 +36,6 @@ const unitPriceOf = (e: RawCartEntry) => {
   const qty = e.totalCartQuantity || 0;
   return qty > 0 ? (e.totalCartPrice || 0) / qty : 0;
 };
-// Số lượng ưu tiên item[0].quantity, fallback totalCartQuantity
 const qtyOf = (e: RawCartEntry) => {
   const q =
     Array.isArray(e.item) && e.item[0] && typeof e.item[0].quantity === 'number'
@@ -46,7 +43,6 @@ const qtyOf = (e: RawCartEntry) => {
       : e.totalCartQuantity;
   return Math.max(1, q || 1);
 };
-// Tổng qty của 1 bundle (chỉ tính phụ kiện)
 const calcBundleQty = (b: CartBundle) =>
   (b.bundleAccessories || []).reduce((sum, it) => sum + qtyOf(it), 0);
 
@@ -67,13 +63,19 @@ const Cart: React.FC = () => {
   const [terrariumThumb, setTerrariumThumb] = useState<Record<number, string>>({});
   const [accessoryName, setAccessoryName] = useState<Record<number, string>>({});
   const [accessoryThumb, setAccessoryThumb] = useState<Record<number, string>>({});
-  const [comboMeta, setComboMeta] = useState<Record<number, { name: string; image: string; items: any[] }>>({});
+  // meta combo + stock combo
+  const [comboMeta, setComboMeta] = useState<
+    Record<number, { name: string; image: string; items: any[]; stock?: number }>
+  >({});
   const [variantsMap, setVariantsMap] = useState<Record<number, any[]>>({});
   const [variantToTerrariumMap, setVariantToTerrariumMap] = useState<Record<number, number>>({});
 
-  // stock caches (nếu bạn cần hiện tồn)
+  // stock từng item
   const [variantStock, setVariantStock] = useState<VariantStock>({});
   const [accessoryStock, setAccessoryStock] = useState<AccessoryStock>({});
+
+  // trạng thái updating số lượng combo theo comboId
+  const [comboUpdating, setComboUpdating] = useState<Record<number, boolean>>({});
 
   const navigate = useNavigate();
 
@@ -91,7 +93,7 @@ const Cart: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
-  // ====== COMBO META (nếu có) ======
+  // ====== COMBO META (kèm tồn kho combo) ======
   useEffect(() => {
     const fetchComboMeta = async () => {
       if (!data) return;
@@ -144,7 +146,7 @@ const Cart: React.FC = () => {
             })
           );
           const items = itemDetails.map((r) => (r.status === 'fulfilled' ? r.value : null)).filter(Boolean) as any[];
-          return { comboId, name: comboData.name, image: comboData.imageUrl || FALLBACK_IMG, items };
+          return { comboId, name: comboData.name, image: comboData.imageUrl || FALLBACK_IMG, items, stock: comboData.stockQuantity };
         })
       );
 
@@ -169,7 +171,7 @@ const Cart: React.FC = () => {
     [data]
   );
 
-  // ✅ Luôn đẩy main variant (có giá) ra “Sản phẩm lẻ”, kể cả khi bundle có phụ kiện
+  // main variant của bundle -> đưa ra “Sản phẩm lẻ” nếu có giá
   const variantSinglesFromBundles = useMemo<RawCartEntry[]>(
     () =>
       (data?.bundleItems || [])
@@ -189,7 +191,7 @@ const Cart: React.FC = () => {
     [variantSinglesFromBundles, regularSingles]
   );
 
-  // ====== Map variant → terrarium & variants list & stock ======
+  // ====== Map variant → terrarium + danh sách variant + stock ======
   useEffect(() => {
     const run = async () => {
       const variantIds = new Set<number>();
@@ -233,9 +235,9 @@ const Cart: React.FC = () => {
               return { tid, list };
             })
           );
-          const add: Record<number, any[]> = {};
-          fetched.forEach((r) => { if (r.status === 'fulfilled') add[r.value.tid] = r.value.list || []; });
-          if (Object.keys(add).length) setVariantsMap((prev) => ({ ...prev, ...add }));
+            const add: Record<number, any[]> = {};
+            fetched.forEach((r) => { if (r.status === 'fulfilled') add[r.value.tid] = r.value.list || []; });
+            if (Object.keys(add).length) setVariantsMap((prev) => ({ ...prev, ...add }));
         }
 
         const needMeta = [...terrariumIds].filter((tid) => !terrariumName[tid] || !terrariumThumb[tid]);
@@ -265,7 +267,7 @@ const Cart: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, mergedSingles, variantsMap, terrariumName, terrariumThumb, variantToTerrariumMap]);
 
-  // ====== Terrarium meta (trường hợp có terrariumId trực tiếp) ======
+  // ====== Terrarium meta nếu có terrariumId trực tiếp ======
   useEffect(() => {
     const fetchTerrariumMeta = async () => {
       if (!data) return;
@@ -356,13 +358,36 @@ const Cart: React.FC = () => {
     setSelected((s) => ({ ...s, [k]: !s[k] }));
   };
 
-  // ====== +/- số lượng (single line) ======
+  // ====== Chọn tất cả / Bỏ chọn tất cả ======
+  const buildAllKeys = () => {
+    const entryKeys: string[] = [];
+    // singles (variant & accessory)
+    for (const e of mergedSingles) entryKeys.push(keyOfEntry(e));
+    // bundle accessories
+    for (const b of bundlesToShow) for (const e of b.bundleAccessories) entryKeys.push(keyOfEntry(e));
+    // combos
+    const comboKeys: string[] = [];
+    for (const e of comboItems) comboKeys.push(keyOfCombo(e));
+    return { entryKeys, comboKeys };
+  };
+
+  const selectAll = () => {
+    const { entryKeys, comboKeys } = buildAllKeys();
+    const map: Record<string, boolean> = {};
+    entryKeys.forEach((k) => (map[k] = true));
+    comboKeys.forEach((k) => (map[k] = true));
+    setSelected(map);
+  };
+
+  const deselectAll = () => setSelected({});
+
+  // ====== CẬP NHẬT SỐ LƯỢNG ======
   const inc = async (e: RawCartEntry) => {
     try {
       const next = qtyOf(e) + 1;
+      if (e.comboId) return incCombo(e);
       if (e.accessoryId) await updateCartItem(e.cartItemId, { accessoryQuantity: next });
       else if (e.terrariumVariantId) await updateCartItem(e.cartItemId, { variantQuantity: next });
-      // else if (e.comboId) await updateComboQuantity(e.comboId!, next);
       await load();
     } catch {
       toast.error('Không cập nhật được số lượng');
@@ -371,16 +396,53 @@ const Cart: React.FC = () => {
   const dec = async (e: RawCartEntry) => {
     try {
       const next = Math.max(1, qtyOf(e) - 1);
+      if (e.comboId) return decCombo(e);
       if (e.accessoryId) await updateCartItem(e.cartItemId, { accessoryQuantity: next });
       else if (e.terrariumVariantId) await updateCartItem(e.cartItemId, { variantQuantity: next });
-      // else if (e.comboId) await updateComboQuantity(e.comboId!, next);
       await load();
     } catch {
       toast.error('Không cập nhật được số lượng');
     }
   };
 
-  // ====== Xoá item/bundle ======
+  // ====== Combo ± số lượng qua /Cart/update-combo ======
+  const incCombo = async (e: RawCartEntry) => {
+    if (!e.comboId) return;
+    const comboId = e.comboId;
+    const current = qtyOf(e);
+    const max = comboMeta[comboId]?.stock ?? Infinity;
+    if (current >= max) {
+      toast.info('Đã đạt tối đa tồn kho combo');
+      return;
+    }
+    setComboUpdating((m) => ({ ...m, [comboId]: true }));
+    try {
+      await updateComboQuantity(comboId, current + 1);
+      await load();
+    } catch {
+      toast.error('Không cập nhật được số lượng combo');
+    } finally {
+      setComboUpdating((m) => ({ ...m, [comboId]: false }));
+    }
+  };
+
+  const decCombo = async (e: RawCartEntry) => {
+    if (!e.comboId) return;
+    const comboId = e.comboId;
+    const current = qtyOf(e);
+    const next = Math.max(1, current - 1);
+    setComboUpdating((m) => ({ ...m, [comboId]: true }));
+    try {
+      await updateComboQuantity(comboId, next);
+      await load();
+    } catch {
+      toast.error('Không cập nhật được số lượng combo');
+    } finally {
+      setComboUpdating((m) => ({ ...m, [comboId]: false }));
+    }
+  };
+
+  // ====== Xoá item / bundle / toàn bộ ======
   const removeEntry = async (e: RawCartEntry) => {
     try {
       await deleteCartItem(e.cartItemId);
@@ -391,51 +453,46 @@ const Cart: React.FC = () => {
     }
   };
 
-  // ✅ Sửa: xoá tuần tự & bỏ qua 404 để tránh “Xoá bộ thất bại” giả
   const removeBundle = async (b: CartBundle) => {
-    const ids = [
-      b?.mainItem?.cartItemId,
-      ...(b?.bundleAccessories || []).map((e) => e.cartItemId),
-    ].filter(Boolean) as number[];
+    // nếu BE đã hỗ trợ xoá theo main thì chỉ cần gọi 1 lần:
     try {
-      for (const id of ids) {
-        try {
-          await deleteCartItem(id);
-        } catch (err: any) {
-          // nếu BE đã xoá theo quan hệ và trả 404, coi như OK
-          if (!String(err?.response?.status || '').startsWith('4')) {
-            // lỗi khác 4xx thì ném tiếp
-            throw err;
+      await deleteCartItem(b.mainItem.cartItemId);
+      await load();
+      toast.success('Đã xoá trọn bộ');
+    } catch {
+      // fallback tuần tự (nếu BE chưa xoá theo quan hệ)
+      try {
+        const ids = [b.mainItem.cartItemId, ...b.bundleAccessories.map((e) => e.cartItemId)];
+        for (const id of ids) {
+          try {
+            await deleteCartItem(id);
+          } catch (err: any) {
+            if (!String(err?.response?.status || '').startsWith('4')) throw err;
           }
         }
+        await load();
+        toast.success('Đã xoá trọn bộ (fallback)');
+      } catch {
+        await load();
+        toast.error('Xoá bộ thất bại');
       }
-      await load();
-      toast.success('Đã xoá trọn bộ (main + phụ kiện)');
-    } catch {
-      // vẫn load lại để đồng bộ UI
-      await load();
-      toast.error('Xoá bộ thất bại');
     }
   };
 
-  // ====== Đổi variant ======
-  const changeVariant = async (e: RawCartEntry, newVariantId: number) => {
-    if (e.terrariumVariantId === newVariantId) return;
-    const cartItemId = e.cartItemId;
-    setVariantChanging((prev) => ({ ...prev, [cartItemId]: true }));
+  const removeAll = async () => {
+    if (!data) return;
+    if (!window.confirm('Xoá toàn bộ giỏ hàng?')) return;
     try {
-      await changeCartItemVariant(e.cartItemId, newVariantId, qtyOf(e));
+      await deleteAllCartItems();
       await load();
-      toast.success('Đã thay đổi phân loại hàng');
+      setSelected({});
+      toast.success('Đã xoá toàn bộ giỏ hàng');
     } catch {
-      toast.error('Không thể thay đổi phân loại');
-      await load();
-    } finally {
-      setVariantChanging((prev) => ({ ...prev, [cartItemId]: false }));
+      toast.error('Không thể xoá toàn bộ giỏ hàng');
     }
   };
 
-  // ====== Helper: tổng tiền hiển thị của 1 entry ======
+  // ====== Helper: tổng tiền hiển thị ======
   const displayTotalOf = (e: RawCartEntry) => {
     const unit = unitPriceOf(e);
     const q = qtyOf(e);
@@ -444,7 +501,7 @@ const Cart: React.FC = () => {
     return Math.max(fromItem, unit * q, server);
   };
 
-  // ====== Checkout data & subtotal (dùng displayTotal) ======
+  // ====== Checkout data & subtotal ======
   const selectedItemsForCheckout = useMemo(() => {
     const list: {
       id: string;
@@ -538,19 +595,67 @@ const Cart: React.FC = () => {
     return <div className="min-h-[60vh] flex items-center justify-center text-gray-600">Đang tải giỏ hàng...</div>;
   }
 
+  const cartIsEmpty = !bundlesToShow.length && !mergedSingles.length && !comboItems.length;
+              // ====== Đổi variant ======
+              const changeVariant = async (e: RawCartEntry, newVariantId: number) => {
+                if (e.terrariumVariantId === newVariantId) return;
+                const cartItemId = e.cartItemId;
+                setVariantChanging((prev) => ({ ...prev, [cartItemId]: true }));
+                try {
+                  await changeCartItemVariant(e.cartItemId, newVariantId, qtyOf(e));
+                  await load();
+                  toast.success('Đã thay đổi phân loại hàng');
+                } catch {
+                  toast.error('Không thể thay đổi phân loại');
+                  await load();
+                } finally {
+                  setVariantChanging((prev) => ({ ...prev, [cartItemId]: false }));
+                }
+              };
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-8 md:py-10">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT */}
         <div className="lg:col-span-2 space-y-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-green-700">Giỏ hàng</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl md:text-3xl font-bold text-green-700">Giỏ hàng</h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAll}
+                disabled={cartIsEmpty}
+                className="px-3 py-1 text-sm rounded border bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Chọn tất cả
+              </button>
+              <button
+                onClick={deselectAll}
+                disabled={cartIsEmpty && Object.keys(selected).length === 0}
+                className="px-3 py-1 text-sm rounded border bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Bỏ chọn tất cả
+              </button>
+              <button
+                onClick={removeAll}
+                disabled={cartIsEmpty}
+                className="px-3 py-1 text-sm rounded border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+              >
+                Xoá toàn bộ
+              </button>
+            </div>
+          </div>
 
           {/* (Nếu có) COMBO */}
           {comboItems.map((e) => {
             const comboKey = keyOfCombo(e);
             const isOpen = comboOpen[comboKey] ?? false;
             const checked = isComboChecked(e);
-            const comboData = comboMeta[e.comboId!];
+            const comboId = e.comboId!;
+            const comboData = comboMeta[comboId];
+            const stock = comboData?.stock;
+            const qty = qtyOf(e);
+            const isUpdating = !!comboUpdating[comboId];
+            const disableInc = typeof stock === 'number' ? qty >= stock : false;
+
 
             return (
               <div key={e.cartItemId} className="bg-white rounded-lg shadow border">
@@ -559,29 +664,50 @@ const Cart: React.FC = () => {
                     <input type="checkbox" checked={checked} onChange={() => toggleCombo(e)} className="w-5 h-5 accent-green-600" />
                     <img
                       src={comboData?.image || FALLBACK_IMG}
-                      alt={comboData?.name || `Combo #${e.comboId}`}
+                      alt={comboData?.name || `Combo #${comboId}`}
                       className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
-                      onClick={() => navigate(`/combo/${e.comboId}`)}
+                      onClick={() => navigate(`/combo/${comboId}`)}
                       onError={(ev) => ((ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG)}
                     />
                     <div className="font-semibold">
-                      <button onClick={() => navigate(`/combo/${e.comboId}`)} className="text-green-700 hover:underline">
-                        {comboData?.name || `Combo #${e.comboId}`}
+                      <button onClick={() => navigate(`/combo/${comboId}`)} className="text-green-700 hover:underline">
+                        {comboData?.name || `Combo #${comboId}`}
                       </button>
-                      <div className="text-sm text-gray-500">Combo gồm {comboData?.items?.length || 0} sản phẩm</div>
+                      <div className="text-xs text-gray-500">
+                        Combo gồm {comboData?.items?.length || 0} sản phẩm
+                        {typeof stock === 'number' && (
+                          <span className="ml-2 inline-block px-2 py-[2px] rounded bg-gray-100 text-gray-700">Tồn: {stock}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <button onClick={() => navigate(`/combo/${e.comboId}`)} className="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded border border-purple-200 hover:bg-purple-100">
+                    <button
+                      onClick={() => navigate(`/combo/${comboId}`)}
+                      className="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded border border-purple-200 hover:bg-purple-100"
+                    >
                       Xem combo
                     </button>
 
-                    {/* (tuỳ BE) nút ± combo có thể bật sau */}
-                    <div className="flex items-center border rounded overflow-hidden opacity-60 cursor-not-allowed">
-                      <button className="px-3 py-1 bg-gray-100">−</button>
-                      <span className="px-4 py-1 min-w-[50px] text-center">{qtyOf(e)}</span>
-                      <button className="px-3 py-1 bg-gray-100">+</button>
+                    {/* ± COMBO */}
+                    <div className={`flex items-center border rounded overflow-hidden ${isUpdating ? 'opacity-60' : ''}`}>
+                      <button
+                        onClick={() => decCombo(e)}
+                        disabled={isUpdating || qty <= 1}
+                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                      >
+                        −
+                      </button>
+                      <span className="px-4 py-1 min-w-[50px] text-center">{qty}</span>
+                      <button
+                        onClick={() => incCombo(e)}
+                        disabled={isUpdating || disableInc}
+                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                        title={disableInc ? 'Đã đạt tối đa tồn kho' : ''}
+                      >
+                        +
+                      </button>
                     </div>
 
                     <div className="text-sm text-purple-700 font-semibold">{currency(displayTotalOf(e))}</div>
@@ -845,7 +971,7 @@ const Cart: React.FC = () => {
             </div>
           )}
 
-          {!bundlesToShow.length && !mergedSingles.length && !comboItems.length && (
+          {cartIsEmpty && (
             <div className="bg-white rounded-lg shadow p-8 text-center">
               <div className="text-gray-400 text-lg mb-2">Giỏ hàng trống</div>
               <button onClick={() => navigate('/')} className="text-green-600 hover:underline">Tiếp tục mua sắm</button>

@@ -1,105 +1,133 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AccessoryCard from './AccessoryCard';
-import { getAllAccessories, getAccessoryImagesByAccessoryId, getAllAccessoryCategories } from '@/api/accessory';
-import { Accessory, AccessoryCategory } from '@/types/accessory';
+import { getAllAccessories } from '@/api/accessory';
+import axios from 'axios';
 
-interface AccessoryGridProps {
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const PAGE_SIZE = 9;
+
+type Accessory = {
+  accessoryId: number;
+  name: string;
+  description?: string;
+  categoryId?: number;
+  price: number;
+  accessoryImages?: { imageUrl: string }[];
+};
+
+interface Props {
   searchQuery: string;
-  selectedType: string | null;
-  sortCriteria: string;
-  sortOrder: 'ASC' | 'DESC';
   page: number;
   setPage: React.Dispatch<React.SetStateAction<number>>;
 }
 
-const AccessoryGrid: React.FC<AccessoryGridProps> = ({
-  searchQuery,
-  selectedType,
-  sortCriteria,
-  sortOrder,
-  page,
-  setPage,
-}) => {
-  const [accessories, setAccessories] = useState<Accessory[]>([]);
-  const [categories, setCategories] = useState<AccessoryCategory[]>([]);
+const authHeaders = () => {
+  const token = localStorage.getItem('authToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const AccessoryGrid: React.FC<Props> = ({ searchQuery, page, setPage }) => {
+  const [items, setItems] = useState<Accessory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false); // true khi đang search theo tên
 
   useEffect(() => {
-    const fetchData = async () => {
+    let ignore = false;
+
+    (async () => {
       try {
-        const [accessoryRes, categoryRes] = await Promise.all([
-          getAllAccessories(page),
-          getAllAccessoryCategories(),
-        ]);
+        setLoading(true);
+        const keyword = searchQuery?.trim();
 
-        const enriched = await Promise.all(
-          (accessoryRes || []).map(async (item) => {
-            if (item.accessoryImages?.length > 0) return item;
-            const images = await getAccessoryImagesByAccessoryId(item.accessoryId);
-            return { ...item, accessoryImages: images || [] };
-          })
-        );
-
-        setAccessories(enriched);
-        setCategories(categoryRes || []);
-      } catch (err) {
-        console.error('Error fetching accessories or categories:', err);
+        if (keyword) {
+          // SEARCH BY NAME (không paging BE)
+          setIsSearchMode(true);
+          const name = encodeURIComponent(keyword);
+          const res = await axios.get(`${BASE_URL}/Accessory/get-by-name/${name}`, {
+            headers: authHeaders(),
+          });
+          const data: any[] = res?.data?.data ?? res?.data ?? [];
+          if (!ignore) {
+            setItems(Array.isArray(data) ? data : []);
+            setPage(1); // reset khi đổi nguồn dữ liệu
+          }
+        } else {
+          // GET ALL (paging BE)
+          setIsSearchMode(false);
+          const list = await getAllAccessories(page, PAGE_SIZE, true);
+          if (!ignore) setItems(Array.isArray(list) ? list : []);
+        }
+      } catch (e) {
+        if (!ignore) setItems([]);
+        console.error('Load accessories failed', e);
+      } finally {
+        if (!ignore) setLoading(false);
       }
-    };
+    })();
 
-    fetchData();
-  }, [page]);
+    return () => { ignore = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, page]);
 
-  const filtered = accessories
-    .filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter((a) => (selectedType ? a.status?.toLowerCase() === selectedType.toLowerCase() : true));
+  // Khi search (không có paging BE) → tự cắt trang ở FE
+  const paged = useMemo(() => {
+    if (!isSearchMode) return items; // paging do BE trả sẵn
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, page, isSearchMode]);
 
-  const sorted = [...filtered]
-    .sort((a, b) => {
-      let comparison = 0;
-      if (sortCriteria === 'rating') comparison = 0;
-      else if (sortCriteria === 'purchases') comparison = 0;
-      else if (sortCriteria === 'price') comparison = a.price - b.price;
-      return sortOrder === 'ASC' ? comparison : -comparison;
-    })
-    .slice(0, 9); // Giới hạn tối đa 9 sản phẩm
-
-  const getCategoryName = (categoryId: number): string =>
-    categories.find((cat) => cat.categoryId === categoryId)?.categoryName || 'Không rõ';
+  // Tính “có trang tiếp không”
+  const canNext = useMemo(() => {
+    if (isSearchMode) return page * PAGE_SIZE < items.length;
+    return items.length === PAGE_SIZE; // BE: nếu trả < PAGE_SIZE coi như hết
+  }, [items, page, isSearchMode]);
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
-        {sorted.map((item) => (
-          <AccessoryCard
-            key={item.accessoryId}
-            id={item.accessoryId.toString()}
-            name={item.name}
-            description={item.description}
-            categoryName={getCategoryName(item.categoryId)}
-            price={item.price}
-            image={item.accessoryImages?.[0]?.imageUrl || '/TerraTechLogo.png'}
-            page={page}
-          />
-        ))}
-      </div>
+      {loading && <div className="py-8 text-center text-gray-500">Đang tải...</div>}
 
-      <div className="flex justify-center mt-6 space-x-3 md:space-x-4">
-        <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={page === 1}
-          className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
-        >
-          Trang trước
-        </button>
-        <span className="px-3 md:px-4 py-2 text-sm md:text-base font-roboto">Trang {page}</span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={sorted.length < 9}
-          className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
-        >
-          Trang tiếp
-        </button>
-      </div>
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+            {paged.map((a) => (
+              <AccessoryCard
+                key={a.accessoryId}
+                id={String(a.accessoryId)}
+                name={a.name}
+                description={a.description ?? ''}
+                categoryName={String(a.categoryId ?? '')}
+                price={a.price}
+                image={a.accessoryImages?.[0]?.imageUrl || '/TerraTechLogo.png'}
+                page={page}
+              />
+            ))}
+          </div>
+
+          <div className="flex justify-center mt-6 space-x-3 md:space-x-4">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
+            >
+              Trang trước
+            </button>
+            <span className="px-3 md:px-4 py-2 text-sm md:text-base font-roboto">
+              Trang {page}
+            </span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!canNext}
+              className="px-3 md:px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 text-sm md:text-base font-roboto"
+            >
+              Trang tiếp
+            </button>
+          </div>
+
+          {!paged.length && !loading && (
+            <div className="py-8 text-center text-gray-500">Không có phụ kiện để hiển thị</div>
+          )}
+        </>
+      )}
     </>
   );
 };
