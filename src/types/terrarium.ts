@@ -9,11 +9,24 @@ export interface TerrariumImage {
 /**
  * Phụ kiện cấu hình theo từng biến thể (mới theo BE)
  * - Được trả về trong field `terrariumVariantAccessories` của mỗi `TerrariumVariant`
+ * - API mới trả thêm nhiều thuộc tính chi tiết phụ kiện (name, description, price, stockQuantity, size, quantitative)
  */
 export interface TerrariumVariantAccessory {
   terrariumVariantAccessoryId?: number;
   terrariumVariantId?: number;
+
+  /** Khoá chính phụ kiện */
   accessoryId: number;
+
+  /** Các field chi tiết phụ kiện (theo BE mới) */
+  accessoryName?: string;
+  accessoryDescription?: string;
+  accessoryPrice?: number;
+  accessoryStockQuantity?: number;
+  accessorySize?: string;
+  accessoryQuantitative?: string;
+
+  /** Số lượng phụ kiện cần cho 1 đơn vị variant */
   quantity: number;
 }
 
@@ -27,7 +40,7 @@ export interface TerrariumVariant {
   createdAt: string | null;
   updatedAt: string | null;
 
-  /** MỚI: danh sách phụ kiện thuộc về biến thể */
+  /** Danh sách phụ kiện thuộc về biến thể (đủ thông tin để hiển thị & check tồn kho) */
   terrariumVariantAccessories?: TerrariumVariantAccessory[];
 }
 
@@ -78,7 +91,7 @@ export interface Terrarium {
   maxPrice: number;
   stock: number;
   status: string;
-
+  generatedByAI?: boolean; 
   environmentId: number;
   shapeId: number;
   tankMethodId: number;
@@ -112,7 +125,6 @@ export interface Terrarium {
    BỔ SUNG CHO LUỒNG AI & LAYOUT
    ======================= */
 
-/** Yêu cầu gọi AI generate */
 export interface AutoGenerateRequest {
   environmentId: number;
   shapeId: number;
@@ -120,7 +132,6 @@ export interface AutoGenerateRequest {
   accessoryId?: number; // optional nếu BE hỗ trợ
 }
 
-/** Kết quả AI trả về (nguồn để hiển thị & tạo terrarium) */
 export interface GeneratedTerrarium {
   environmentId: number;
   shapeId: number;
@@ -136,7 +147,6 @@ export interface GeneratedTerrarium {
   accessoryNames?: string[]; // BE có thể trả, FE không gửi khi tạo
 }
 
-/** Payload tạo terrarium bằng AI — THEO SCHEMA YÊU CẦU */
 export interface AddTerrariumByAIRequest {
   environmentId: number;
   shapeId: number;
@@ -165,3 +175,30 @@ export interface CreateLayoutRequest {
 export interface CreatedLayout {
   layoutId: number;
 }
+
+/* =======================
+   TIỆN ÍCH: TÍNH SỐ LƯỢNG MUA TỐI ĐA
+   ======================= */
+/**
+ * Tính số lượng variant tối đa có thể mua, xét đồng thời:
+ *  - stock của variant (`stockQuantity`)
+ *  - stock của từng phụ kiện: floor(accessoryStockQuantity / quantity yêu cầu)
+ * Kết quả là min của tất cả các giới hạn.
+ */
+export const computeMaxPurchasable = (variant: TerrariumVariant | null | undefined): number => {
+  if (!variant) return 0;
+  const variantLimit = Math.max(0, Number(variant.stockQuantity || 0));
+
+  const accessories = variant.terrariumVariantAccessories ?? [];
+  if (!accessories.length) return variantLimit;
+
+  const accessoryLimit = accessories.reduce((min, acc) => {
+    const needPerUnit = Math.max(0, Number(acc.quantity || 0));
+    if (needPerUnit === 0) return min; // không giới hạn bởi phụ kiện này
+    const inStock = Math.max(0, Number(acc.accessoryStockQuantity || 0));
+    const canMake = Math.floor(inStock / needPerUnit);
+    return Math.min(min, canMake);
+  }, Number.POSITIVE_INFINITY);
+
+  return Math.max(0, Math.min(variantLimit, accessoryLimit));
+};
