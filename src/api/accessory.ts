@@ -13,11 +13,13 @@ export const getAllAccessories = async (
       'Pagination.PageNumber': pageNumber,
       'Pagination.PageSize': pageSize,
       'Pagination.IsPagingEnabled': isPagingEnabled,
+      'IncludeProperties': 'AccessoryImages', // ✅ thêm param
     },
   });
 
   return res.data?.data?.results || [];
 };
+
 
 export const getAccessoryById = async (
   id: number
