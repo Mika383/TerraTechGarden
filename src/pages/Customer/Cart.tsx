@@ -1,5 +1,5 @@
 // src/pages/Customer/Cart.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -49,6 +49,81 @@ const calcBundleQty = (b: CartBundle) =>
 type VariantStock = Record<number, number>;
 type AccessoryStock = Record<number, number>;
 
+// ===========================
+// Custom Confirm Modal (headless Tailwind)
+// ===========================
+type ConfirmKind = 'single' | 'bundle' | 'all';
+type ConfirmState =
+  | { open: false }
+  | {
+      open: true;
+      kind: ConfirmKind;
+      title: string;
+      message?: string;
+      // payload cho xoá single/bundle
+      entry?: RawCartEntry;
+      bundle?: CartBundle;
+    };
+
+const ConfirmModal: React.FC<{
+  state: ConfirmState;
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmText?: string;
+  cancelText?: string;
+}> = ({ state, onCancel, onConfirm, confirmText = 'Xác nhận', cancelText = 'Huỷ' }) => {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // ESC để đóng
+  useEffect(() => {
+    if (!state.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [state.open, onCancel]);
+
+  if (!state.open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        className="relative z-[1001] w-full max-w-md rounded-lg bg-white shadow-xl border p-5"
+      >
+        <h3 className="text-lg font-semibold text-gray-900">{state.title}</h3>
+        {state.message && <p className="mt-2 text-gray-600">{state.message}</p>}
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded border bg-gray-50 hover:bg-gray-100"
+          >
+            {cancelText}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ===========================
+// PAGE
+// ===========================
 const Cart: React.FC = () => {
   const [data, setData] = useState<CartResponseNew | null>(null);
 
@@ -76,6 +151,9 @@ const Cart: React.FC = () => {
 
   // trạng thái updating số lượng combo theo comboId
   const [comboUpdating, setComboUpdating] = useState<Record<number, boolean>>({});
+
+  // ===== Confirm modal state =====
+  const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
 
   const navigate = useNavigate();
 
@@ -442,8 +520,8 @@ const Cart: React.FC = () => {
     }
   };
 
-  // ====== Xoá item / bundle / toàn bộ ======
-  const removeEntry = async (e: RawCartEntry) => {
+  // ====== Xoá item / bundle / toàn bộ (thực thi) ======
+  const _removeEntryNoConfirm = async (e: RawCartEntry) => {
     try {
       await deleteCartItem(e.cartItemId);
       await load();
@@ -453,7 +531,7 @@ const Cart: React.FC = () => {
     }
   };
 
-  const removeBundle = async (b: CartBundle) => {
+  const _removeBundleNoConfirm = async (b: CartBundle) => {
     // nếu BE đã hỗ trợ xoá theo main thì chỉ cần gọi 1 lần:
     try {
       await deleteCartItem(b.mainItem.cartItemId);
@@ -479,9 +557,7 @@ const Cart: React.FC = () => {
     }
   };
 
-  const removeAll = async () => {
-    if (!data) return;
-    if (!window.confirm('Xoá toàn bộ giỏ hàng?')) return;
+  const _removeAllNoConfirm = async () => {
     try {
       await deleteAllCartItems();
       await load();
@@ -489,6 +565,61 @@ const Cart: React.FC = () => {
       toast.success('Đã xoá toàn bộ giỏ hàng');
     } catch {
       toast.error('Không thể xoá toàn bộ giỏ hàng');
+    }
+  };
+
+  // ====== Trigger modal xác nhận ======
+  const askRemoveEntry = (e: RawCartEntry) => {
+    const name =
+      e.accessoryId
+        ? (accessoryName[e.accessoryId] || e.item?.[0]?.productName || `Phụ kiện #${e.accessoryId}`)
+        : e.terrariumVariantId
+        ? (terrariumName[variantToTerrariumMap[e.terrariumVariantId] || 0] || 'Sản phẩm')
+        : 'Sản phẩm';
+    setConfirm({
+      open: true,
+      kind: 'single',
+      title: 'Xác nhận xoá sản phẩm?',
+      message: `Bạn có chắc muốn xoá "${name}" khỏi giỏ hàng?`,
+      entry: e,
+    });
+  };
+
+  const askRemoveBundle = (b: CartBundle) => {
+    const mainVariantId = b?.mainItem?.terrariumVariantId || 0;
+    const tidFromMain = mainVariantId ? variantToTerrariumMap[mainVariantId] : 0;
+    const name = tidFromMain ? (terrariumName[tidFromMain] || `Bộ terrarium #${tidFromMain}`) : 'Bộ phụ kiện theo biến thể';
+    setConfirm({
+      open: true,
+      kind: 'bundle',
+      title: 'Xác nhận xoá trọn bộ?',
+      message: `Thao tác này sẽ xoá toàn bộ phụ kiện của "${name}".`,
+      bundle: b,
+    });
+  };
+
+  const askRemoveAll = () => {
+    setConfirm({
+      open: true,
+      kind: 'all',
+      title: 'Xoá toàn bộ giỏ hàng?',
+      message: 'Tất cả sản phẩm trong giỏ sẽ bị xoá và không thể hoàn tác.',
+    });
+  };
+
+  // ====== Điều khiển modal ======
+  const closeConfirm = () => setConfirm({ open: false });
+
+  const confirmProceed = async () => {
+    if (!confirm.open) return;
+    const kind = confirm.kind;
+    closeConfirm();
+    if (kind === 'single' && confirm.entry) {
+      await _removeEntryNoConfirm(confirm.entry);
+    } else if (kind === 'bundle' && confirm.bundle) {
+      await _removeBundleNoConfirm(confirm.bundle);
+    } else if (kind === 'all') {
+      await _removeAllNoConfirm();
     }
   };
 
@@ -596,24 +727,29 @@ const Cart: React.FC = () => {
   }
 
   const cartIsEmpty = !bundlesToShow.length && !mergedSingles.length && !comboItems.length;
-              // ====== Đổi variant ======
-              const changeVariant = async (e: RawCartEntry, newVariantId: number) => {
-                if (e.terrariumVariantId === newVariantId) return;
-                const cartItemId = e.cartItemId;
-                setVariantChanging((prev) => ({ ...prev, [cartItemId]: true }));
-                try {
-                  await changeCartItemVariant(e.cartItemId, newVariantId, qtyOf(e));
-                  await load();
-                  toast.success('Đã thay đổi phân loại hàng');
-                } catch {
-                  toast.error('Không thể thay đổi phân loại');
-                  await load();
-                } finally {
-                  setVariantChanging((prev) => ({ ...prev, [cartItemId]: false }));
-                }
-              };
+
+  // ====== Đổi variant ======
+  const changeVariant = async (e: RawCartEntry, newVariantId: number) => {
+    if (e.terrariumVariantId === newVariantId) return;
+    const cartItemId = e.cartItemId;
+    setVariantChanging((prev) => ({ ...prev, [cartItemId]: true }));
+    try {
+      await changeCartItemVariant(e.cartItemId, newVariantId, qtyOf(e));
+      await load();
+      toast.success('Đã thay đổi phân loại hàng');
+    } catch {
+      toast.error('Không thể thay đổi phân loại');
+      await load();
+    } finally {
+      setVariantChanging((prev) => ({ ...prev, [cartItemId]: false }));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-8 md:py-10">
+      {/* Modal xác nhận */}
+      <ConfirmModal state={confirm} onCancel={closeConfirm} onConfirm={confirmProceed} confirmText="Xoá" cancelText="Huỷ" />
+
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT */}
         <div className="lg:col-span-2 space-y-4">
@@ -635,7 +771,7 @@ const Cart: React.FC = () => {
                 Bỏ chọn tất cả
               </button>
               <button
-                onClick={removeAll}
+                onClick={askRemoveAll} // ✅ dùng modal thay vì window.confirm
                 disabled={cartIsEmpty}
                 className="px-3 py-1 text-sm rounded border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50"
               >
@@ -655,7 +791,6 @@ const Cart: React.FC = () => {
             const qty = qtyOf(e);
             const isUpdating = !!comboUpdating[comboId];
             const disableInc = typeof stock === 'number' ? qty >= stock : false;
-
 
             return (
               <div key={e.cartItemId} className="bg-white rounded-lg shadow border">
@@ -714,7 +849,18 @@ const Cart: React.FC = () => {
                     <button onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))} className="text-gray-600 hover:text-gray-800 text-sm">
                       {isOpen ? 'Thu gọn' : 'Mở rộng'}
                     </button>
-                    <button onClick={() => removeEntry(e)} className="text-red-600 hover:underline text-sm">
+                    <button
+                      onClick={() =>
+                        setConfirm({
+                          open: true,
+                          kind: 'single',
+                          title: 'Xác nhận xoá combo?',
+                          message: `Bạn có chắc muốn xoá "${comboData?.name || `Combo #${comboId}`}" khỏi giỏ hàng?`,
+                          entry: e,
+                        })
+                      }
+                      className="text-red-600 hover:underline text-sm"
+                    >
                       Xoá combo
                     </button>
                   </div>
@@ -806,7 +952,12 @@ const Cart: React.FC = () => {
                     <button onClick={() => setBundleOpen((m) => ({ ...m, [bundleId]: !isOpen }))} className="text-gray-600 hover:text-gray-800 text-sm">
                       {isOpen ? 'Thu gọn' : 'Mở rộng'}
                     </button>
-                    <button onClick={() => removeBundle(b)} className="text-red-600 hover:underline text-sm">Xoá bộ</button>
+                    <button
+                      onClick={() => askRemoveBundle(b)} // ✅ mở modal xác nhận xoá bundle
+                      className="text-red-600 hover:underline text-sm"
+                    >
+                      Xoá bộ
+                    </button>
                   </div>
                 </div>
 
@@ -841,7 +992,20 @@ const Cart: React.FC = () => {
                             <button onClick={() => inc(e)} className="px-3 py-1 bg-gray-100 hover:bg-gray-200">+</button>
                           </div>
                           <div className="w-32 text-right font-semibold text-gray-800">{currency(displayTotalOf(e))}</div>
-                          <button onClick={() => removeEntry(e)} className="text-red-600 hover:underline text-sm">Xoá</button>
+                          <button
+                            onClick={() =>
+                              setConfirm({
+                                open: true,
+                                kind: 'single',
+                                title: 'Xác nhận xoá sản phẩm?',
+                                message: `Bạn có chắc muốn xoá "${aName}" khỏi giỏ hàng?`,
+                                entry: e,
+                              })
+                            }
+                            className="text-red-600 hover:underline text-sm"
+                          >
+                            Xoá
+                          </button>
                         </div>
                       );
                     })}
@@ -955,7 +1119,11 @@ const Cart: React.FC = () => {
 
                       <div className="w-32 text-right">
                         <div className="font-semibold text-gray-800">{currency(displayTotalOf(e))}</div>
-                        <button onClick={() => removeEntry(e)} className="text-red-600 hover:underline text-sm mt-1 disabled:opacity-50" disabled={isChangingVariant}>
+                        <button
+                          onClick={() => askRemoveEntry(e)} // ✅ modal xác nhận xoá single
+                          className="text-red-600 hover:underline text-sm mt-1 disabled:opacity-50"
+                          disabled={isChangingVariant}
+                        >
                           Xoá
                         </button>
                         {e.accessoryId && (

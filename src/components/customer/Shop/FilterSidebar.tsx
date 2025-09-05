@@ -71,9 +71,9 @@ const FilterSidebar: React.FC<Props> = ({
     <aside className="w-full bg-white p-4 rounded-lg shadow-md font-roboto">
       <h2 className="text-lg md:text-xl font-semibold text-green-700 mb-4">Bộ lọc</h2>
 
-      <Select label="Môi trường (Environment)" value={environmentId} onChange={setEnvironmentId} options={envs} />
-      <Select label="Hình dạng bể (Shape)" value={shapeId} onChange={setShapeId} options={shapes} />
-      <Select label="Phương pháp bể (Tank Method)" value={tankMethodId} onChange={setTankMethodId} options={methods} />
+      <Select label="Môi trường " value={environmentId} onChange={setEnvironmentId} options={envs} />
+      <Select label="Hình dạng bể " value={shapeId} onChange={setShapeId} options={shapes} />
+      <Select label="Loại bể " value={tankMethodId} onChange={setTankMethodId} options={methods} />
 
       <button
         onClick={onClear}

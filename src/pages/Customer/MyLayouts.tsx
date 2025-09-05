@@ -28,13 +28,11 @@ import {
 
 import { getMyLayouts, deleteLayout } from '@/api/layout';
 import type { LayoutSummary } from '@/types/layout';
-import { getTerrariumById, getVariantsByTerrariumId } from '@/api/terrarium';
-import type { TerrariumVariant } from '@/types/terrarium';
+import { getTerrariumById } from '@/api/terrarium';
 import api from '@/lib/axios/axiosInstance';
 import MembershipGate from '@/components/common/MembershipGate';
-
-// 🔄 FE-only smart polling hook
 import useAutoRefetch from '@/hooks/useAutoRefetch';
+import { toast } from 'react-toastify';
 
 // ===== Helpers =====
 type LayoutRow = LayoutSummary & {
@@ -89,6 +87,44 @@ const statusClass = (s?: string) => {
   }
 };
 
+// =============== Custom Confirm Modal (headless Tailwind) ===============
+type ConfirmKind = 'delete' | 'submit';
+type ConfirmState =
+  | { open: false }
+  | { open: true; kind: ConfirmKind; title: string; message?: string; layoutId?: number };
+
+const ConfirmModal: React.FC<{
+  state: ConfirmState;
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmText?: string;
+  cancelText?: string;
+}> = ({ state, onCancel, onConfirm, confirmText = 'Xác nhận', cancelText = 'Huỷ' }) => {
+  const escClose = (e: KeyboardEvent) => e.key === 'Escape' && onCancel();
+  useEffect(() => {
+    if (!state.open) return;
+    window.addEventListener('keydown', escClose);
+    return () => window.removeEventListener('keydown', escClose);
+  }, [state.open]);
+
+  if (!state.open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div role="dialog" aria-modal="true" className="relative z-[1001] w-full max-w-md rounded-lg bg-white shadow-xl border p-5">
+        <h3 className="text-lg font-semibold text-gray-900">{state.title}</h3>
+        {state.message && <p className="mt-2 text-gray-600">{state.message}</p>}
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button onClick={onCancel} className="px-4 py-2 rounded border bg-gray-50 hover:bg-gray-100"> {cancelText} </button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">{confirmText}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+// =======================================================================
+
 const MyLayoutsPage: React.FC = () => {
   const navigate = useNavigate();
   const [rows, setRows] = useState<LayoutRow[]>([]);
@@ -97,7 +133,6 @@ const MyLayoutsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [submittingId, setSubmittingId] = useState<number | null>(null);
-  const [preorderingId, setPreorderingId] = useState<number | null>(null);
 
   // 🔄 Pagination state (5/trang)
   const PAGE_SIZE = 5;
@@ -110,6 +145,9 @@ const MyLayoutsPage: React.FC = () => {
   const cardsRef  = useRef<Array<HTMLDivElement | null>>([]);
 
   const userId = Number(localStorage.getItem('userId') || 0);
+
+  // Confirm modal state
+  const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
 
   const load = async () => {
     if (!userId) {
@@ -160,9 +198,9 @@ const MyLayoutsPage: React.FC = () => {
   // ▶️ Load lần đầu
   useEffect(() => { load(); }, []); // eslint-disable-line
 
-  // 🔔 FE-only auto refetch mỗi 10s, pause khi tab ẩn, refetch khi focus/online
+  // 🔔 FE-only auto refetch đổi sang 30s, pause khi tab ẩn, refetch khi focus/online
   useAutoRefetch(load, {
-    interval: 10000,
+    interval: 30000,
     onFocus: true,
     onReconnect: true,
     whenHidden: 'pause'
@@ -233,87 +271,60 @@ const MyLayoutsPage: React.FC = () => {
     rejected: rows.filter(x => norm(x.status) === 'rejected').length,
   }), [rows]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa layout này?')) return;
-    try {
-      await deleteLayout(id);
-      setRows(prev => prev.filter(x => x.layoutId !== id));
-      const gsap: any = (window as any).gsap;
-      if (gsap) gsap.to(`.layout-row-${id}`, { opacity: 0, x: -100, duration: 0.5, ease: 'power2.in' });
-      alert('Đã xóa layout thành công!');
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Xoá thất bại. Vui lòng thử lại.');
-    }
+  // === Actions with Confirm Modal ===
+  const requestDelete = (layoutId: number, layoutName: string) => {
+    setConfirm({
+      open: true,
+      kind: 'delete',
+      title: 'Xác nhận xoá layout?',
+      message: `Bạn có chắc muốn xoá "${layoutName}"? Thao tác không thể hoàn tác.`,
+      layoutId
+    });
   };
 
-  // ===== Gửi yêu cầu định giá (Draft -> Pending) =====
-  const handleSubmitPricing = async (layoutId: number) => {
-    const userId = Number(localStorage.getItem('userId') || 0);
-    if (!userId) { alert('Bạn chưa đăng nhập.'); return; }
-    if (!confirm('Gửi yêu cầu định giá cho layout này?')) return;
-
-    try {
-      setSubmittingId(layoutId);
-      await api.put(`/TerrariumLayout/${layoutId}/submit`, null, { params: { userId } });
-      setRows(prev => prev.map(r => (r.layoutId === layoutId ? { ...r, status: 'Pending' } : r)));
-      alert('Đã gửi yêu cầu định giá. Layout chuyển sang trạng thái "Đang chờ duyệt".');
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Gửi yêu cầu thất bại. Vui lòng thử lại.');
-    } finally {
-      setSubmittingId(null);
-    }
+  const requestSubmitPricing = (layoutId: number, layoutName: string) => {
+    setConfirm({
+      open: true,
+      kind: 'submit',
+      title: 'Gửi yêu cầu định giá?',
+      message: `Gửi yêu cầu định giá cho "${layoutName}" và chuyển sang trạng thái "Đang chờ duyệt"?`,
+      layoutId
+    });
   };
 
-  // ===== PRE-ORDER =====
-  const handlePreorder = async (layout: LayoutRow) => {
-    if (norm(layout.status) !== 'approved') {
-      alert('Layout chưa được duyệt để đặt trước.');
-      return;
-    }
+  const closeConfirm = () => setConfirm({ open: false });
 
-    try {
-      setPreorderingId(layout.layoutId);
+  const confirmProceed = async () => {
+    if (!confirm.open || !confirm.layoutId) return;
+    const id = confirm.layoutId;
+    const kind = confirm.kind;
+    closeConfirm();
 
-      const variants: TerrariumVariant[] = await getVariantsByTerrariumId(layout.terrariumId);
-      if (!variants || variants.length === 0) {
-        alert('Terrarium này chưa có phân loại sản phẩm.');
-        navigate(`/terrarium/${layout.terrariumId}`);
-        return;
+    if (kind === 'delete') {
+      try {
+        await deleteLayout(id);
+        setRows(prev => prev.filter(x => x.layoutId !== id));
+        const gsap: any = (window as any).gsap;
+        if (gsap) gsap.to(`.layout-row-${id}`, { opacity: 0, x: -100, duration: 0.5, ease: 'power2.in' });
+        toast.success('Đã xoá layout.');
+      } catch (e: any) {
+        console.error(e);
+        toast.error(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Xoá thất bại. Vui lòng thử lại.');
       }
-      if (variants.length > 1) {
-        alert('Terrarium có nhiều phân loại. Vui lòng chọn phân loại trước khi đặt.');
-        navigate(`/terrarium/${layout.terrariumId}`);
-        return;
+    } else if (kind === 'submit') {
+      const uid = Number(localStorage.getItem('userId') || 0);
+      if (!uid) { toast.info('Bạn chưa đăng nhập.'); return; }
+      try {
+        setSubmittingId(id);
+        await api.put(`/TerrariumLayout/${id}/submit`, null, { params: { userId: uid } });
+        setRows(prev => prev.map(r => (r.layoutId === id ? { ...r, status: 'Pending' } : r)));
+        toast.success('Đã gửi yêu cầu định giá. Layout chuyển sang "Đang chờ duyệt".');
+      } catch (e: any) {
+        console.error(e);
+        toast.error(e?.response?.status === 401 ? 'Hết phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Gửi yêu cầu thất bại. Vui lòng thử lại.');
+      } finally {
+        setSubmittingId(null);
       }
-
-      const v = variants[0];
-      const name = layout.terrariumName || `Terrarium #${layout.terrariumId}`;
-      const image = layout.terrariumImage || v.urlImage || '';
-      const price = typeof (v as any)?.price === 'number' ? (v as any).price : 0;
-
-      const item = {
-        id: `pre_${layout.layoutId}_${v.terrariumVariantId}`,
-        name,
-        price,
-        image,
-        quantity: 1,
-        selected: true,
-        variantId: v.terrariumVariantId,
-        accessoryId: null,
-        comboId: null
-      };
-
-      localStorage.removeItem('cartItems');
-      localStorage.setItem('checkoutItems', JSON.stringify([item]));
-
-      navigate('/checkout');
-    } catch (e) {
-      console.error('Preorder error:', e);
-      alert('Không thể tạo pre-order. Vui lòng thử lại sau.');
-    } finally {
-      setPreorderingId(null);
     }
   };
 
@@ -352,6 +363,15 @@ const MyLayoutsPage: React.FC = () => {
 
   return (
     <MembershipGate message="Bạn cần là thành viên để xem và quản lý Layout của mình.">
+      {/* Confirm Modal */}
+      <ConfirmModal
+        state={confirm}
+        onCancel={closeConfirm}
+        onConfirm={confirmProceed}
+        confirmText={confirm.open && confirm.kind === 'submit' ? 'Gửi' : 'Xoá'}
+        cancelText="Huỷ"
+      />
+
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
@@ -363,7 +383,7 @@ const MyLayoutsPage: React.FC = () => {
               <p className="text-slate-600 text-lg max-w-2xl mx-auto">
                 Quản lý và theo dõi các layout terrarium bạn đã tạo với giao diện hiện đại
               </p>
-              <p className="text-xs text-slate-400 mt-2">Trang tự động cập nhật mỗi 10 giây (FE-only)</p>
+              <p className="text-xs text-slate-400 mt-2">Trang tự động cập nhật mỗi 30 giây (FE-only)</p>
             </div>
 
             {/* Search and Filter */}
@@ -486,7 +506,6 @@ const MyLayoutsPage: React.FC = () => {
                 <div className="divide-y divide-slate-100">
                   {pagedRows.map((layout, index) => {
                     const isDraft = norm(layout.status) === 'draft';
-                    const isApproved = norm(layout.status) === 'approved';
                     return (
                       <div
                         key={layout.layoutId}
@@ -558,24 +577,12 @@ const MyLayoutsPage: React.FC = () => {
 
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 ml-6">
-                            {/* Pre-order khi đã duyệt */}
-                            <button
-                              onClick={() => handlePreorder(layout)}
-                              disabled={!isApproved || preorderingId === layout.layoutId}
-                              className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all duration-300
-                                ${isApproved
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                }`}
-                              title={isApproved ? 'Đặt trước (Pre-order)' : 'Chỉ khả dụng khi layout đã duyệt'}
-                            >
-                              {preorderingId === layout.layoutId ? 'Đang xử lý...' : 'Pre-order'}
-                            </button>
+                            {/* (ĐÃ LOẠI BỎ Pre-order theo yêu cầu) */}
 
                             {/* Nút gửi yêu cầu định giá khi Draft */}
-                            {norm(layout.status) === 'draft' && (
+                            {isDraft && (
                               <button
-                                onClick={() => handleSubmitPricing(layout.layoutId)}
+                                onClick={() => requestSubmitPricing(layout.layoutId, layout.layoutName)}
                                 disabled={submittingId === layout.layoutId}
                                 className="p-3 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-xl transition-all duration-300 group-hover:scale-105 font-medium"
                                 title="Gửi yêu cầu định giá"
@@ -585,7 +592,7 @@ const MyLayoutsPage: React.FC = () => {
                             )}
 
                             <button
-                              onClick={() => handleDelete(layout.layoutId)}
+                              onClick={() => requestDelete(layout.layoutId, layout.layoutName)}
                               className="p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-all duration-300 group-hover:scale-105"
                               title="Xoá"
                             >

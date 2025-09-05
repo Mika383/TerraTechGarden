@@ -37,38 +37,6 @@ const CustomerDashboard: React.FC = () => {
       {/* Địa chỉ */}
       <AddressSection />
 
-      {/* Đơn hàng */}
-      <h2 className="text-2xl font-bold mb-4 mt-8">Đơn Mua</h2>
-      {loadingOrders ? (
-        <div className="flex justify-center py-6">
-          <Spin />
-        </div>
-      ) : orders.length > 0 ? (
-        orders.map((order, index) => {
-          const firstItem = order.orderItems?.[0];
-          return (
-            <OrderItem
-              key={index}
-              name={
-                firstItem?.accessoryId
-                  ? `Phụ kiện #${firstItem.accessoryId}`
-                  : firstItem?.terrariumVariantId
-                  ? `Terrarium variant #${firstItem.terrariumVariantId}`
-                  : 'Sản phẩm'
-              }
-              price={firstItem?.totalPrice || 0}
-              image={'/default.jpg'} // TODO: Có API lấy ảnh sản phẩm thì thay vào đây
-              date={order.orderDate}
-              status={String(order.status)}
-            />
-          );
-        })
-      ) : (
-        <p className="text-gray-500">Bạn chưa có đơn hàng nào.</p>
-      )}
-
-      {/* Review - TODO: load từ API nếu có */}
-      <ReviewSection reviews={[]} />
     </div>
   );
 };

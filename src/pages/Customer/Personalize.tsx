@@ -49,9 +49,9 @@ interface TankMethodDto {
 const API_BASE = 'https://terarium.shop/api';
 
 // Demo images (giữ cảm giác UI, bạn có thể thay bằng assets thực tế)
-const forestImg = '/assets/image/1.jpg';
-const desertImg = '/assets/image/2.jpg';
-const aquaticImg = '/assets/image/3.jpg';
+const IMG_BEGINNER = '/beginer.webp';     // lưu ý tên file: "beginer"
+const IMG_INTERMEDIATE = '/average.webp';
+const IMG_ADVANCED = '/hard.webp';
 
 // ===== Helpers =====
 function decodeJwtPayload(token?: string | null): Record<string, any> | null {
@@ -251,40 +251,40 @@ const Personalize: React.FC = () => {
           prefs.agreeToProvideInfo === true || 'Vui lòng đồng ý để tiếp tục',
       },
       {
-        key: 'exp',
-        title: 'Trải nghiệm của bạn với terrarium?',
-        render: (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {([
-              { key: 'beginner', label: 'Mới bắt đầu', img: forestImg },
-              { key: 'intermediate', label: 'Trung bình', img: desertImg },
-              { key: 'advanced', label: 'Nâng cao', img: aquaticImg },
-            ] as const).map((opt) => (
-              <div
-                key={opt.key}
-                className={`p-4 border-2 rounded-lg cursor-pointer transition duration-300 transform hover:scale-105 ${
-                  prefs.experienceLevel === opt.key
-                    ? 'border-green-700 bg-green-100'
-                    : 'border-green-300 hover:border-green-700'
-                }`}
-                onClick={() =>
-                  setPrefs((p) => ({ ...p, experienceLevel: opt.key }))
-                }
-              >
-                <img
-                  src={opt.img}
-                  alt={opt.label}
-                  className="w-full h-40 object-cover rounded-md mb-4"
-                />
-                <h3 className="text-xl font-semibold text-center text-green-900">
-                  {opt.label}
-                </h3>
-              </div>
-            ))}
-          </div>
-        ),
-        validate: () => !!prefs.experienceLevel || 'Vui lòng chọn 1 tùy chọn',
-      },
+          key: 'exp',
+          title: 'Trải nghiệm của bạn với terrarium?',
+          render: (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {([
+                { key: 'beginner',     label: 'Người mới', img: IMG_BEGINNER },
+                { key: 'intermediate', label: 'Đã sở hữu bể',  img: IMG_INTERMEDIATE },
+                { key: 'advanced',     label: 'Nâng cao',    img: IMG_ADVANCED },
+              ] as const).map((opt) => (
+                <div
+                  key={opt.key}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition duration-300 transform hover:scale-105 ${
+                    prefs.experienceLevel === opt.key
+                      ? 'border-green-700 bg-green-100'
+                      : 'border-green-300 hover:border-green-700'
+                  }`}
+                  onClick={() => setPrefs((p) => ({ ...p, experienceLevel: opt.key }))}
+                >
+                  <img
+                    src={opt.img}
+                    alt={opt.label}
+                    className="w-full h-40 object-cover rounded-md mb-4"
+                    loading="lazy"
+                  />
+                  <h3 className="text-xl font-semibold text-center text-green-900">
+                    {opt.label}
+                  </h3>
+                </div>
+              ))}
+            </div>
+          ),
+          validate: () => !!prefs.experienceLevel || 'Vui lòng chọn 1 tùy chọn',
+        },
+
       {
         key: 'purpose',
         title: 'Mục đích chính của bạn?',
