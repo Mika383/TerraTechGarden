@@ -2,9 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { notification } from 'antd';
-import Step1BasicInfo from './Step1BasicInfo';
+import Step1TankSelection from './Step1TankSelection';
 import Step4Accessories from './Step4Accessories';
+import Step1BasicInfo from './Step1BasicInfo';
 import Step3Review from './Step3Review';
+
+interface TankImage {
+  id: number;
+  url: string;
+  alt?: string;
+}
+
+interface Tank {
+  accessoryId: number;
+  name: string;
+  size: string;
+  description: string;
+  price: number;
+  stockQuantity: number;
+  categoryId: number;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
+  accessoryImages: TankImage[];
+}
+
+interface SelectedTank {
+  accessoryId: number;
+  tank: Tank;
+}
 
 interface Accessory {
   accessoryId: number;
@@ -34,8 +60,9 @@ interface VariantData {
   urlImage: string;
   stockQuantity: number;
   imageFile: File | null;
+  selectedTank: SelectedTank | null;
   accessories: SelectedAccessory[];
-  laborCost: number; // Tiền công, calculated as price - accessoriesTotal
+  laborCost: number;
 }
 
 const EditVariantPage: React.FC = () => {
@@ -55,25 +82,28 @@ const EditVariantPage: React.FC = () => {
     urlImage: '',
     stockQuantity: 0,
     imageFile: null,
+    selectedTank: null,
     accessories: [],
     laborCost: 0
   });
 
-  // Tính tổng giá accessories
-  const calculateAccessoriesTotal = () => {
-    return variantData.accessories.reduce((sum, acc) => sum + (acc.accessory.price * acc.quantity), 0);
+  // Tính tổng giá tank + accessories
+  const calculateTankAndAccessoriesTotal = () => {
+    const tankPrice = variantData.selectedTank?.tank.price || 0;
+    const accessoriesTotal = variantData.accessories.reduce((sum, acc) => sum + (acc.accessory.price * acc.quantity), 0);
+    return tankPrice + accessoriesTotal;
   };
 
   // Tính tổng giá cuối cùng
   const calculateTotalPrice = () => {
-    return calculateAccessoriesTotal() + variantData.laborCost;
+    return calculateTankAndAccessoriesTotal() + variantData.laborCost;
   };
 
-  // Cập nhật giá tự động khi accessories hoặc laborCost thay đổi
+  // Cập nhật giá tự động khi tank, accessories hoặc laborCost thay đổi
   useEffect(() => {
     const newPrice = calculateTotalPrice();
     setVariantData(prev => ({ ...prev, price: newPrice }));
-  }, [variantData.accessories, variantData.laborCost]);
+  }, [variantData.selectedTank, variantData.accessories, variantData.laborCost]);
 
   const getAuthToken = (): string | null => {
     return localStorage.getItem('authToken') || 
@@ -98,7 +128,6 @@ const EditVariantPage: React.FC = () => {
 
   useEffect(() => {
     if (checkAuth()) {
-      // Fetch accessories first, then variant data
       initializeData();
     }
   }, [terrariumId, variantId]);
@@ -148,7 +177,17 @@ const EditVariantPage: React.FC = () => {
     }
   };
 
-  const fetchVariantData = async (accessories?: Accessory[]) => {
+  // Helper function để kiểm tra xem accessory có phải là tank không
+  const isTankAccessory = (accessory: Accessory): boolean => {
+    // Kiểm tra theo categoryId (giả sử categoryId = 6 là tank)
+    if (accessory.categoryId === 6) return true;
+    
+    // Kiểm tra theo tên
+    const name = accessory.name.toLowerCase();
+    return name.includes('tank') || name.includes('bể') || name.includes('thủy tinh');
+  };
+
+  const fetchVariantData = async () => {
     try {
       const token = getAuthToken();
       
@@ -176,54 +215,72 @@ const EditVariantPage: React.FC = () => {
       if (result.status === 200 && result.data) {
         const variant = result.data;
         
-        // Use the accessories passed as parameter or the current availableAccessories
-        const accessoriesData = accessories || availableAccessories;
+        // Separate tank and other accessories
+        let selectedTank: SelectedTank | null = null;
+        const selectedAccessories: SelectedAccessory[] = [];
         
-        // Map accessories to SelectedAccessory using accessoriesData
-        const selectedAccessories: SelectedAccessory[] = await Promise.all(
-          variant.terrariumVariantAccessories.map(async (acc: any) => {
-            let accessory = accessoriesData.find(a => a.accessoryId === acc.accessoryId);
-            
-            // If accessory is not found in available accessories, fetch it individually
-            if (!accessory) {
-              try {
-                const accessoryResponse = await fetch(`https://terarium.shop/api/Accessory/get/${acc.accessoryId}`);
-                if (accessoryResponse.ok) {
-                  const accessoryResult = await accessoryResponse.json();
-                  if (accessoryResult.status === 200 && accessoryResult.data) {
-                    accessory = accessoryResult.data;
-                  }
+        for (const acc of variant.terrariumVariantAccessories) {
+          // Find accessory in available accessories
+          let accessory = availableAccessories.find(a => a.accessoryId === acc.accessoryId);
+          
+          // If accessory is not found in available accessories, fetch it individually
+          if (!accessory) {
+            try {
+              const accessoryResponse = await fetch(`https://terarium.shop/api/Accessory/get/${acc.accessoryId}`);
+              if (accessoryResponse.ok) {
+                const accessoryResult = await accessoryResponse.json();
+                if (accessoryResult.status === 200 && accessoryResult.data) {
+                  accessory = accessoryResult.data;
                 }
-              } catch (error) {
-                console.error(`Error fetching accessory ${acc.accessoryId}:`, error);
               }
+            } catch (error) {
+              console.error(`Error fetching accessory ${acc.accessoryId}:`, error);
             }
-            
-            return {
+          }
+          
+          if (!accessory) {
+            // Create placeholder if accessory can't be found
+            accessory = {
+              accessoryId: acc.accessoryId,
+              name: `Unknown Accessory #${acc.accessoryId}`,
+              size: '',
+              description: '',
+              price: 0,
+              stockQuantity: 0,
+              categoryId: 0,
+              createdAt: '',
+              updatedAt: '',
+              status: '',
+              accessoryImages: []
+            };
+          }
+
+          // Kiểm tra xem accessory có phải là tank không
+          if (isTankAccessory(accessory) && !selectedTank) {
+            selectedTank = {
+              accessoryId: acc.accessoryId,
+              tank: {
+                ...accessory,
+                accessoryImages: accessory.accessoryImages || []
+              } as Tank
+            };
+          } else if (!isTankAccessory(accessory)) {
+            // Chỉ thêm vào accessories nếu không phải tank
+            selectedAccessories.push({
               accessoryId: acc.accessoryId,
               quantity: acc.quantity,
-              accessory: accessory || {
-                accessoryId: acc.accessoryId,
-                name: `Unknown Accessory #${acc.accessoryId}`,
-                size: '',
-                description: '',
-                price: 0,
-                stockQuantity: 0,
-                categoryId: 0,
-                createdAt: '',
-                updatedAt: '',
-                status: '',
-                accessoryImages: []
-              }
-            };
-          })
-        );
+              accessory: accessory
+            });
+          }
+        }
 
-        // Calculate initial accessories total
-        const initialAccessoriesTotal = selectedAccessories.reduce((sum, acc) => sum + (acc.accessory.price * acc.quantity), 0);
+        // Calculate initial accessories total (including tank)
+        const tankPrice = selectedTank?.tank.price || 0;
+        const accessoriesPrice = selectedAccessories.reduce((sum, acc) => sum + (acc.accessory.price * acc.quantity), 0);
+        const totalAccessoriesPrice = tankPrice + accessoriesPrice;
 
-        // Calculate laborCost as price - accessoriesTotal
-        const laborCost = variant.price - initialAccessoriesTotal;
+        // Calculate laborCost as price - totalAccessoriesPrice
+        const laborCost = variant.price - totalAccessoriesPrice;
 
         setVariantData({
           terrariumVariantId: variant.terrariumVariantId,
@@ -233,6 +290,7 @@ const EditVariantPage: React.FC = () => {
           urlImage: variant.urlImage || '',
           stockQuantity: variant.stockQuantity,
           imageFile: null,
+          selectedTank: selectedTank,
           accessories: selectedAccessories,
           laborCost: laborCost >= 0 ? laborCost : 0 // Ensure non-negative
         });
@@ -250,7 +308,7 @@ const EditVariantPage: React.FC = () => {
   };
 
   const handleNext = () => {
-    if (currentStep < 3) {
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -261,30 +319,34 @@ const EditVariantPage: React.FC = () => {
     }
   };
 
-  const handleBasicInfoChange = (data: Partial<VariantData>) => {
-    setVariantData({ ...variantData, ...data });
+  const handleTankSelectionChange = (tank: SelectedTank | null) => {
+    setVariantData({ ...variantData, selectedTank: tank });
   };
 
   const handleAccessoriesChange = (accessories: SelectedAccessory[]) => {
     setVariantData({ ...variantData, accessories });
   };
 
+  const handleBasicInfoChange = (data: Partial<VariantData>) => {
+    setVariantData({ ...variantData, ...data });
+  };
+
   const handleSubmit = async () => {
     if (!checkAuth()) return;
 
-    if (!variantData.variantName.trim()) {
+    if (!variantData.selectedTank) {
       notification.error({
         message: 'Lỗi',
-        description: 'Vui lòng nhập tên variant',
+        description: 'Vui lòng chọn loại bể',
         placement: 'topRight',
       });
       return;
     }
 
-    if (variantData.price <= 0) {
+    if (!variantData.variantName.trim()) {
       notification.error({
         message: 'Lỗi',
-        description: 'Giá phải lớn hơn 0',
+        description: 'Vui lòng nhập tên variant',
         placement: 'topRight',
       });
       return;
@@ -319,7 +381,7 @@ const EditVariantPage: React.FC = () => {
         const imageFormData = new FormData();
         imageFormData.append('file', variantData.imageFile);
 
-        const imageResponse = await fetch('https://terarium.shop/api/Image/upload', {
+        const imageResponse = await fetch('https://terarium.shop/api/upload', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -333,6 +395,20 @@ const EditVariantPage: React.FC = () => {
         }
       }
 
+      // Prepare accessories array including the selected tank
+      const allAccessories = [
+        // Add tank as first accessory
+        {
+          accessoryId: variantData.selectedTank.accessoryId,
+          quantity: 1
+        },
+        // Add other accessories
+        ...variantData.accessories.map(acc => ({
+          accessoryId: acc.accessoryId,
+          quantity: acc.quantity
+        }))
+      ];
+
       // Prepare request body
       const requestBody = {
         terrariumVariantId: variantData.terrariumVariantId,
@@ -341,10 +417,7 @@ const EditVariantPage: React.FC = () => {
         price: variantData.price,
         urlImage: imageUrl,
         stockQuantity: variantData.stockQuantity,
-        accessories: variantData.accessories.map(acc => ({
-          accessoryId: acc.accessoryId,
-          quantity: acc.quantity
-        })),
+        accessories: allAccessories,
         updatedAt: new Date().toISOString()
       };
 
@@ -386,12 +459,17 @@ const EditVariantPage: React.FC = () => {
     }
   };
 
-  // Steps similar to create
+  // Cập nhật thứ tự steps giống create
   const steps = [
-    { number: 1, title: 'Phụ kiện', description: 'Chọn phụ kiện đi kèm' },
-    { number: 2, title: 'Thông tin cơ bản', description: 'Nhập tên, tiền công và hình ảnh' },
-    { number: 3, title: 'Xác nhận', description: 'Xem lại và cập nhật variant' }
+    { number: 1, title: 'Chọn bể', description: 'Chọn loại bể cho terrarium' },
+    { number: 2, title: 'Phụ kiện', description: 'Chọn phụ kiện đi kèm' },
+    { number: 3, title: 'Thông tin cơ bản', description: 'Nhập tên, tiền công và hình ảnh' },
+    { number: 4, title: 'Xác nhận', description: 'Xem lại và cập nhật variant' }
   ];
+
+  const canProceedFromStep1 = () => {
+    return variantData.selectedTank !== null;
+  };
 
   if (fetchingVariant || loadingAccessories) {
     return (
@@ -469,38 +547,49 @@ const EditVariantPage: React.FC = () => {
         {/* Step Content */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="px-6 py-8">
-            {/* Bước 1: Chọn phụ kiện */}
+            {/* Bước 1: Chọn loại bể */}
             {currentStep === 1 && (
-              <Step4Accessories
-                selectedAccessories={variantData.accessories}
-                onSelectionChange={handleAccessoriesChange}
+              <Step1TankSelection
+                selectedTank={variantData.selectedTank}
+                onSelectionChange={handleTankSelectionChange}
                 onNext={handleNext}
                 onPrev={() => {}} // Không có bước trước
                 showPrevButton={false}
               />
             )}
 
-            {/* Bước 2: Thông tin cơ bản (với tiền công) */}
+            {/* Bước 2: Chọn phụ kiện */}
             {currentStep === 2 && (
+              <Step4Accessories
+                selectedAccessories={variantData.accessories}
+                onSelectionChange={handleAccessoriesChange}
+                onNext={handleNext}
+                onPrev={handlePrev}
+                showPrevButton={true}
+              />
+            )}
+
+            {/* Bước 3: Thông tin cơ bản (với tiền công) */}
+            {currentStep === 3 && (
               <Step1BasicInfo
                 data={variantData}
                 onChange={handleBasicInfoChange}
                 onNext={handleNext}
                 onPrev={handlePrev}
-                accessoriesTotal={calculateAccessoriesTotal()}
+                accessoriesTotal={calculateTankAndAccessoriesTotal()}
                 showPrevButton={true}
               />
             )}
 
-            {/* Bước 3: Review */}
-            {currentStep === 3 && (
+            {/* Bước 4: Review */}
+            {currentStep === 4 && (
               <Step3Review
                 data={variantData}
                 availableAccessories={availableAccessories}
                 onPrev={handlePrev}
                 onSubmit={handleSubmit}
                 loading={loading}
-                accessoriesTotal={calculateAccessoriesTotal()}
+                accessoriesTotal={calculateTankAndAccessoriesTotal()}
               />
             )}
           </div>

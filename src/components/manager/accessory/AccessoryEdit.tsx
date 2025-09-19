@@ -58,12 +58,7 @@ const AccessoryEdit: React.FC = () => {
     if (!formData.name.trim()) {
       errors.name = 'Tên phụ kiện là bắt buộc';
     }
-    if (!formData.size?.trim()) {
-      errors.size = 'Kích thước là bắt buộc';
-    }
-    if (!formData.quantitative?.trim()) {
-      errors.quantitative = 'Định lượng là bắt buộc';
-    }
+    // Removed validation for size and quantitative - they are now optional
     if (!formData.description.trim()) {
       errors.description = 'Mô tả là bắt buộc';
     }
@@ -215,8 +210,8 @@ const AccessoryEdit: React.FC = () => {
       const payload = {
         accessoryId: formData.accessoryId,
         name: formData.name,
-        size: formData.size,
-        quantitative: formData.quantitative,
+        size: formData.size || '',
+        quantitative: formData.quantitative || '',
         description: formData.description,
         price: formData.price,
         stockQuantity: formData.stockQuantity,
@@ -316,7 +311,7 @@ const AccessoryEdit: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kích thước *
+                    Kích thước
                   </label>
                   <input
                     type="text"
@@ -335,7 +330,7 @@ const AccessoryEdit: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Định lượng *
+                    Định lượng
                   </label>
                   <input
                     type="text"
