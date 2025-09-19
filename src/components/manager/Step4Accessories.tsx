@@ -40,7 +40,7 @@ interface ApiResponse<T> {
   data: T;
 }
 
-interface Step4Props {
+interface Step2Props {
   selectedAccessories: SelectedAccessory[];
   onSelectionChange: (accessories: SelectedAccessory[]) => void;
   onNext: () => void;
@@ -48,7 +48,7 @@ interface Step4Props {
   showPrevButton?: boolean;
 }
 
-const Step4Accessories: React.FC<Step4Props> = ({
+const Step2Accessories: React.FC<Step2Props> = ({
   selectedAccessories,
   onSelectionChange,
   onNext,
@@ -83,7 +83,15 @@ const Step4Accessories: React.FC<Step4Props> = ({
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result: ApiResponse<Category[]> = await response.json();
       if (result.status !== 200) throw new Error(result.message || 'Failed to fetch categories');
-      setCategories(result.data);
+      
+      // Filter out tank categories (exclude categories that contain "bể", "tank", or "thủy tinh")
+      const accessoryCategories = result.data.filter(category => 
+        !category.categoryName.toLowerCase().includes('bể') && 
+        !category.categoryName.toLowerCase().includes('tank') &&
+        !category.categoryName.toLowerCase().includes('thủy tinh')
+      );
+      
+      setCategories(accessoryCategories);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
@@ -99,8 +107,13 @@ const Step4Accessories: React.FC<Step4Props> = ({
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result: ApiResponse<Accessory[]> = await response.json();
       if (result.status !== 200) throw new Error(result.message || 'Failed to fetch accessories');
-      setAccessories(result.data);
-      setFilteredAccessories(result.data);
+      
+      // Filter only active accessories
+      const activeAccessories = result.data.filter(accessory => 
+        accessory.status === 'ACTIVE' || accessory.status === 'Active'
+      );
+      setAccessories(activeAccessories);
+      setFilteredAccessories(activeAccessories);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
       setAccessories([]);
@@ -313,6 +326,10 @@ const Step4Accessories: React.FC<Step4Props> = ({
             >
               Thử lại
             </button>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="px-4 py-8 text-center text-gray-500">
+            Không tìm thấy danh mục phụ kiện nào
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -534,7 +551,7 @@ const Step4Accessories: React.FC<Step4Props> = ({
             className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             aria-label="Tiếp tục đến bước tiếp theo"
           >
-            Tiếp theo
+            Tiếp tục
             <ChevronRight className="w-4 h-4 ml-2" />
           </button>
         </div>
@@ -543,4 +560,4 @@ const Step4Accessories: React.FC<Step4Props> = ({
   );
 };
 
-export default Step4Accessories;
+export default Step2Accessories;

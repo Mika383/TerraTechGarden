@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle, Clock, ArrowRight, X } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, Clock, ArrowRight, X, MapPin, User, Phone } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface OrderItem {
@@ -43,6 +43,37 @@ interface Order {
     reason: string;
   }>;
   orderItems: OrderItem[];
+}
+
+interface Address {
+  id: number;
+  tagName: string;
+  userId: number;
+  receiverName: string;
+  receiverPhone: string;
+  receiverAddress: string;
+  provinceCode: string;
+  districtCode: string;
+  wardCode: string;
+  latitude: string;
+  longitude: string;
+  isDefault: boolean;
+}
+
+interface LocationData {
+  level1_id: string;
+  name: string;
+  type: string;
+  level2s: Array<{
+    level2_id: string;
+    name: string;
+    type: string;
+    level3s: Array<{
+      level3_id: string;
+      name: string;
+      type: string;
+    }>;
+  }>;
 }
 
 interface TerrariumVariant {
@@ -297,16 +328,98 @@ const formatDate = (dateString: string) => {
   });
 };
 
+// Location data helper functions
+const findLocationName = (locationData: LocationData[], code: string, type: 'province' | 'district' | 'ward', parentCode?: string): string => {
+  if (type === 'province') {
+    const province = locationData.find(p => p.level1_id === code);
+    return province ? province.name : `Tỉnh/TP (${code})`;
+  }
+  
+  if (type === 'district' && parentCode) {
+    const province = locationData.find(p => p.level1_id === parentCode);
+    if (province) {
+      const district = province.level2s.find(d => d.level2_id === code);
+      return district ? district.name : `Quận/Huyện (${code})`;
+    }
+  }
+  
+  if (type === 'ward' && parentCode) {
+    for (const province of locationData) {
+      for (const district of province.level2s) {
+        if (district.level2_id === parentCode) {
+          const ward = district.level3s.find(w => w.level3_id === code);
+          if (ward) return ward.name;
+        }
+      }
+    }
+    return `Phường/Xã (${code})`;
+  }
+  
+  return `Không xác định (${code})`;
+};
+
 const OrderDetailStaff: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
+  const [address, setAddress] = useState<Address | null>(null);
+  const [locationData, setLocationData] = useState<LocationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [itemsDetails, setItemsDetails] = useState<(TerrariumVariant | Accessory | Combo | null)[]>([]);
   const [updating, setUpdating] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+
+  // Load location data (you would need to import this data or fetch it from your API)
+  useEffect(() => {
+    // Sample location data structure - you should replace this with your actual data loading
+    const loadLocationData = async () => {
+      try {
+        // Replace this with your actual data loading logic
+        // For example: const response = await fetch('/path/to/data.json');
+        // const data = await response.json();
+        // setLocationData(data.data);
+        
+        // For now, using empty array - replace with your data loading logic
+        setLocationData([]);
+      } catch (error) {
+        console.error('Error loading location data:', error);
+      }
+    };
+    
+    loadLocationData();
+  }, []);
+
+  const fetchAddress = async (addressId: number) => {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`https://terarium.shop/api/Address/get/${addressId}`, {
+        method: 'GET',
+        headers: headers,
+      });
+
+      if (response.status === 401) {
+        throw new Error('Chưa xác thực, vui lòng đăng nhập.');
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      setAddress(result.data);
+    } catch (err) {
+      console.error('Error fetching address:', err);
+      toast.error('Không thể tải thông tin địa chỉ');
+    }
+  };
 
   const fetchOrder = async () => {
     try {
@@ -333,6 +446,11 @@ const OrderDetailStaff: React.FC = () => {
 
       const result = await response.json();
       setOrder(result.data);
+
+      // Fetch address if addressId exists
+      if (result.data.addressId) {
+        await fetchAddress(result.data.addressId);
+      }
 
       const detailsPromises = result.data.orderItems.map(async (item: OrderItem) => {
         if (item.terrariumVariantId) {
@@ -496,6 +614,17 @@ const OrderDetailStaff: React.FC = () => {
   const buttonConfig = getStatusButtonConfig(order.status);
   const canReject = order.status === 'Pending';
 
+  // Format full address with location names
+  const formatFullAddress = () => {
+    if (!address) return '';
+    
+    const provinceName = findLocationName(locationData, address.provinceCode, 'province');
+    const districtName = findLocationName(locationData, address.districtCode, 'district', address.provinceCode);
+    const wardName = findLocationName(locationData, address.wardCode, 'ward', address.districtCode);
+    
+    return `${address.receiverAddress}, ${wardName}, ${districtName}, ${provinceName}`;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
@@ -540,8 +669,8 @@ const OrderDetailStaff: React.FC = () => {
               <div>Đặt cọc: <b>{formatCurrency(order.deposit)}</b></div>
             </div>
             <div>
-              <div>Mã giao dịch: {order.transactionId || 'N/A'}</div>
-              <div>Phương thức: {order.paymentMethod || 'N/A'}</div>
+              {/* <div>Mã giao dịch: {order.transactionId || 'N/A'}</div>
+              <div>Phương thức: {order.paymentMethod || 'N/A'}</div> */}
               <div>Đã thanh toán đủ: {order.isPayFull ? 'Có' : 'Không'}</div>
             </div>
             <div className="flex gap-2 sm:justify-end">
@@ -572,6 +701,44 @@ const OrderDetailStaff: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Address Information */}
+        {address && (
+          <div className="bg-white rounded-lg shadow p-4 border">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin className="w-5 h-5 text-green-600" />
+              <h3 className="font-semibold text-gray-800">Thông tin giao hàng</h3>
+              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
+                {address.tagName}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-gray-500" />
+                  <span className="font-medium">Người nhận:</span>
+                  <span>{address.receiverName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-gray-500" />
+                  <span className="font-medium">Số điện thoại:</span>
+                  <span>{address.receiverPhone}</span>
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-gray-700 mb-1">Địa chỉ giao hàng:</div>
+                <div className="text-gray-600">
+                  {locationData.length > 0 ? formatFullAddress() : address.receiverAddress}
+                </div>
+                {/* {locationData.length === 0 && (
+                  <div className="text-xs text-orange-600 mt-1">
+                    * Chưa tải được dữ liệu địa danh chi tiết
+                  </div>
+                )} */}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Refund Information */}
         {order.refunds && order.refunds.length > 0 && (
@@ -674,8 +841,9 @@ const OrderDetailStaff: React.FC = () => {
                             {item.itemType && (
                               <div className="text-xs text-gray-500 mt-1">
                                 {item.itemType === 'MAIN_ITEM' ? 'Sản phẩm chính' : 
-                                 item.itemType === 'ACCESSORY' ? 'Phụ kiện' :
+                                 item.itemType === 'BUNDLE_ACCESSORY' ? 'Phụ kiện' :
                                  item.itemType === 'COMBO' ? 'Combo' : 
+                                 item.itemType === 'SINGLE' ? 'Sản phẩm đơn' :
                                  item.itemType}
                               </div>
                             )}
@@ -696,6 +864,37 @@ const OrderDetailStaff: React.FC = () => {
               Không có sản phẩm trong đơn hàng
             </div>
           )}
+        </div>
+
+        {/* Order Summary */}
+        <div className="bg-white rounded-lg shadow border p-4">
+          <div className="font-semibold mb-3">Tổng kết đơn hàng</div>
+          <div className="space-y-2 text-sm max-w-md ml-auto">
+            <div className="flex justify-between">
+              <span>Tổng tiền sản phẩm:</span>
+              <span>{formatCurrency(order.originalAmount)}</span>
+            </div>
+            {order.discountAmount && order.discountAmount > 0 && (
+              <div className="flex justify-between text-red-600">
+                <span>Giảm giá:</span>
+                <span>-{formatCurrency(order.discountAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t pt-2 font-semibold">
+              <span>Tổng cộng:</span>
+              <span>{formatCurrency(order.totalAmount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Đã thanh toán (đặt cọc):</span>
+              <span className="text-green-600">{formatCurrency(order.deposit)}</span>
+            </div>
+            <div className="flex justify-between font-semibold text-lg">
+              <span>Còn lại:</span>
+              <span className={order.totalAmount - order.deposit > 0 ? 'text-orange-600' : 'text-green-600'}>
+                {formatCurrency(order.totalAmount - order.deposit)}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

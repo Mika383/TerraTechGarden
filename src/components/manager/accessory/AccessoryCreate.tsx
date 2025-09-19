@@ -54,12 +54,7 @@ const AccessoryCreate: React.FC = () => {
     if (!formData.name.trim()) {
       errors.name = 'Tên phụ kiện là bắt buộc';
     }
-    if (!formData.size.trim()) {
-      errors.size = 'Kích thước là bắt buộc';
-    }
-    if (!formData.quantitative.trim()) {
-      errors.quantitative = 'Định lượng là bắt buộc';
-    }
+    // Removed validation for size and quantitative - they are now optional
     if (!formData.description.trim()) {
       errors.description = 'Mô tả là bắt buộc';
     }
@@ -145,6 +140,9 @@ const AccessoryCreate: React.FC = () => {
       const token = localStorage.getItem('authToken');
       const payload = {
         ...formData,
+        // Ensure size and quantitative are sent as empty string if not provided
+        size: formData.size || '',
+        quantitative: formData.quantitative || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -239,7 +237,7 @@ const AccessoryCreate: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kích thước *
+                    Kích thước
                   </label>
                   <input
                     type="text"
@@ -258,7 +256,7 @@ const AccessoryCreate: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Định lượng *
+                    Định lượng
                   </label>
                   <input
                     type="text"
