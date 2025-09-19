@@ -515,18 +515,23 @@ const subtotal = apiCart ? subtotalFromAPI : subtotalLocal;
     for (const e of mergedSingles) {
       const qty = e.totalCartQuantity ?? qtyOf(e);
 
-      if (e.terrariumVariantId != null) {
-        items.push({
-          itemType: 'MAIN_ITEM',
-          terrariumId: 0,
-          terrariumVariantId: e.terrariumVariantId,
-          terrariumVariantQuantity: qty,
-          accessoryId: 0,
-          accessoryQuantity: 0,
-          comboId: 0,
-          comboQuantity: 0,
-        });
-      } else if (e.accessoryId != null) {
+     // ✅ thay block MAIN_ITEM bằng đoạn này
+if (e.terrariumVariantId != null) {
+  const resolvedTid =
+    variantToTerrariumMap[e.terrariumVariantId] ?? e.terrariumId ?? 0;
+
+  items.push({
+    itemType: 'MAIN_ITEM',
+    terrariumId: resolvedTid,        // ✅ gửi kèm terrariumId của bể
+    terrariumVariantId: e.terrariumVariantId,
+    terrariumVariantQuantity: qty,
+    accessoryId: 0,
+    accessoryQuantity: 0,
+    comboId: 0,
+    comboQuantity: 0,
+  });
+}
+else if (e.accessoryId != null) {
         items.push({
           itemType: 'SINGLE',
           terrariumId: 0,

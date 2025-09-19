@@ -19,6 +19,10 @@ import {
 import { createFeedback, uploadFeedbackImage } from '@/api/feedback';
 import { requestRefund as apiRequestRefund } from '@/api/refund';
 
+// ===== Cloudinary config (bạn đã cung cấp) =====
+const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dsp6pjeey/upload';
+const CLOUDINARY_UPLOAD_PRESET = 'TerraTech';
+
 const money = (v?: number) => (v ?? 0).toLocaleString('vi-VN') + ' VND';
 const PER_PAGE = 5;
 
@@ -66,6 +70,36 @@ type ReviewState = {
   file?: File | null;
 };
 
+// ===== NEW: modal state for Cancel & Refund =====
+type CancelState = {
+  open: boolean;
+  submitting: boolean;
+  order?: Order | null;
+  reason: string;
+  notes: string;
+};
+
+type RefundState = {
+  open: boolean;
+  submitting: boolean;
+  order?: Order | null;
+  reason: string;
+  files: File[];            // chọn nhiều file
+  uploadedUrls: string[];   // URL trả về từ Cloudinary
+};
+
+// ===== helper: upload 1 file lên Cloudinary, trả secure_url =====
+async function uploadToCloudinary(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error('Upload Cloudinary thất bại');
+  const data = await res.json();
+  // ưu tiên secure_url nếu có
+  return data.secure_url || data.url;
+}
+
 const OrderPage: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -84,6 +118,23 @@ const OrderPage: React.FC = () => {
     rating: 5,
     comment: '',
     file: null,
+  });
+
+  // NEW: modal states
+  const [cancelM, setCancelM] = useState<CancelState>({
+    open: false,
+    submitting: false,
+    order: null,
+    reason: 'Khách hàng yêu cầu hủy',
+    notes: '',
+  });
+  const [refundM, setRefundM] = useState<RefundState>({
+    open: false,
+    submitting: false,
+    order: null,
+    reason: '',
+    files: [],
+    uploadedUrls: [],
   });
 
   const userId = useMemo(() => Number(localStorage.getItem('userId') || 0), []);
@@ -132,87 +183,126 @@ const OrderPage: React.FC = () => {
 
   // ——— ACTIONS ———
   const payWithMoMo = async (o: Order) => {
-  try {
-    // ✅ LẤY ĐƠN MỚI NHẤT TRƯỚC KHI TẠO THANH TOÁN (tránh dùng state cũ sau khi back từ MoMo)
-    const fresh = await getOrderById(o.orderId);
-
-    if (!fresh) {
-      toast.error('Không lấy được thông tin đơn hàng mới nhất.');
-      return;
-    }
-
-    // Ép kiểu/đề phòng dữ liệu string
-    const totalAmount = Math.max(0, Number(fresh.totalAmount ?? 0));
-    const deposit = Math.max(0, Number(fresh.deposit ?? 0));
-    const isDepositOrder = deposit > 0;
-
-    // ✅ ĐƠN CỌC → gửi đúng TIỀN CỌC; ĐƠN FULL → gửi TỔNG TIỀN
-    // (Không dùng “phần còn lại”, tránh nhầm khi back/refresh)
-    const amountToPay = isDepositOrder ? deposit : totalAmount;
-
-    if (!Number.isFinite(amountToPay) || amountToPay <= 0) {
-      toast.info('Không có số tiền cần thanh toán.');
-      return;
-    }
-
-    const voucherId = (fresh as any)?.voucherId ?? 0;
-
-    // console.log('[MoMo][OrderPage] payload', { orderId: fresh.orderId, amountToPay, deposit, totalAmount, isDepositOrder, voucherId });
-
-    const { payUrl } = await createMoMoPayment({
-      orderId: fresh.orderId,
-      orderInfo: `Thanh toán đơn #${fresh.orderId}`,
-      finalAmount: amountToPay,     // ✅ chỉ gửi deposit hoặc totalAmount
-      voucherId,
-      payAll: !isDepositOrder,      // ✅ deposit => false, full => true
-    } as any);
-
-    window.location.href = payUrl;
-  } catch (err) {
-    console.error(err);
-    toast.error('Không tạo được giao dịch MoMo.');
-  }
-};
-  const handleCancel = async (o: Order) => {
-    const reason = window.prompt('Lý do hủy (tùy chọn):', 'Khách hàng yêu cầu hủy');
-    if (reason === null) return;
     try {
-      await cancelOrder(o.orderId, userId, {
+      // lấy đơn mới nhất
+      const fresh = await getOrderById(o.orderId);
+      if (!fresh) {
+        toast.error('Không lấy được thông tin đơn hàng mới nhất.');
+        return;
+      }
+      const totalAmount = Math.max(0, Number(fresh.totalAmount ?? 0));
+      const deposit = Math.max(0, Number(fresh.deposit ?? 0));
+      const isDepositOrder = deposit > 0;
+      const amountToPay = isDepositOrder ? deposit : totalAmount;
+      if (!Number.isFinite(amountToPay) || amountToPay <= 0) {
+        toast.info('Không có số tiền cần thanh toán.');
+        return;
+      }
+      const voucherId = (fresh as any)?.voucherId ?? 0;
+
+      const { payUrl } = await createMoMoPayment({
+        orderId: fresh.orderId,
+        orderInfo: `Thanh toán đơn #${fresh.orderId}`,
+        finalAmount: amountToPay,
+        voucherId,
+        payAll: !isDepositOrder,
+      } as any);
+
+      window.location.href = payUrl;
+    } catch (err) {
+      console.error(err);
+      toast.error('Không tạo được giao dịch MoMo.');
+    }
+  };
+
+  // ==== OPEN modals ====
+  const openCancelModal = (o: Order) => {
+    setCancelM({
+      open: true,
+      submitting: false,
+      order: o,
+      reason: 'Khách hàng yêu cầu hủy',
+      notes: '',
+    });
+  };
+
+  const openRefundModal = (o: Order) => {
+    if (!isCompleted(o.status)) {
+      toast.info('Chỉ có thể yêu cầu hoàn hàng/hoàn tiền cho đơn đã hoàn thành.');
+      return;
+    }
+    setRefundM({
+      open: true,
+      submitting: false,
+      order: o,
+      reason: '',
+      files: [],
+      uploadedUrls: [],
+    });
+  };
+
+  // ==== SUBMIT modals ====
+  const submitCancel = async () => {
+    if (!cancelM.order) return;
+    const reason = (cancelM.reason || '').trim();
+    try {
+      setCancelM(s => ({ ...s, submitting: true }));
+      await cancelOrder(cancelM.order.orderId, userId, {
         cancelReason: reason || 'Khách hàng yêu cầu hủy',
-        additionalNotes: '',
+        additionalNotes: cancelM.notes || '',
       });
-      toast.success(`Đã gửi yêu cầu hủy đơn #${o.orderId}`);
+      toast.success(`Đã gửi yêu cầu hủy đơn #${cancelM.order.orderId}`);
+      setCancelM({ open: false, submitting: false, order: null, reason: 'Khách hàng yêu cầu hủy', notes: '' });
       await load(false);
     } catch (e: any) {
       console.error(e);
       toast.error('Hủy đơn thất bại.');
+      setCancelM(s => ({ ...s, submitting: false }));
     }
   };
 
-  const handleRequestRefund = async (o: Order) => {
+  const submitRefund = async () => {
+    if (!refundM.order) return;
+    const reason = (refundM.reason || '').trim();
+    if (!reason) {
+      toast.info('Vui lòng nhập lý do hoàn hàng/hoàn tiền.');
+      return;
+    }
     try {
-      if (!isCompleted(o.status)) {
-        toast.info('Chỉ có thể yêu cầu hoàn hàng/hoàn tiền cho đơn đã hoàn thành.');
-        return;
-      }
-      const reason = window.prompt('Lý do hoàn hàng/hoàn tiền:', 'không còn nhu cầu sử dụng');
-      if (reason === null) return;
-      const trimmed = (reason || '').trim();
-      if (!trimmed) {
-        toast.info('Vui lòng nhập lý do.');
-        return;
-      }
-      const imgStr = window.prompt('Dán URL ảnh (Cloudinary). Có thể để trống hoặc nhiều URL cách nhau bằng dấu phẩy:', '');
-      const images = (imgStr || '').split(',').map(s => s.trim()).filter(Boolean);
+      setRefundM(s => ({ ...s, submitting: true }));
 
-      const res = await apiRequestRefund({ orderId: o.orderId, userId, reason: trimmed, images });
+      // 1) Upload ảnh (nếu chọn)
+      let urls: string[] = [];
+      if (refundM.files.length > 0) {
+        const results = await Promise.allSettled(refundM.files.map(f => uploadToCloudinary(f)));
+        urls = results
+          .filter(r => r.status === 'fulfilled')
+          .map(r => (r as PromiseFulfilledResult<string>).value);
+
+        if (urls.length === 0) {
+          toast.error('Upload ảnh lên Cloudinary thất bại.');
+          setRefundM(s => ({ ...s, submitting: false }));
+          return;
+        }
+      }
+
+      // 2) Gửi yêu cầu refund + đính kèm URLs
+      const res = await apiRequestRefund({
+        orderId: refundM.order.orderId,
+        userId,
+        reason,
+        images: urls, // gửi URL cho BE
+      });
+
       const msg = res?.message || 'Yêu cầu hoàn tiền đã được gửi thành công!';
       toast.success(msg);
+      setRefundM({ open: false, submitting: false, order: null, reason: '', files: [], uploadedUrls: [] });
       await load(false);
     } catch (err: any) {
       console.error('[Refund] error', err?.response?.status, err?.response?.data || err);
       const msg = err?.response?.data?.message || err?.response?.data || 'Gửi yêu cầu hoàn tiền thất bại.';
       toast.error(String(msg));
+      setRefundM(s => ({ ...s, submitting: false }));
     }
   };
 
@@ -246,8 +336,17 @@ const OrderPage: React.FC = () => {
         toast.info('Điểm đánh giá từ 1 đến 5.');
         return;
       }
-      const fb = await createFeedback({ orderItemId: review.orderItemId, rating: review.rating, comment: review.comment || '' });
-      const fid: number = (fb as any)?.feedbackId ?? (fb as any)?.data?.feedbackId ?? (fb as any)?.id ?? (fb as any)?.data?.id;
+      const fb = await createFeedback({
+        orderItemId: review.orderItemId,
+        rating: review.rating,
+        comment: review.comment || ''
+      });
+      const fid: number =
+        (fb as any)?.feedbackId ??
+        (fb as any)?.data?.feedbackId ??
+        (fb as any)?.id ??
+        (fb as any)?.data?.id;
+
       if (fid && review.file) await uploadFeedbackImage(fid, review.file);
       toast.success('Đã gửi đánh giá. Cảm ơn bạn!');
       setReview((s) => ({ ...s, open: false }));
@@ -356,7 +455,7 @@ const OrderPage: React.FC = () => {
                       <>
                         {canCancel(o) && (
                           <button
-                            onClick={() => handleCancel(o)}
+                            onClick={() => openCancelModal(o)}
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded"
                           >
                             <XCircle size={16} />
@@ -366,7 +465,7 @@ const OrderPage: React.FC = () => {
 
                         {isCompleted(o.status) && (
                           <button
-                            onClick={() => handleRequestRefund(o)}
+                            onClick={() => openRefundModal(o)}
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-purple-50 text-purple-700 border border-purple-200 rounded"
                           >
                             <RotateCcw size={16} />
@@ -496,6 +595,148 @@ const OrderPage: React.FC = () => {
               </button>
               <button onClick={submitReview} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded">
                 Gửi đánh giá
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal HỦY ĐƠN */}
+      {cancelM.open && cancelM.order && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
+            <div className="px-5 py-3 border-b font-semibold">Hủy đơn #{cancelM.order.orderId}</div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Lý do hủy</label>
+                <input
+                  className="w-full border rounded px-3 py-2"
+                  value={cancelM.reason}
+                  onChange={(e) => setCancelM(s => ({ ...s, reason: e.target.value }))}
+                  placeholder="Ví dụ: Đặt nhầm / Đổi ý / ..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Ghi chú (tuỳ chọn)</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                  value={cancelM.notes}
+                  onChange={(e) => setCancelM(s => ({ ...s, notes: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setCancelM(s => ({ ...s, open: false }))}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
+                disabled={cancelM.submitting}
+              >
+                Đóng
+              </button>
+              <button
+                onClick={submitCancel}
+                className={`px-4 py-2 rounded text-white ${cancelM.submitting ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'}`}
+                disabled={cancelM.submitting}
+              >
+                {cancelM.submitting ? 'Đang gửi...' : 'Xác nhận hủy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal HOÀN HÀNG/HOÀN TIỀN + Cloudinary */}
+      {refundM.open && refundM.order && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-lg shadow-lg">
+            <div className="px-5 py-3 border-b font-semibold">
+              Yêu cầu hoàn hàng/hoàn tiền • Đơn #{refundM.order.orderId}
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Lý do</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                  placeholder="Mô tả lý do hoàn hàng/hoàn tiền…"
+                  value={refundM.reason}
+                  onChange={(e) => setRefundM(s => ({ ...s, reason: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Ảnh minh chứng (có thể chọn nhiều)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    setRefundM(s => ({ ...s, files }));
+                  }}
+                />
+                {refundM.files.length > 0 && (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {refundM.files.map((f, i) => (
+                      <div key={i} className="border rounded p-2 text-xs text-gray-700">
+                        <div className="truncate">{f.name}</div>
+                        <div className="text-gray-500">{(f.size / 1024).toFixed(0)} KB</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {refundM.uploadedUrls.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-xs text-gray-600 mb-1">Đã upload:</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {refundM.uploadedUrls.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer" className="block border rounded overflow-hidden">
+                          <img src={url} alt={`proof-${i}`} className="w-full h-24 object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setRefundM(s => ({ ...s, open: false }))}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded"
+                disabled={refundM.submitting}
+              >
+                Đóng
+              </button>
+
+              <button
+                onClick={async () => {
+                  // Tải ảnh lên trước để hiển thị preview URL đã upload (UX)
+                  try {
+                    setRefundM(s => ({ ...s, submitting: true }));
+                    let urls: string[] = [];
+                    if (refundM.files.length > 0) {
+                      const results = await Promise.allSettled(refundM.files.map(f => uploadToCloudinary(f)));
+                      urls = results
+                        .filter(r => r.status === 'fulfilled')
+                        .map(r => (r as PromiseFulfilledResult<string>).value);
+                      setRefundM(s => ({ ...s, uploadedUrls: urls }));
+                    }
+                    // Sau đó submitRefund (gửi URL cho BE)
+                    await submitRefund();
+                  } catch (e) {
+                    // submitRefund đã xử lý toast; ở đây đảm bảo state
+                    setRefundM(s => ({ ...s, submitting: false }));
+                  }
+                }}
+                className={`px-4 py-2 rounded text-white ${refundM.submitting ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'}`}
+                disabled={refundM.submitting}
+              >
+                {refundM.submitting ? 'Đang gửi…' : 'Gửi yêu cầu'}
               </button>
             </div>
           </div>

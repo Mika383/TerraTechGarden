@@ -23,7 +23,13 @@ interface OrderItemsDisplayProps {
   className?: string;
 }
 
-// Kiểu item trả về từ API combo.items (cho chắc chắn, cho phép null)
+/** Mở rộng kiểu hiển thị cục bộ để đọc các field optional BE trả về */
+type DisplayItemExt = DisplayItem & {
+  accessoryId?: number;
+  terrariumId?: number;
+  terrariumVariantId?: number;
+};
+
 type ComboMetaItem = {
   accessoryId?: number | null;
   terrariumVariantId?: number | null;
@@ -32,7 +38,6 @@ type ComboMetaItem = {
   totalPrice?: number;
 };
 
-// Kiểu item đã enrich (không ép chặt null → tránh TS error)
 type ComboEnrichedItem = ComboMetaItem & {
   name?: string;
   image?: string;
@@ -40,6 +45,9 @@ type ComboEnrichedItem = ComboMetaItem & {
   variantName?: string | null;
   id?: number; // terrariumId nếu là terrarium
 };
+
+/** NEW: gom đủ meta của Terrarium từ variantId (id + tên + ảnh + tên variant) */
+type TerrFromVariant = { id: number; name: string; thumb: string; variantName?: string };
 
 const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
   order,
@@ -49,12 +57,13 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  // 1) Chuẩn hoá dữ liệu order -> cấu trúc hiển thị giống Cart
+  // 1) Chuẩn hoá dữ liệu order -> cấu trúc hiển thị
   const transformedData = useMemo(() => transformOrderForDisplayImproved(order), [order]);
   const { bundlesToShow, mergedSingles, comboItems } = useMemo(
     () => separateBundlesAndSingles(transformedData),
     [transformedData]
   );
+  const mergedSinglesEx = useMemo(() => mergedSingles as DisplayItemExt[], [mergedSingles]);
 
   // 2) UI state
   const [bundleOpen, setBundleOpen] = useState<Record<string, boolean>>({});
@@ -63,8 +72,9 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
   // 3) Meta caches
   const [terrariumName, setTerrariumName] = useState<Record<number, string>>({});
   const [terrariumThumb, setTerrariumThumb] = useState<Record<number, string>>({});
-  const [terrariumNameByVariant, setTerrariumNameByVariant] = useState<Record<number, string>>({});
-  const [terrariumThumbByVariant, setTerrariumThumbByVariant] = useState<Record<number, string>>({});
+
+  /** NEW: meta theo variant → id + name + thumb + variantName */
+  const [terrFromVariant, setTerrFromVariant] = useState<Record<number, TerrFromVariant>>({});
 
   const [accessoryName, setAccessoryName] = useState<Record<number, string>>({});
   const [accessoryThumb, setAccessoryThumb] = useState<Record<number, string>>({});
@@ -79,10 +89,10 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
       const ids = new Set<number>();
 
       bundlesToShow.forEach((b) => {
-        const tid = b.mainItem.terrariumId;
+        const tid = (b.mainItem as DisplayItemExt).terrariumId;
         if (tid) ids.add(tid);
       });
-      mergedSingles.forEach((it) => {
+      mergedSinglesEx.forEach((it) => {
         if (it.terrariumId) ids.add(it.terrariumId);
       });
 
@@ -116,20 +126,30 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
       });
     };
     fetchTerrariumMeta();
-  }, [bundlesToShow, mergedSingles]);
+  }, [bundlesToShow, mergedSinglesEx, terrariumName, terrariumThumb]);
 
-  // === TERRARIUM META BY variantId (khi API trả terrariumId = null) ===
+  // === NEW: TERRARIUM + VARIANT META BY variantId (gồm cả bundle header) ===
   useEffect(() => {
     const fetchTerrariumMetaByVariant = async () => {
       const variantIds = new Set<number>();
 
-      mergedSingles.forEach((it) => {
+      // Singles chưa có terrariumId → lấy theo variant
+      mergedSinglesEx.forEach((it) => {
         if (!it.terrariumId && it.terrariumVariantId) variantIds.add(it.terrariumVariantId);
       });
 
-      const missing = [...variantIds].filter(
-        (vid) => !terrariumNameByVariant[vid] || !terrariumThumbByVariant[vid]
-      );
+      // Bundle main (để header hiện đúng tên bể) — Fallback lấy từ 1 accessory trong bundle
+      bundlesToShow.forEach((b) => {
+        let v = (b.mainItem as DisplayItemExt).terrariumVariantId;
+        const t = (b.mainItem as DisplayItemExt).terrariumId;
+        if (!v) {
+          const found = (b.bundleAccessories || []).find((x) => (x as any).terrariumVariantId);
+          v = found ? (found as any).terrariumVariantId : undefined;
+        }
+        if (!t && v) variantIds.add(v);
+      });
+
+      const missing = [...variantIds].filter((vid) => !terrFromVariant[vid]);
       if (!missing.length) return;
 
       const pairs = await Promise.all(
@@ -140,37 +160,33 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
             const t = await getTerrariumById(variant.terrariumId);
             return {
               variantId,
-              name: t?.terrariumName || variant.variantName || `Terrarium #${variant.terrariumId}`,
-              thumb:
-                variant.urlImage ||
-                t?.terrariumImages?.[0]?.imageUrl ||
-                t?.thumbnailUrl ||
-                FALLBACK_IMG,
+              data: {
+                id: variant.terrariumId,
+                name: t?.terrariumName || variant.variantName || `Terrarium #${variant.terrariumId}`,
+                thumb:
+                  variant.urlImage ||
+                  t?.terrariumImages?.[0]?.imageUrl ||
+                  t?.thumbnailUrl ||
+                  FALLBACK_IMG,
+                variantName: variant.variantName || undefined,
+              } as TerrFromVariant,
             };
           } catch {
             return {
               variantId,
-              name: `Terrarium variant #${variantId}`,
-              thumb: FALLBACK_IMG,
+              data: { id: 0, name: `Terrarium variant #${variantId}`, thumb: FALLBACK_IMG } as TerrFromVariant,
             };
           }
         })
       );
 
-      setTerrariumNameByVariant((prev) => {
-        const next = { ...prev };
-        for (const p of pairs) next[p.variantId] = p.name;
-        return next;
-      });
-      setTerrariumThumbByVariant((prev) => {
-        const next = { ...prev };
-        for (const p of pairs) next[p.variantId] = p.thumb;
-        return next;
-      });
+      const add: Record<number, TerrFromVariant> = {};
+      pairs.forEach((p) => (add[p.variantId] = p.data));
+      setTerrFromVariant((m) => ({ ...m, ...add }));
     };
 
     fetchTerrariumMetaByVariant();
-  }, [mergedSingles, terrariumNameByVariant, terrariumThumbByVariant]);
+  }, [bundlesToShow, mergedSinglesEx, terrFromVariant]);
 
   // === ACCESSORY META ===
   useEffect(() => {
@@ -178,10 +194,11 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
       const ids = new Set<number>();
       bundlesToShow.forEach((b) => {
         (b.bundleAccessories || []).forEach((e) => {
-          if (e.accessoryId) ids.add(e.accessoryId);
+          const ex = e as DisplayItemExt;
+          if (ex.accessoryId) ids.add(ex.accessoryId);
         });
       });
-      mergedSingles.forEach((e) => {
+      mergedSinglesEx.forEach((e) => {
         if (e.accessoryId) ids.add(e.accessoryId);
       });
 
@@ -215,7 +232,7 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
       });
     };
     fetchAccessoryMeta();
-  }, [bundlesToShow, mergedSingles]);
+  }, [bundlesToShow, mergedSinglesEx, accessoryName, accessoryThumb]);
 
   // === COMBO META (enrich từng item trong combo) ===
   useEffect(() => {
@@ -234,7 +251,6 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
             const comboData = await getComboById(comboId);
             const items: ComboEnrichedItem[] = await Promise.all(
               (comboData?.items as ComboMetaItem[] | undefined)?.map(async (ci) => {
-                // Accessory trong combo
                 if (ci?.accessoryId) {
                   try {
                     const a = await getAccessoryById(ci.accessoryId);
@@ -254,7 +270,6 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
                   }
                 }
 
-                // Terrarium (thông qua variant) trong combo
                 if (ci?.terrariumVariantId) {
                   try {
                     const variant = await getTerrariumVariantById(ci.terrariumVariantId);
@@ -292,7 +307,6 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
                   }
                 }
 
-                // fallback
                 return { ...ci } as ComboEnrichedItem;
               }) ?? []
             );
@@ -320,146 +334,116 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
   }, [comboItems, comboMeta]);
 
   // Helper dựng tên/ảnh cho 1 item order
-  const getEnrichedItem = (item: DisplayItem) => {
-    // Accessory
+  const getEnrichedItem = (item: DisplayItemExt) => {
     if (item.accessoryId) {
       return {
         name: accessoryName[item.accessoryId] || `Phụ kiện #${item.accessoryId}`,
         image: accessoryThumb[item.accessoryId] || FALLBACK_IMG,
       };
     }
-
-    // Terrarium: nếu có terrariumId → lấy theo terrariumId,
-    // nếu không có mà có variantId → lấy theo variantId
     if (item.terrariumId) {
       return {
         name: terrariumName[item.terrariumId] || `Bộ terrarium #${item.terrariumId}`,
         image: terrariumThumb[item.terrariumId] || FALLBACK_IMG,
       };
     }
-
     if (item.terrariumVariantId) {
+      const vm = terrFromVariant[item.terrariumVariantId];
       return {
-        name:
-          terrariumNameByVariant[item.terrariumVariantId] ||
-          `Terrarium variant #${item.terrariumVariantId}`,
-        image: terrariumThumbByVariant[item.terrariumVariantId] || FALLBACK_IMG,
+        name: vm?.name || `Terrarium variant #${item.terrariumVariantId}`,
+        image: vm?.thumb || FALLBACK_IMG,
       };
     }
-
     return { name: 'Sản phẩm', image: FALLBACK_IMG };
   };
 
+  // Chia single items: MAIN (variant) vs ACCESSORY lẻ
+  const mainSingles = useMemo(
+    () => mergedSinglesEx.filter((i) => !!i.terrariumVariantId),
+    [mergedSinglesEx]
+  );
+  const accessorySingles = useMemo(
+    () => mergedSinglesEx.filter((i) => !!i.accessoryId),
+    [mergedSinglesEx]
+  );
+
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* === COMBO SECTION === */}
-      {comboItems.map((ci) => {
-        const comboKey = keyOfCombo(ci);
-        const isOpen = comboOpen[comboKey] ?? false;
-        const meta = ci.comboId ? comboMeta[ci.comboId] : undefined;
+      {/* === SẢN PHẨM CHÍNH (variant) === */}
+      {mainSingles.length > 0 && (
+        <div className="bg-white rounded-lg shadow border">
+          <div className="p-4 border-b font-semibold">Sản phẩm chính</div>
+          <div className="divide-y">
+            {mainSingles.map((item) => {
+              const { name: itemName, image: itemImage } = getEnrichedItem(item);
+              const vname = item.terrariumVariantId
+                ? terrFromVariant[item.terrariumVariantId]?.variantName
+                : undefined;
 
-        return (
-          <div key={ci.orderItemId} className="bg-white rounded-lg shadow border">
-            <div className="flex items-center justify-between p-4 border-b">
-              <div className="flex items-center gap-3">
-                <img
-                  src={meta?.image || FALLBACK_IMG}
-                  alt={meta?.name || `Combo #${ci.comboId}`}
-                  className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
-                  onClick={() => ci.comboId && navigate(`/combo/${ci.comboId}`)}
-                  onError={(ev) => {
-                    (ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
-                  }}
-                />
-                <div className="font-semibold">
-                  <button
-                    onClick={() => ci.comboId && navigate(`/combo/${ci.comboId}`)}
-                    className="text-green-700 hover:underline"
-                  >
-                    {meta?.name || `Combo #${ci.comboId}`}
-                  </button>
-                  <div className="text-sm text-gray-500">
-                    Combo gồm {meta?.items?.length ?? 0} sản phẩm
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="text-sm text-gray-700">SL: {ci.quantity}</div>
-                <div className="text-sm text-purple-700 font-semibold">
-                  {currency(ci.totalPrice)}
-                </div>
-                <button
-                  onClick={() => setComboOpen((m) => ({ ...m, [comboKey]: !isOpen }))}
-                  className="text-gray-600 hover:text-gray-800 text-sm"
-                >
-                  {isOpen ? 'Thu gọn' : 'Mở rộng'}
-                </button>
-                {showActions && onReviewItem && (
-                  <button
-                    onClick={() => onReviewItem(ci)}
-                    className="px-3 py-1 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100"
-                  >
-                    Đánh giá
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {isOpen && meta?.items && (
-              <div className="divide-y bg-gray-50">
-                <div className="px-4 py-2 text-sm text-gray-600 font-medium bg-purple-50 border-b">
-                  Sản phẩm trong combo:
-                </div>
-                {meta.items.map((item, idx) => (
-                  <div key={`combo-item-${idx}`} className="p-4 flex items-center gap-3">
-                    <div className="w-5" />
-                    <img
-                      src={item.image || FALLBACK_IMG}
-                      alt={item.name || 'Sản phẩm'}
-                      className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
-                      onClick={() => {
-                        if (item.type === 'accessory' && item.accessoryId) {
-                          navigate(`/accessory/${item.accessoryId}`);
-                        } else if (item.type === 'terrarium' && item.id) {
-                          navigate(`/terrarium/${item.id}`);
-                        }
-                      }}
-                      onError={(ev) => {
-                        (ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
-                      }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-800 truncate">
-                        {item.name || 'Sản phẩm'}
+              return (
+                <div key={item.orderItemId} className="p-4 flex items-center gap-3">
+                  <img
+                    src={itemImage}
+                    alt={itemName}
+                    className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
+                    onClick={async () => {
+                      if (item.terrariumId) {
+                        navigate(`/terrarium/${item.terrariumId}`);
+                      } else if (item.terrariumVariantId) {
+                        const vm = terrFromVariant[item.terrariumVariantId];
+                        if (vm?.id) navigate(`/terrarium/${vm.id}`);
+                      }
+                    }}
+                    onError={(ev) => {
+                      (ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{itemName}</div>
+                    {vname && (
+                      <div className="text-sm text-gray-500">
+                        Phân loại: <b>{vname}</b>
                       </div>
-                      {item.variantName && (
-                        <div className="text-sm text-gray-500">Phân loại: {item.variantName}</div>
-                      )}
-                      <div className="text-sm text-gray-600">{currency(item.unitPrice || 0)}</div>
-                    </div>
-                    <div className="text-sm text-gray-700 px-3 py-1 bg-gray-100 rounded">
-                      SL: {item.quantity || 1}
-                    </div>
-                    <div className="w-32 text-right font-semibold text-gray-800">
-                      {currency(item.totalPrice || item.unitPrice || 0)}
+                    )}
+                    <div className="text-sm text-green-600 font-semibold">
+                      {currency(item.unitPrice)}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="text-sm text-gray-700">SL: {item.quantity}</div>
+                  <div className="w-32 text-right font-semibold text-gray-800">
+                    {currency(item.totalPrice)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      )}
 
       {/* === BUNDLE (BỘ PHỤ KIỆN THEO BỂ) === */}
       {bundlesToShow.map((bundle) => {
-        const tid = bundle.mainItem.terrariumId; // có thể là 0 nếu chưa suy luận được
+        const mainEx = bundle.mainItem as DisplayItemExt;
+
+        // Lấy variant cho header: ưu tiên mainItem, fallback từ 1 accessory
+        let vid = mainEx.terrariumVariantId;
+        if (!vid) {
+          const f = (bundle.bundleAccessories || []).find((x) => (x as any).terrariumVariantId);
+          vid = f ? (f as any).terrariumVariantId : undefined;
+        }
+
+        const vMeta = vid ? terrFromVariant[vid] : undefined;
+        const derivedTid = mainEx.terrariumId || vMeta?.id;
+
+        const name = derivedTid
+          ? (terrariumName[derivedTid] || vMeta?.name || `Bộ terrarium #${derivedTid}`)
+          : (vMeta?.name || 'Bộ phụ kiện (chưa xác định bể)');
+
+        const thumb = derivedTid
+          ? (terrariumThumb[derivedTid] || vMeta?.thumb || FALLBACK_IMG)
+          : (vMeta?.thumb || FALLBACK_IMG);
+
+        const vname = vMeta?.variantName;
         const bundleId = keyOfBundle(bundle);
-        const name =
-          (tid && terrariumName[tid]) ||
-          (tid ? `Bộ terrarium #${tid}` : 'Bộ phụ kiện (chưa xác định bể)');
-        const thumb = (tid && terrariumThumb[tid]) || FALLBACK_IMG;
         const isOpen = bundleOpen[bundleId] ?? false;
 
         return (
@@ -470,16 +454,16 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
                   src={thumb}
                   alt={name}
                   className="w-10 h-10 rounded border bg-white object-cover cursor-pointer"
-                  onClick={() => tid && navigate(`/terrarium/${tid}`)}
+                  onClick={() => derivedTid && navigate(`/terrarium/${derivedTid}`)}
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                   }}
                 />
                 <div className="font-semibold">
                   Bộ phụ kiện của{' '}
-                  {tid ? (
+                  {derivedTid ? (
                     <button
-                      onClick={() => navigate(`/terrarium/${tid}`)}
+                      onClick={() => navigate(`/terrarium/${derivedTid}`)}
                       className="text-green-700 hover:underline"
                     >
                       {name}
@@ -487,6 +471,7 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
                   ) : (
                     <span>{name}</span>
                   )}
+                  {vname ? <span> • {vname}</span> : null}
                 </div>
               </div>
 
@@ -508,7 +493,8 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
 
             {isOpen && (
               <div className="divide-y">
-                {bundle.bundleAccessories.map((item) => {
+                {bundle.bundleAccessories.map((raw) => {
+                  const item = raw as DisplayItemExt;
                   const { name: itemName, image: itemImage } = getEnrichedItem(item);
                   return (
                     <div key={item.orderItemId} className="p-4 flex items-center gap-3">
@@ -558,12 +544,12 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
         );
       })}
 
-      {/* === SINGLE ITEMS (SẢN PHẨM LẺ) === */}
-      {mergedSingles.length > 0 && (
+      {/* === SẢN PHẨM LẺ (accessory) === */}
+      {accessorySingles.length > 0 && (
         <div className="bg-white rounded-lg shadow border">
           <div className="p-4 border-b font-semibold">Sản phẩm lẻ</div>
           <div className="divide-y">
-            {mergedSingles.map((item) => {
+            {accessorySingles.map((item) => {
               const { name: itemName, image: itemImage } = getEnrichedItem(item);
               return (
                 <div key={item.orderItemId} className="p-4 flex items-center gap-3">
@@ -571,21 +557,7 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
                     src={itemImage}
                     alt={itemName}
                     className="w-14 h-14 object-cover rounded border bg-white cursor-pointer"
-                    onClick={async () => {
-                      if (item.accessoryId) {
-                        navigate(`/accessory/${item.accessoryId}`);
-                      } else if (item.terrariumId) {
-                        navigate(`/terrarium/${item.terrariumId}`);
-                      } else if (item.terrariumVariantId) {
-                        // Khi API trả terrariumId = null → lấy terrariumId qua variant
-                        try {
-                          const variant = await getTerrariumVariantById(item.terrariumVariantId);
-                          if (variant?.terrariumId) navigate(`/terrarium/${variant.terrariumId}`);
-                        } catch {
-                          // ignore
-                        }
-                      }
-                    }}
+                    onClick={() => item.accessoryId && navigate(`/accessory/${item.accessoryId}`)}
                     onError={(ev) => {
                       (ev.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
                     }}
@@ -604,22 +576,9 @@ const OrderItemsDisplay: React.FC<OrderItemsDisplayProps> = ({
                   </div>
                   {showActions && (
                     <div className="flex gap-2">
-                      {(item.accessoryId || item.terrariumId || item.terrariumVariantId) && (
+                      {item.accessoryId && (
                         <button
-                          onClick={async () => {
-                            if (item.accessoryId) {
-                              navigate(`/accessory/${item.accessoryId}`);
-                            } else if (item.terrariumId) {
-                              navigate(`/terrarium/${item.terrariumId}`);
-                            } else if (item.terrariumVariantId) {
-                              try {
-                                const variant = await getTerrariumVariantById(item.terrariumVariantId);
-                                if (variant?.terrariumId) navigate(`/terrarium/${variant.terrariumId}`);
-                              } catch {
-                                // ignore
-                              }
-                            }
-                          }}
+                          onClick={() => navigate(`/accessory/${item.accessoryId}`)}
                           className="px-3 py-1 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100"
                         >
                           Xem
