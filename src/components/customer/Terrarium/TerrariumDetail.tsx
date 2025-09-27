@@ -1,4 +1,3 @@
-// src/components/customer/TerrariumDetail.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Terrarium, TerrariumVariant, TerrariumVariantAccessory } from '@/types/terrarium';
 import {
@@ -25,6 +24,7 @@ import 'swiper/css/effect-fade';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 import { EffectFade, Navigation, Pagination, Autoplay } from 'swiper/modules';
+import { Link } from 'react-router-dom';
 
 import {
   getEnvironmentById,
@@ -33,7 +33,6 @@ import {
 } from '@/api/terrarium';
 import { getAccessoryById } from '@/api/accessory';
 
-// GSAP
 gsap.registerPlugin(ScrollTrigger);
 
 interface Props {
@@ -44,6 +43,20 @@ interface Props {
   onAddToCart: (qty?: number) => void;
   onBuyAccessories: (selected: { id: number; qty: number }[]) => void;
 }
+
+type AccessoryMeta = {
+  accessoryId: number;
+  name: string;
+  price: number;
+  description?: string;
+  accessoryImages?: { imageUrl: string }[];
+  quantityDefault?: number;
+  stockQuantity?: number;
+  // ✨ bổ sung mới:
+  size?: string;
+  quantitative?: string;
+  categoryId?: number;
+};
 
 const FALLBACK_IMG = '/TerraTechLogo.png';
 
@@ -131,20 +144,13 @@ const TerrariumDetail: React.FC<Props> = ({
 }) => {
   const [showAccessories, setShowAccessories] = useState(false);
 
-  // STATE phụ kiện theo Variant
+  // ✨ Cache metadata phụ kiện cho TOÀN BỘ variants (để lấy size bể cho từng variant)
+  const [accessoryMetaCache, setAccessoryMetaCache] = useState<Map<number, AccessoryMeta>>(new Map());
+
+  // STATE phụ kiện theo Variant (đang xem)
   const [selectedAccessories, setSelectedAccessories] = useState<number[]>([]);
   const [accessoryQuantities, setAccessoryQuantities] = useState<Record<number, number>>({});
-  const [accessoryDetails, setAccessoryDetails] = useState<
-    Array<{
-      accessoryId: number;
-      name: string;
-      price: number;
-      description?: string;
-      accessoryImages?: { imageUrl: string }[];
-      quantityDefault?: number;
-      stockQuantity?: number;
-    }>
-  >([]);
+  const [accessoryDetails, setAccessoryDetails] = useState<AccessoryMeta[]>([]);
 
   const [variantQty, setVariantQty] = useState<number>(1);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -156,12 +162,11 @@ const TerrariumDetail: React.FC<Props> = ({
   const accessoriesRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDivElement>(null);
 
-  // local names nếu prop chưa enrich
   const [envName, setEnvName] = useState<string | undefined>();
   const [shapeName, setShapeName] = useState<string | undefined>();
   const [tankMethodType, setTankMethodType] = useState<string | undefined>();
 
-  // Animation
+  // Animations
   useEffect(() => {
     if (!containerRef.current) return;
     const ctx = gsap.context(() => {
@@ -214,21 +219,44 @@ const TerrariumDetail: React.FC<Props> = ({
     return () => { alive = false; };
   }, [terrarium]);
 
-  // Map định mức & stock phụ kiện từ Variant
-  const variantAccessoryMap = useMemo(() => {
-    const m = new Map<number, { needPerUnit: number; stock: number }>();
-    if (selectedVariant?.terrariumVariantAccessories?.length) {
-      selectedVariant.terrariumVariantAccessories.forEach((va) => {
-        m.set(va.accessoryId, {
-          needPerUnit: Math.max(0, Number(va.quantity || 0)),
-          stock: Math.max(0, Number((va as any).accessoryStockQuantity || 0)),
-        });
-      });
-    }
-    return m;
-  }, [selectedVariant]);
+  // 🚀 Prefetch metadata phụ kiện CHO TẤT CẢ VARIANTS (để hiển thị kích thước bể ở mỗi card)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const allIds = new Set<number>();
+      variants?.forEach(v => v.terrariumVariantAccessories?.forEach(va => allIds.add(va.accessoryId)));
+      const idsToFetch = Array.from(allIds).filter(id => !accessoryMetaCache.has(id));
+      if (idsToFetch.length === 0) return;
 
-  // Fetch phụ kiện theo selectedVariant
+      const settled = await Promise.allSettled(idsToFetch.map(id => getAccessoryById(id)));
+      if (!alive) return;
+
+      const newMap = new Map(accessoryMetaCache);
+      settled.forEach((res, idx) => {
+        const id = idsToFetch[idx];
+        if (res.status === 'fulfilled' && res.value) {
+          const acc = res.value as any;
+          newMap.set(id, {
+            accessoryId: acc.accessoryId,
+            name: acc.name,
+            price: acc.price ?? 0,
+            description: acc.description,
+            accessoryImages: acc.accessoryImages || [],
+            quantityDefault: 1,
+            stockQuantity: acc.stockQuantity ?? 0,
+            size: acc.size,
+            quantitative: acc.quantitative,
+            categoryId: acc.categoryId,
+          });
+        }
+      });
+      setAccessoryMetaCache(newMap);
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variants]);
+
+  // Fetch phụ kiện theo selectedVariant (để render grid accessories)
   useEffect(() => {
     let alive = true;
     const run = async () => {
@@ -237,26 +265,53 @@ const TerrariumDetail: React.FC<Props> = ({
         return;
       }
       const list = selectedVariant.terrariumVariantAccessories as TerrariumVariantAccessory[];
-      const settled = await Promise.allSettled(list.map(va => getAccessoryById(va.accessoryId)));
-      if (!alive) return;
-      const okResults = settled
-        .map((r, idx) => (r.status === 'fulfilled' ? { acc: r.value, idx } : null))
-        .filter((x): x is { acc: any; idx: number } => !!x && !!x.acc);
 
-      const enriched = okResults.map(({ acc, idx }) => {
-        const va = list[idx];
+      // Ưu tiên dùng cache, nếu thiếu thì gọi API và update cache
+      const missingIds = list.map(va => va.accessoryId).filter(id => !accessoryMetaCache.has(id));
+      if (missingIds.length) {
+        const settled = await Promise.allSettled(missingIds.map(id => getAccessoryById(id)));
+        const newMap = new Map(accessoryMetaCache);
+        settled.forEach((res, idx) => {
+          const id = missingIds[idx];
+          if (res.status === 'fulfilled' && res.value) {
+            const acc = res.value as any;
+            newMap.set(id, {
+              accessoryId: acc.accessoryId,
+              name: acc.name,
+              price: acc.price ?? 0,
+              description: acc.description,
+              accessoryImages: acc.accessoryImages || [],
+              quantityDefault: 1,
+              stockQuantity: acc.stockQuantity ?? 0,
+              size: acc.size,
+              quantitative: acc.quantitative,
+              categoryId: acc.categoryId,
+            });
+          }
+        });
+        setAccessoryMetaCache(newMap);
+      }
+
+      // Build enriched list from cache + VA info
+      const enriched: AccessoryMeta[] = list.map(va => {
+        const meta = accessoryMetaCache.get(va.accessoryId);
         return {
-          accessoryId: acc.accessoryId,
-          name: acc.name,
-          price: acc.price ?? (va as any).accessoryPrice ?? 0,
-          description: acc.description ?? (va as any).accessoryDescription,
-          accessoryImages: acc.accessoryImages || [],
+          accessoryId: va.accessoryId,
+          name: meta?.name || `#${va.accessoryId}`,
+          price: meta?.price ?? (va as any).accessoryPrice ?? 0,
+          description: meta?.description ?? (va as any).accessoryDescription,
+          accessoryImages: meta?.accessoryImages || [],
           quantityDefault: va.quantity ?? 1,
-          stockQuantity: (va as any).accessoryStockQuantity ?? acc.stockQuantity ?? 0,
+          stockQuantity: meta?.stockQuantity ?? (va as any).accessoryStockQuantity ?? 0,
+          size: meta?.size,
+          quantitative: meta?.quantitative,
+          categoryId: meta?.categoryId,
         };
       });
 
+      if (!alive) return;
       setAccessoryDetails(enriched);
+
       const defaultSelected = enriched.map(a => a.accessoryId);
       const defaultQty = Object.fromEntries(enriched.map(a => [a.accessoryId, Math.max(0, Math.trunc(a.quantityDefault || 1))]));
       setSelectedAccessories(defaultSelected);
@@ -264,7 +319,7 @@ const TerrariumDetail: React.FC<Props> = ({
     };
     run();
     return () => { alive = false; };
-  }, [selectedVariant]);
+  }, [selectedVariant, accessoryMetaCache]);
 
   // ===== generatedByAI logic =====
   const isPreorder = (terrarium as any)?.generatedByAI === true;
@@ -275,12 +330,12 @@ const TerrariumDetail: React.FC<Props> = ({
     for (const va of selectedVariant.terrariumVariantAccessories) {
       const need = Math.max(0, Number(va.quantity || 0));
       if (need === 0) continue;
-      const stock = Math.max(0, Number((va as any).accessoryStockQuantity || 0));
+      const stock = Math.max(0, Number((va as any).accessoryStockQuantity || accessoryMetaCache.get(va.accessoryId)?.stockQuantity || 0));
       const cap = Math.floor(stock / need);
       minCap = Math.min(minCap, cap);
     }
     return Number.isFinite(minCap) ? Math.max(0, minCap) : Infinity;
-  }, [selectedVariant]);
+  }, [selectedVariant, accessoryMetaCache]);
 
   const maxPurchasable = useMemo(() => {
     if (!selectedVariant) return 0;
@@ -318,7 +373,7 @@ const TerrariumDetail: React.FC<Props> = ({
   const clamp = (n: number, min = 0, max = 99) => Math.max(min, Math.min(max, Math.trunc(n || 0)));
 
   const setAccQty = (id: number, qty: number) => {
-    const stockLimit = variantAccessoryMap.get(id)?.stock ?? 99;
+    const stockLimit = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
     const q = clamp(qty, 0, stockLimit);
     setAccessoryQuantities((prev) => ({ ...prev, [id]: q }));
     if (!selectedAccessories.includes(id) && q > 0) setSelectedAccessories((p) => [...p, id]);
@@ -326,7 +381,7 @@ const TerrariumDetail: React.FC<Props> = ({
   };
 
   const toggleAccessory = (id: number) => {
-    const stockLimit = variantAccessoryMap.get(id)?.stock ?? 99;
+    const stockLimit = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
     setSelectedAccessories((prev) => {
       if (prev.includes(id)) return prev.filter((aid) => aid !== id);
       setAccessoryQuantities((q) => ({ ...q, [id]: q[id] && q[id] > 0 ? Math.min(q[id], stockLimit) : Math.min(1, stockLimit) }));
@@ -367,7 +422,7 @@ const TerrariumDetail: React.FC<Props> = ({
 
   const handleBuyAccessories = () => {
     const payload = selectedAccessories.map((id) => {
-      const maxForAcc = variantAccessoryMap.get(id)?.stock ?? 99;
+      const maxForAcc = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
       const qty = clamp(accessoryQuantities[id] || 1, 0, maxForAcc);
       return { id, qty };
     });
@@ -375,6 +430,22 @@ const TerrariumDetail: React.FC<Props> = ({
   };
 
   const variantStock = selectedVariant?.stockQuantity ?? 0;
+
+  // 🔎 Lấy kích thước bể cho MỖI VARIANT: duyệt theo thứ tự bắt buộc & lấy phần tử đầu tiên có size
+  // 🔁 REPLACE this function
+const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined => {
+  const vas = variant.terrariumVariantAccessories || [];
+  for (const va of vas) {
+    const meta = accessoryMetaCache.get(va.accessoryId);
+    // ✅ Chỉ nhận size từ phụ kiện thuộc danh mục BỂ (categoryId = 6)
+    if (Number(meta?.categoryId) === 6) {
+      const size = (meta?.size ?? '').toString().trim();
+      if (size) return size; // lấy cái size đầu tiên hợp lệ
+    }
+  }
+  return undefined; // không có size từ category 6
+};
+
 
   return (
     <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50">
@@ -482,43 +553,58 @@ const TerrariumDetail: React.FC<Props> = ({
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {variants.map((variant) => {
-                      const isSelected = selectedVariant?.terrariumVariantId === variant.terrariumVariantId;
-                      const variantImage = variant.urlImage || FALLBACK_IMG;
-                      return (
-                        <button
-                          key={variant.terrariumVariantId}
-                          onClick={() => onSelectVariant(variant)}
-                          className={`group relative p-4 rounded-2xl border-2 transition-all duration-300 text-left ${
-                            isSelected ? 'border-emerald-500 bg-emerald-50 shadow-lg scale-105'
-                                      : 'border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md hover:scale-102'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="relative">
+                        const isSelected = selectedVariant?.terrariumVariantId === variant.terrariumVariantId;
+                        const variantImage = variant.urlImage || FALLBACK_IMG;
+                        const sizeLine = deriveVariantTankSize(variant);
+
+                        return (
+                          <button
+                            key={variant.terrariumVariantId}
+                            onClick={() => onSelectVariant(variant)}
+                            className={`group relative p-4 rounded-2xl border-2 transition-all duration-300 text-left ${
+                              isSelected
+                                ? 'border-emerald-500 bg-emerald-50 shadow-lg scale-105'
+                                : 'border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md hover:scale-102'
+                            }`}
+                          >
+                            {/* ✅ Dấu tích ở góc phải button */}
+                            {isSelected && (
+                              <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">
+                                <span className="text-white text-xs">✓</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-3">
                               <img
                                 src={variantImage}
                                 alt={variant.variantName}
                                 className="w-12 h-12 rounded-lg object-cover"
-                                onError={(e) => { (e.currentTarget as HTMLImageElement).onerror = null; (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).onerror = null;
+                                  (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
+                                }}
                               />
-                              {isSelected && (
-                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                                  <span className="text-white text-xs">✓</span>
+                              <div className="flex-1">
+                                <div
+                                  className={`font-medium transition-colors ${
+                                    isSelected ? 'text-emerald-700' : 'text-gray-700 group-hover:text-emerald-600'
+                                  }`}
+                                >
+                                  {variant.variantName}
                                 </div>
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <div className={`font-medium transition-colors ${isSelected ? 'text-emerald-700' : 'text-gray-700 group-hover:text-emerald-600'}`}>
-                                {variant.variantName}
+                                <div className="text-xs text-gray-600">
+                                  Giá: {numberFmt(variant.price)} VND{' '}
+                                  {!isPreorder && <> · Tồn: <b>{numberFmt(variant.stockQuantity)}</b></>}
+                                </div>
+                                <div className="text-xs text-gray-700 mt-1">
+                                  Kích thước bể: <span className="font-semibold">{sizeLine || 'không rõ'}</span>
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-500">
-                                Giá: {numberFmt(variant.price)} VND {!isPreorder && <> · Tồn: <b>{numberFmt(variant.stockQuantity)}</b></>}
-                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+
                   </div>
                 </div>
               )}
@@ -528,7 +614,7 @@ const TerrariumDetail: React.FC<Props> = ({
                 className={`w-full py-4 px-6 rounded-2xl font-semibold text-lg transition-all duration-300 flex items-center justify-center gap-3 ${
                   selectedVariant && maxPurchasable > 0
                     ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 }`}
                 disabled={!selectedVariant || maxPurchasable <= 0}
                 onClick={handleAddToCart}
@@ -556,7 +642,7 @@ const TerrariumDetail: React.FC<Props> = ({
                 </h2>
                 <button
                   onClick={() => setShowAccessories(!showAccessories)}
-                  className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors duration-200 font-medium"
+                  className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors duration-200 font-medium text-gray-800"
                 >
                   {showAccessories ? (<><ChevronUp className="w-5 h-5" />Thu gọn</>) : (<><ChevronDown className="w-5 h-5" />Xem chi tiết ({accessoryDetails.length} phụ kiện)</>)}
                 </button>
@@ -568,7 +654,7 @@ const TerrariumDetail: React.FC<Props> = ({
                   <div>
                     <p className="text-blue-700 font-semibold text-lg">Tổng giá trị phụ kiện</p>
                     <p className="text-3xl font-bold text-blue-800">{totalSelectedPrice.toLocaleString('vi-VN')} VND</p>
-                    <p className="text-blue-600 text-sm mt-1">{selectedAccessories.length} / {accessoryDetails.length} phụ kiện đã chọn</p>
+                    <p className="text-blue-700/80 text-sm mt-1">{selectedAccessories.length} / {accessoryDetails.length} phụ kiện đã chọn</p>
                   </div>
                   <button
                     className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95"
@@ -584,8 +670,8 @@ const TerrariumDetail: React.FC<Props> = ({
                 <div ref={accessoriesRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {accessoryDetails.map((acc) => {
                     const id = acc.accessoryId;
-                    const needPerUnit = variantAccessoryMap.get(id)?.needPerUnit ?? acc.quantityDefault ?? 0;
-                    const stock = variantAccessoryMap.get(id)?.stock ?? acc.stockQuantity ?? 0;
+                    const needPerUnit = selectedVariant?.terrariumVariantAccessories?.find(v => v.accessoryId === id)?.quantity ?? acc.quantityDefault ?? 0;
+                    const stock = acc.stockQuantity ?? 0;
                     const qty = accessoryQuantities[id] ?? (acc.quantityDefault ?? 1);
                     const isChecked = selectedAccessories.includes(id);
                     const accImage = Array.isArray(acc.accessoryImages) && acc.accessoryImages.length > 0 ? acc.accessoryImages[0].imageUrl : undefined;
@@ -593,50 +679,70 @@ const TerrariumDetail: React.FC<Props> = ({
                     return (
                       <div
                         key={id}
-                        className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer ${
+                        className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
                           isChecked ? 'border-blue-400 bg-blue-50 shadow-lg' : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
                         }`}
-                        onClick={() => toggleAccessory(id)}
                       >
-                        {/* Checkbox */}
+                        {/* Checkbox riêng */}
                         <div className="absolute top-4 right-4">
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isChecked ? 'border-blue-500 bg-blue-500' : 'border-gray-300 group-hover:border-blue-400'}`}>
-                            {isChecked && <span className="text-white text-xs">✓</span>}
-                          </div>
+                          <button
+                            type="button"
+                            aria-pressed={isChecked}
+                            aria-label={isChecked ? 'Bỏ chọn phụ kiện' : 'Chọn phụ kiện'}
+                            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                              isChecked ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'
+                            }`}
+                            onClick={(e) => { e.stopPropagation(); toggleAccessory(id); }}
+                            title={isChecked ? 'Bỏ chọn' : 'Chọn'}
+                          >
+                            ✓
+                          </button>
                         </div>
 
-                        {/* Image (fallback) */}
+                        {/* Ảnh → đi chi tiết */}
                         <div className="mb-4">
-                          <img
-                            src={accImage || FALLBACK_IMG}
-                            alt={acc.name}
-                            className="w-full h-32 object-cover rounded-xl"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).onerror = null; (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-                          />
+                          <Link to={`/accessory/${id}`} onClick={(e) => e.stopPropagation()} className="block rounded-xl overflow-hidden">
+                            <img
+                              src={accImage || FALLBACK_IMG}
+                              alt={acc.name}
+                              className="w-full h-32 object-cover rounded-xl transition-transform duration-300 hover:scale-105"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).onerror = null; (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                            />
+                          </Link>
                         </div>
 
                         {/* Content */}
                         <div className="space-y-3">
                           <div>
-                            <h4 className="font-bold text-gray-800 text-lg group-hover:text-blue-600 transition-colors">{acc.name}</h4>
-                            <p className="text-2xl font-bold text-blue-600">{(acc.price ?? 0).toLocaleString('vi-VN')} VND</p>
+                            <Link to={`/accessory/${id}`} onClick={(e) => e.stopPropagation()} className="block">
+                              <h4 className="font-bold text-gray-800 text-lg group-hover:text-blue-600 transition-colors">{acc.name}</h4>
+                            </Link>
+                            <p className="text-xl font-bold text-blue-700">
+                              {(acc.price ?? 0).toLocaleString('vi-VN')} VND{acc.quantitative ? ` / ${acc.quantitative}` : ''}
+                            </p>
+                          </div>
+
+                          {/* ✨ Thêm size + unit */}
+                          <div className="text-sm text-gray-700 flex flex-wrap gap-3">
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg">Kích thước: <b className="text-gray-900">{acc.size || '—'}</b></span>
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg">Đơn vị: <b className="text-gray-900">{acc.quantitative || '—'}</b></span>
                           </div>
 
                           {/* Stock & định mức */}
                           <div className="text-sm text-gray-700 flex flex-wrap gap-3">
-                            <span className="px-2 py-1 bg-gray-100 rounded-lg">Định mức/1 sản phẩm: <b>{needPerUnit}</b></span>
-                            <span className="px-2 py-1 bg-gray-100 rounded-lg">Tồn phụ kiện: <b>{numberFmt(stock)}</b></span>
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg">Định mức/1 sản phẩm: <b className="text-gray-900">{needPerUnit}</b></span>
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg">Tồn phụ kiện: <b className="text-gray-900">{numberFmt(stock)}</b></span>
                           </div>
 
                           {acc.description && <p className="text-gray-600 text-sm leading-relaxed">{acc.description}</p>}
 
-                          {/* Quantity Control (Ẩn spinner + màu đen) */}
+                          {/* Quantity Control */}
                           <div className="flex items-center justify-between pt-2 border-t border-gray-200">
                             <span className="text-sm text-gray-600">Số lượng:</span>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors"
                                 onClick={(e) => { e.stopPropagation(); setAccQty(id, (qty || 0) - 1); }}
                               >
                                 −
@@ -651,7 +757,7 @@ const TerrariumDetail: React.FC<Props> = ({
                                 className="
                                   w-16 h-8 text-center border border-gray-300 rounded-lg
                                   focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                                  text-black
+                                  text-gray-900
                                   appearance-none [appearance:textfield] [-moz-appearance:textfield]
                                   [&::-webkit-outer-spin-button]:appearance-none
                                   [&::-webkit-inner-spin-button]:appearance-none
@@ -659,7 +765,7 @@ const TerrariumDetail: React.FC<Props> = ({
                               />
                               <button
                                 type="button"
-                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors"
                                 onClick={(e) => { e.stopPropagation(); setAccQty(id, (qty || 0) + 1); }}
                                 disabled={qty >= stock}
                                 title={qty >= stock ? 'Đã đạt tối đa tồn kho' : undefined}
@@ -673,7 +779,7 @@ const TerrariumDetail: React.FC<Props> = ({
                           <div className="text-right">
                             <p className="text-sm text-gray-600">
                               Tạm tính:{' '}
-                              <span className="font-semibold text-gray-800">
+                              <span className="font-semibold text-gray-900">
                                 {(((acc.price ?? 0) * (Math.min(qty, stock) || 0)) || 0).toLocaleString('vi-VN')} VND
                               </span>
                             </p>
@@ -749,8 +855,8 @@ const TerrariumDetail: React.FC<Props> = ({
                     </button>
 
                     <style>{`
-                      .swiper-pagination-bullet-custom { width: 12px; height: 12px; background: rgba(255,255,255,.5); border-radius: 50%; opacity: 1; transition: all .3s; }
-                      .swiper-pagination-bullet-custom-active { background: #fff; transform: scale(1.2); }
+                      .swiper-pagination-bullet-custom { width: 12px; height: 12px; background: rgba(0,0,0,.25); border-radius: 50%; opacity: 1; transition: all .3s; }
+                      .swiper-pagination-bullet-custom-active { background: rgba(0,0,0,.55); transform: scale(1.2); }
                     `}</style>
                   </div>
                 ) : (

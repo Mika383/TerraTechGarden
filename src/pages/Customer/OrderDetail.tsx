@@ -848,7 +848,7 @@ const OrderDetail: React.FC = () => {
                     <span>Đã đặt cọc</span>
                     <span>-{money(deposit)}</span>
                   </div>
-
+                  
                   <hr />
 
                   <div className="flex justify-between font-semibold text-base">
@@ -861,7 +861,7 @@ const OrderDetail: React.FC = () => {
                     <span>{money(codAmount)}</span>
                   </div>
                 </div>
-
+                
                 {isUnpaid(order.paymentStatus ?? '') && (
                   <div className="p-4 pt-0">
                     <button
