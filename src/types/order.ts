@@ -62,7 +62,7 @@ export interface Order {
   paymentStatus?: string | null;
   paymentMethod?: string | null;
   transactionId?: string | null;
-
+  shippingFee?: number; 
   // Danh sách item — có ở /Order/{id}, vắng ở /get-all-by-userid
   orderItems?: OrderItem[];
 }

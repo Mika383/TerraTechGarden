@@ -45,6 +45,7 @@ import OrderPage from '../pages/Customer/Order';
 
 import PaymentWalletSuccess from '@/pages/Customer/PaymentWalletSuccess';
 import WalletSuccess from '@/pages/Customer/WalletSuccess';
+import SystemSettings from '@/pages/Admin/SystemSetting';
 
 const Layout = lazy(() => import('../components/customer/Layout/Layout'));
 const CustomerLayout = lazy(() => import('../components/customer/Dashboard/CustomerLayout'));
@@ -222,7 +223,7 @@ const AppRoutes = () => {
           <Route path="orders/canceled" element={<Suspense fallback={<Loading />}><CanceledOrders /></Suspense>} />
           <Route path="revenue" element={<Suspense fallback={<Loading />}><RevenueReport /></Suspense>} />
           <Route path="statistics" element={<Suspense fallback={<Loading />}><StatisticsReport /></Suspense>} />
-          <Route path="settings" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
+          <Route path="settings" element={<Suspense fallback={<Loading />}><SystemSettings /></Suspense>} />
           <Route path="reports" element={<Suspense fallback={<Loading />}><AdminDashboard /></Suspense>} />
           <Route path="blog-categories" element={<Suspense fallback={<Loading />}><BlogCategoryManagement /></Suspense>} />
           <Route path="blogs" element={<Suspense fallback={<Loading />}><BlogManagement /></Suspense>} />

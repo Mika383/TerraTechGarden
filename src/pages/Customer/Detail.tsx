@@ -88,7 +88,7 @@ const Detail: React.FC = () => {
 
   const handleSelectVariant = (variant: any) => {
     setSelectedVariant(variant);
-    toast.info(`Đã chọn: ${variant.variantName}`);
+    
   };
 
   const handleAddToCart = async (qty: number = 1) => {

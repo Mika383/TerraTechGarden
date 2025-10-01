@@ -1,4 +1,3 @@
-// src/components/admin/AdminSidebar.tsx
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   HomeIcon,
@@ -94,7 +93,18 @@ const AdminSidebar: React.FC = () => {
           <span>Quản lý voucher</span>
         </li>
 
-        
+        {/* ✅ Quản lý hệ thống (Settings) */}
+        <li
+          className={`flex items-center space-x-3 p-2 rounded-lg transition-colors cursor-pointer ${
+            isActive('/admin/settings')
+              ? 'bg-blue-100 text-blue-600 font-semibold'
+              : 'text-gray-700 hover:text-blue-600 hover:bg-blue-100'
+          }`}
+          onClick={() => navigate('/admin/settings')}
+        >
+          <CogIcon className="h-6 w-6" />
+          <span>Quản lý hệ thống</span>
+        </li>
 
         {/* Bài viết: vẫn dropdown như cũ */}
         <li
