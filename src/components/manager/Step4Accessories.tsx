@@ -110,7 +110,7 @@ const Step2Accessories: React.FC<Step2Props> = ({
       
       // Filter only active accessories
       const activeAccessories = result.data.filter(accessory => 
-        accessory.status === 'ACTIVE' || accessory.status === 'Active'
+        accessory.status === 'ACTIVE' || accessory.status === 'Active' || accessory.status === 'active'
       );
       setAccessories(activeAccessories);
       setFilteredAccessories(activeAccessories);

@@ -245,10 +245,14 @@ const TerrariumVariants: React.FC = () => {
     return variants.reduce((total, variant) => total + variant.stockQuantity, 0);
   };
 
-  const getAveragePrice = () => {
+  const getMinPrice = () => {
     if (variants.length === 0) return 0;
-    const totalPrice = variants.reduce((total, variant) => total + variant.price, 0);
-    return totalPrice / variants.length;
+    return Math.min(...variants.map(v => v.price));
+  };
+
+  const getMaxPrice = () => {
+    if (variants.length === 0) return 0;
+    return Math.max(...variants.map(v => v.price));
   };
 
   const getVariantAccessoryCount = (variant: TerrariumVariant) => {
@@ -377,8 +381,8 @@ const TerrariumVariants: React.FC = () => {
               <DollarSign className="w-6 h-6 text-yellow-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Giá Trung Bình</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(getAveragePrice())}</p>
+              <p className="text-sm font-medium text-gray-600">Giao Động Giá</p>
+              <p className="text-2xl font-bold text-gray-900">{formatPrice(getMinPrice())}-{formatPrice(getMaxPrice())}</p>
             </div>
           </div>
         </div>
