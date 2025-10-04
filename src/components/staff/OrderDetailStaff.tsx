@@ -885,13 +885,15 @@ const OrderDetailStaff: React.FC = () => {
               <span>{formatCurrency(order.totalAmount)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Đã thanh toán (đặt cọc):</span>
-              <span className="text-green-600">{formatCurrency(order.deposit)}</span>
+              <span>Đã thanh toán{order.deposit > 0 && order.deposit < order.totalAmount ? ' (đặt cọc)' : ''}:</span>
+              <span className="text-green-600">
+                {formatCurrency(order.deposit > 0 ? order.deposit : (order.isPayFull || order.paymentStatus === 'Paid' ? order.totalAmount : 0))}
+              </span>
             </div>
             <div className="flex justify-between font-semibold text-lg">
               <span>Còn lại:</span>
-              <span className={order.totalAmount - order.deposit > 0 ? 'text-orange-600' : 'text-green-600'}>
-                {formatCurrency(order.totalAmount - order.deposit)}
+              <span className={order.deposit === 0 && (order.isPayFull || order.paymentStatus === 'Paid') ? 'text-green-600' : (order.totalAmount - order.deposit > 0 ? 'text-orange-600' : 'text-green-600')}>
+                {formatCurrency(order.deposit === 0 && (order.isPayFull || order.paymentStatus === 'Paid') ? 0 : (order.totalAmount - order.deposit))}
               </span>
             </div>
           </div>
