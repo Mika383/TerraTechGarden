@@ -1,3 +1,4 @@
+// src/pages/TerrariumDetail.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Terrarium, TerrariumVariant, TerrariumVariantAccessory } from '@/types/terrarium';
 import {
@@ -52,7 +53,6 @@ type AccessoryMeta = {
   accessoryImages?: { imageUrl: string }[];
   quantityDefault?: number;
   stockQuantity?: number;
-  // ✨ bổ sung mới:
   size?: string;
   quantitative?: string;
   categoryId?: number;
@@ -144,10 +144,10 @@ const TerrariumDetail: React.FC<Props> = ({
 }) => {
   const [showAccessories, setShowAccessories] = useState(false);
 
-  // ✨ Cache metadata phụ kiện cho TOÀN BỘ variants (để lấy size bể cho từng variant)
+  // Cache metadata phụ kiện
   const [accessoryMetaCache, setAccessoryMetaCache] = useState<Map<number, AccessoryMeta>>(new Map());
 
-  // STATE phụ kiện theo Variant (đang xem)
+  // STATE phụ kiện theo Variant
   const [selectedAccessories, setSelectedAccessories] = useState<number[]>([]);
   const [accessoryQuantities, setAccessoryQuantities] = useState<Record<number, number>>({});
   const [accessoryDetails, setAccessoryDetails] = useState<AccessoryMeta[]>([]);
@@ -219,7 +219,7 @@ const TerrariumDetail: React.FC<Props> = ({
     return () => { alive = false; };
   }, [terrarium]);
 
-  // 🚀 Prefetch metadata phụ kiện CHO TẤT CẢ VARIANTS (để hiển thị kích thước bể ở mỗi card)
+  // Prefetch metadata phụ kiện CHO TẤT CẢ VARIANTS
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -312,7 +312,8 @@ const TerrariumDetail: React.FC<Props> = ({
       if (!alive) return;
       setAccessoryDetails(enriched);
 
-      const defaultSelected = enriched.map(a => a.accessoryId);
+      // **Important**: mặc định chỉ chọn những phụ kiện có stock > 0
+      const defaultSelected = enriched.filter(a => (a.stockQuantity ?? 0) > 0).map(a => a.accessoryId);
       const defaultQty = Object.fromEntries(enriched.map(a => [a.accessoryId, Math.max(0, Math.trunc(a.quantityDefault || 1))]));
       setSelectedAccessories(defaultSelected);
       setAccessoryQuantities(defaultQty);
@@ -321,7 +322,7 @@ const TerrariumDetail: React.FC<Props> = ({
     return () => { alive = false; };
   }, [selectedVariant, accessoryMetaCache]);
 
-  // ===== generatedByAI logic =====
+  // generatedByAI logic
   const isPreorder = (terrarium as any)?.generatedByAI === true;
 
   const maxByAccessories = useMemo(() => {
@@ -376,12 +377,21 @@ const TerrariumDetail: React.FC<Props> = ({
     const stockLimit = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
     const q = clamp(qty, 0, stockLimit);
     setAccessoryQuantities((prev) => ({ ...prev, [id]: q }));
+    if (stockLimit <= 0) {
+      // nếu hết hàng thì chắc chắn bỏ chọn
+      setSelectedAccessories((p) => p.filter(x => x !== id));
+      return;
+    }
     if (!selectedAccessories.includes(id) && q > 0) setSelectedAccessories((p) => [...p, id]);
     if (q <= 0) setSelectedAccessories((p) => p.filter((x) => x !== id));
   };
 
   const toggleAccessory = (id: number) => {
     const stockLimit = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
+    if (stockLimit <= 0) {
+      // không cho chọn nếu hết hàng
+      return;
+    }
     setSelectedAccessories((prev) => {
       if (prev.includes(id)) return prev.filter((aid) => aid !== id);
       setAccessoryQuantities((q) => ({ ...q, [id]: q[id] && q[id] > 0 ? Math.min(q[id], stockLimit) : Math.min(1, stockLimit) }));
@@ -421,31 +431,34 @@ const TerrariumDetail: React.FC<Props> = ({
   };
 
   const handleBuyAccessories = () => {
-    const payload = selectedAccessories.map((id) => {
-      const maxForAcc = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
-      const qty = clamp(accessoryQuantities[id] || 1, 0, maxForAcc);
-      return { id, qty };
-    });
+    // only include accessories with qty > 0 and stock > 0
+    const payload = selectedAccessories
+      .map((id) => {
+        const stock = accessoryDetails.find(a => a.accessoryId === id)?.stockQuantity ?? 99;
+        const qtyRaw = accessoryQuantities[id] ?? 1;
+        const qty = clamp(qtyRaw, 0, stock);
+        return { id, qty, stock };
+      })
+      .filter(p => p.qty > 0 && (p.stock ?? 0) > 0)
+      .map(p => ({ id: p.id, qty: p.qty }));
+    if (payload.length === 0) return;
     onBuyAccessories?.(payload);
   };
 
   const variantStock = selectedVariant?.stockQuantity ?? 0;
 
-  // 🔎 Lấy kích thước bể cho MỖI VARIANT: duyệt theo thứ tự bắt buộc & lấy phần tử đầu tiên có size
-  // 🔁 REPLACE this function
-const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined => {
-  const vas = variant.terrariumVariantAccessories || [];
-  for (const va of vas) {
-    const meta = accessoryMetaCache.get(va.accessoryId);
-    // ✅ Chỉ nhận size từ phụ kiện thuộc danh mục BỂ (categoryId = 6)
-    if (Number(meta?.categoryId) === 6) {
-      const size = (meta?.size ?? '').toString().trim();
-      if (size) return size; // lấy cái size đầu tiên hợp lệ
+  // Lấy kích thước bể cho MỖI VARIANT
+  const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined => {
+    const vas = variant.terrariumVariantAccessories || [];
+    for (const va of vas) {
+      const meta = accessoryMetaCache.get(va.accessoryId);
+      if (Number(meta?.categoryId) === 6) {
+        const size = (meta?.size ?? '').toString().trim();
+        if (size) return size;
+      }
     }
-  }
-  return undefined; // không có size từ category 6
-};
-
+    return undefined;
+  };
 
   return (
     <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50">
@@ -556,19 +569,31 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                         const isSelected = selectedVariant?.terrariumVariantId === variant.terrariumVariantId;
                         const variantImage = variant.urlImage || FALLBACK_IMG;
                         const sizeLine = deriveVariantTankSize(variant);
+                        const variantStock = variant.stockQuantity ?? 0;
+                        const isOutOfStock = !isPreorder && variantStock <= 0;
 
                         return (
                           <button
                             key={variant.terrariumVariantId}
-                            onClick={() => onSelectVariant(variant)}
+                            onClick={() => !isOutOfStock && onSelectVariant(variant)}
+                            disabled={isOutOfStock}
                             className={`group relative p-4 rounded-2xl border-2 transition-all duration-300 text-left ${
-                              isSelected
+                              isOutOfStock
+                                ? 'border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed'
+                                : isSelected
                                 ? 'border-emerald-500 bg-emerald-50 shadow-lg scale-105'
                                 : 'border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md hover:scale-102'
                             }`}
                           >
-                            {/* ✅ Dấu tích ở góc phải button */}
-                            {isSelected && (
+                            {/* Badge hết hàng */}
+                            {isOutOfStock && (
+                              <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow">
+                                HẾT HÀNG
+                              </div>
+                            )}
+
+                            {/* Dấu tích khi được chọn */}
+                            {isSelected && !isOutOfStock && (
                               <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">
                                 <span className="text-white text-xs">✓</span>
                               </div>
@@ -578,7 +603,7 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                               <img
                                 src={variantImage}
                                 alt={variant.variantName}
-                                className="w-12 h-12 rounded-lg object-cover"
+                                className={`w-12 h-12 rounded-lg object-cover ${isOutOfStock ? 'grayscale' : ''}`}
                                 onError={(e) => {
                                   (e.currentTarget as HTMLImageElement).onerror = null;
                                   (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
@@ -587,16 +612,20 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                               <div className="flex-1">
                                 <div
                                   className={`font-medium transition-colors ${
-                                    isSelected ? 'text-emerald-700' : 'text-gray-700 group-hover:text-emerald-600'
+                                    isOutOfStock
+                                      ? 'text-gray-500'
+                                      : isSelected
+                                      ? 'text-emerald-700'
+                                      : 'text-gray-700 group-hover:text-emerald-600'
                                   }`}
                                 >
                                   {variant.variantName}
                                 </div>
-                                <div className="text-xs text-gray-600">
+                                <div className={`text-xs ${isOutOfStock ? 'text-gray-400' : 'text-gray-600'}`}>
                                   Giá: {numberFmt(variant.price)} VND{' '}
                                   {!isPreorder && <> · Tồn: <b>{numberFmt(variant.stockQuantity)}</b></>}
                                 </div>
-                                <div className="text-xs text-gray-700 mt-1">
+                                <div className={`text-xs mt-1 ${isOutOfStock ? 'text-gray-400' : 'text-gray-700'}`}>
                                   Kích thước bể: <span className="font-semibold">{sizeLine || 'không rõ'}</span>
                                 </div>
                               </div>
@@ -675,14 +704,27 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                     const qty = accessoryQuantities[id] ?? (acc.quantityDefault ?? 1);
                     const isChecked = selectedAccessories.includes(id);
                     const accImage = Array.isArray(acc.accessoryImages) && acc.accessoryImages.length > 0 ? acc.accessoryImages[0].imageUrl : undefined;
+                    const isOutOfStock = stock <= 0;
 
                     return (
                       <div
                         key={id}
                         className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                          isChecked ? 'border-blue-400 bg-blue-50 shadow-lg' : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
+                          isOutOfStock
+                            ? 'border-gray-200 bg-gray-50 opacity-70 cursor-not-allowed grayscale'
+                            : isChecked
+                            ? 'border-blue-400 bg-blue-50 shadow-lg'
+                            : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
                         }`}
+                        aria-disabled={isOutOfStock}
                       >
+                        {/* Badge hết hàng */}
+                        {isOutOfStock && (
+                          <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow">
+                            HẾT HÀNG
+                          </div>
+                        )}
+
                         {/* Checkbox riêng */}
                         <div className="absolute top-4 right-4">
                           <button
@@ -691,9 +733,10 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                             aria-label={isChecked ? 'Bỏ chọn phụ kiện' : 'Chọn phụ kiện'}
                             className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-blue-300 ${
                               isChecked ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'
-                            }`}
-                            onClick={(e) => { e.stopPropagation(); toggleAccessory(id); }}
-                            title={isChecked ? 'Bỏ chọn' : 'Chọn'}
+                            } ${isOutOfStock ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); if (!isOutOfStock) toggleAccessory(id); }}
+                            title={isOutOfStock ? 'Hết hàng' : (isChecked ? 'Bỏ chọn' : 'Chọn')}
+                            disabled={isOutOfStock}
                           >
                             ✓
                           </button>
@@ -701,7 +744,7 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
 
                         {/* Ảnh → đi chi tiết */}
                         <div className="mb-4">
-                          <Link to={`/accessory/${id}`} onClick={(e) => e.stopPropagation()} className="block rounded-xl overflow-hidden">
+                          <Link to={`/accessory/${id}`} onClick={(e) => e.stopPropagation()} className={`block rounded-xl overflow-hidden ${isOutOfStock ? 'opacity-80' : ''}`}>
                             <img
                               src={accImage || FALLBACK_IMG}
                               alt={acc.name}
@@ -715,35 +758,35 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                         <div className="space-y-3">
                           <div>
                             <Link to={`/accessory/${id}`} onClick={(e) => e.stopPropagation()} className="block">
-                              <h4 className="font-bold text-gray-800 text-lg group-hover:text-blue-600 transition-colors">{acc.name}</h4>
+                              <h4 className={`font-bold text-gray-800 text-lg ${isOutOfStock ? 'text-gray-500' : 'group-hover:text-blue-600 transition-colors'}`}>{acc.name}</h4>
                             </Link>
-                            <p className="text-xl font-bold text-blue-700">
+                            <p className={`text-xl font-bold ${isOutOfStock ? 'text-gray-500' : 'text-blue-700'}`}>
                               {(acc.price ?? 0).toLocaleString('vi-VN')} VND{acc.quantitative ? ` / ${acc.quantitative}` : ''}
                             </p>
                           </div>
 
-                          {/* ✨ Thêm size + unit */}
                           <div className="text-sm text-gray-700 flex flex-wrap gap-3">
                             <span className="px-2 py-1 bg-gray-100 rounded-lg">Kích thước: <b className="text-gray-900">{acc.size || '—'}</b></span>
                             <span className="px-2 py-1 bg-gray-100 rounded-lg">Đơn vị: <b className="text-gray-900">{acc.quantitative || '—'}</b></span>
                           </div>
 
-                          {/* Stock & định mức */}
                           <div className="text-sm text-gray-700 flex flex-wrap gap-3">
                             <span className="px-2 py-1 bg-gray-100 rounded-lg">Định mức/1 sản phẩm: <b className="text-gray-900">{needPerUnit}</b></span>
                             <span className="px-2 py-1 bg-gray-100 rounded-lg">Tồn phụ kiện: <b className="text-gray-900">{numberFmt(stock)}</b></span>
                           </div>
 
-                          {acc.description && <p className="text-gray-600 text-sm leading-relaxed">{acc.description}</p>}
+                          {acc.description && <p className={`text-sm leading-relaxed ${isOutOfStock ? 'text-gray-500' : 'text-gray-600'}`}>{acc.description}</p>}
 
                           {/* Quantity Control */}
                           <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                            <span className="text-sm text-gray-600">Số lượng:</span>
+                            <span className={`text-sm ${isOutOfStock ? 'text-gray-400' : 'text-gray-600'}`}>Số lượng:</span>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); setAccQty(id, (qty || 0) - 1); }}
+                                onClick={(e) => { e.stopPropagation(); if (!isOutOfStock) setAccQty(id, (qty || 0) - 1); }}
+                                disabled={isOutOfStock || (qty <= 0)}
+                                title={isOutOfStock ? 'Hết hàng' : undefined}
                               >
                                 −
                               </button>
@@ -752,23 +795,19 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
                                 min={0}
                                 max={stock}
                                 value={Math.min(qty, stock)}
-                                onChange={(e) => { e.stopPropagation(); setAccQty(id, Number(e.target.value)); }}
+                                onChange={(e) => { e.stopPropagation(); if (!isOutOfStock) setAccQty(id, Number(e.target.value)); }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="
-                                  w-16 h-8 text-center border border-gray-300 rounded-lg
-                                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                                  text-gray-900
-                                  appearance-none [appearance:textfield] [-moz-appearance:textfield]
-                                  [&::-webkit-outer-spin-button]:appearance-none
-                                  [&::-webkit-inner-spin-button]:appearance-none
-                                "
+                                className="w-16 h-8 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 appearance-none [appearance:textfield] [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                disabled={isOutOfStock}
+                                aria-disabled={isOutOfStock}
+                                title={isOutOfStock ? 'Hết hàng' : undefined}
                               />
                               <button
                                 type="button"
                                 className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); setAccQty(id, (qty || 0) + 1); }}
-                                disabled={qty >= stock}
-                                title={qty >= stock ? 'Đã đạt tối đa tồn kho' : undefined}
+                                onClick={(e) => { e.stopPropagation(); if (!isOutOfStock) setAccQty(id, (qty || 0) + 1); }}
+                                disabled={isOutOfStock || (qty >= stock)}
+                                title={isOutOfStock ? 'Hết hàng' : (qty >= stock ? 'Đã đạt tối đa tồn kho' : undefined)}
                               >
                                 +
                               </button>
@@ -777,7 +816,7 @@ const deriveVariantTankSize = (variant: TerrariumVariant): string | undefined =>
 
                           {/* Subtotal */}
                           <div className="text-right">
-                            <p className="text-sm text-gray-600">
+                            <p className={`text-sm ${isOutOfStock ? 'text-gray-500' : 'text-gray-600'}`}>
                               Tạm tính:{' '}
                               <span className="font-semibold text-gray-900">
                                 {(((acc.price ?? 0) * (Math.min(qty, stock) || 0)) || 0).toLocaleString('vi-VN')} VND

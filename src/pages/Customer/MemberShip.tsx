@@ -1,7 +1,7 @@
 // src/pages/MemberShip.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Button, Empty, Badge, Row, Col, Typography, Divider, message, Modal, Space, Radio } from 'antd';
+import { Card, Button, Empty, Row, Col, Typography, Divider, message, Modal, Space, Radio } from 'antd';
 import {
   CheckCircleOutlined,
   StarOutlined,
@@ -313,95 +313,87 @@ const PlanCard: React.FC<PlanCardProps> = ({
     <>
       <div
         ref={cardRef}
-        className={`relative transform transition-all duration-700 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}
+        className={`relative transform transition-all duration-700 h-full ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}
         style={{ transitionDelay: `${index * 200}ms` }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {isPopular && (
-          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10 animate-bounce">
-            <Badge.Ribbon text={styling.badge} color="volcano">
-              <div />
-            </Badge.Ribbon>
-          </div>
-        )}
-
-        {isPopular && (
-          <>
-            <div className="absolute -top-2 -left-2 w-4 h-4 bg-emerald-400 rounded-full animate-ping opacity-75"></div>
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-teal-400 rounded-full animate-pulse"></div>
-            <div className="absolute -bottom-2 left-4 w-2 h-2 bg-green-400 rounded-full animate-bounce"></div>
-          </>
-        )}
-
+        {/* Badge / decorative elements removed */}
         <Card
           className={`h-full transition-all duration-500 ease-out border-2 ${styling.borderColor} rounded-2xl overflow-hidden ${isPopular ? `shadow-2xl scale-105 ${styling.glowColor}` : 'shadow-md hover:shadow-xl'} ${isHovered ? 'transform hover:-translate-y-3 hover:rotate-1' : ''} backdrop-blur-sm bg-white/90`}
           bodyStyle={{ padding: 0 }}
         >
-          <div className={`bg-gradient-to-br ${styling.bgGradient} p-6 text-center relative overflow-hidden`}>
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-16 -translate-y-16 animate-pulse"></div>
-              <div className="absolute bottom-0 right-0 w-24 h-24 bg-white rounded-full translate-x-12 translate-y-12 animate-pulse" style={{ animationDelay: '1s' }}></div>
-            </div>
-            <FloatingElement delay={index * 0.5}>
-              <div className={`mb-4 transform transition-transform duration-300 ${isHovered ? 'scale-125 rotate-12' : ''}`}>
-                {styling.icon}
+          {/* Make card content a column flex so we can stretch middle */}
+          <div className="flex flex-col h-full">
+            <div className={`bg-gradient-to-br ${styling.bgGradient} p-6 text-center relative overflow-hidden`}>
+              <div className="absolute inset-0 opacity-10 pointer-events-none">
+                <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-16 -translate-y-16 animate-pulse"></div>
+                <div className="absolute bottom-0 right-0 w-24 h-24 bg-white rounded-full translate-x-12 translate-y-12 animate-pulse" style={{ animationDelay: '1s' }}></div>
               </div>
-            </FloatingElement>
-            <Title level={3} className="mb-2 text-gray-800 relative z-10">
-              <span className={`transition-all duration-300 ${isHovered ? 'text-transparent bg-clip-text bg-gradient-to-r ' + styling.gradient : ''}`}>
-                {plan.type}
-              </span>
-            </Title>
-            <div className="flex items-center justify-center space-x-2 text-gray-600 mb-4 relative z-10">
-              <CalendarOutlined className={`transition-all duration-300 ${isHovered ? 'animate-spin' : ''}`} />
-              <Text className="text-sm font-medium">{plan.durationDays} ngày</Text>
-            </div>
-            <div className="mb-4 relative z-10">
-              <div className={`transition-all duration-500 ${isHovered ? 'animate-pulse' : ''}`}>
-                <Text className="text-4xl font-bold text-gray-800">{formatPrice(plan.price)}</Text>
-                <Text className="text-lg text-gray-600 ml-2">₫</Text>
-              </div>
-            </div>
-            <Text className="text-sm text-gray-500 relative z-10">
-              {Math.round(plan.price / Math.max(1, plan.durationDays)).toLocaleString('vi-VN')} ₫/ngày
-            </Text>
-          </div>
-
-          <div className="p-6">
-            {plan.description && (
-              <>
-                <div className="mb-6">
-                  <Title level={5} className="mb-3 text-gray-700">
-                    <GiftOutlined className={`mr-2 transition-all duration-300 ${isHovered ? 'animate-bounce' : ''}`} />
-                    Quyền lợi bao gồm:
-                  </Title>
-                  <div className="space-y-2">
-                    {plan.description.split(',').map((benefit, i) => (
-                      <div key={i} className="flex items-start space-x-2">
-                        <CheckCircleOutlined className={`text-green-500 mt-1 flex-shrink-0 transition-all duration-300 ${isHovered ? 'animate-pulse' : ''}`} />
-                        <Text className="text-gray-600 text-sm leading-relaxed">{benefit.trim()}</Text>
-                      </div>
-                    ))}
-                  </div>
+              <FloatingElement delay={index * 0.5}>
+                <div className={`mb-4 transform transition-transform duration-300 ${isHovered ? 'scale-125 rotate-12' : ''}`}>
+                  {styling.icon}
                 </div>
-                <Divider className="my-4" />
-              </>
-            )}
+              </FloatingElement>
+              <Title level={3} className="mb-2 text-gray-800 relative z-10">
+                <span className={`transition-all duration-300 ${isHovered ? 'text-transparent bg-clip-text bg-gradient-to-r ' + styling.gradient : ''}`}>
+                  {plan.type}
+                </span>
+              </Title>
+              <div className="flex items-center justify-center space-x-2 text-gray-600 mb-4 relative z-10">
+                <CalendarOutlined className={`transition-all duration-300 ${isHovered ? 'animate-spin' : ''}`} />
+                <Text className="text-sm font-medium">{plan.durationDays} ngày</Text>
+              </div>
+              <div className="mb-4 relative z-10">
+                <div className={`transition-all duration-500 ${isHovered ? 'animate-pulse' : ''}`}>
+                  <Text className="text-4xl font-bold text-gray-800">{formatPrice(plan.price)}</Text>
+                  <Text className="text-lg text-gray-600 ml-2">₫</Text>
+                </div>
+              </div>
+              <Text className="text-sm text-gray-500 relative z-10">
+                {Math.round(plan.price / Math.max(1, plan.durationDays)).toLocaleString('vi-VN')} ₫/ngày
+              </Text>
+            </div>
 
-            <Button
-              type="primary"
-              size="large"
-              block
-              className={`${styling.buttonColor} border-0 font-semibold text-white h-12 text-base rounded-lg transition-all duration-300 hover:scale-105 hover:shadow-xl relative overflow-hidden
-                ${!requireLogin && !canPurchase ? 'opacity-70 !cursor-not-allowed' : ''}`}
-              disabled={purchasing || (!requireLogin && !canPurchase)}
-              loading={purchasing && !requireLogin}
-              onClick={handleCardPurchase}
-            >
-              <span className="relative z-10">{btnText}</span>
-              <div className={`absolute inset-0 bg-white opacity-20 transform scale-0 rounded-full transition-transform duration-500 ${isHovered ? 'scale-100' : ''}`}></div>
-            </Button>
+            {/* Middle/content area: make flex-1 so it grows to match tallest card */}
+            <div className="p-6 flex-1 flex flex-col">
+              {plan.description && (
+                <>
+                  <div className="mb-6">
+                    <Title level={5} className="mb-3 text-gray-700">
+                      <GiftOutlined className={`mr-2 transition-all duration-300 ${isHovered ? 'animate-bounce' : ''}`} />
+                      Quyền lợi bao gồm:
+                    </Title>
+                    <div className="space-y-2">
+                      {plan.description.split(',').map((benefit, i) => (
+                        <div key={i} className="flex items-start space-x-2">
+                          <CheckCircleOutlined className={`text-green-500 mt-1 flex-shrink-0 transition-all duration-300 ${isHovered ? 'animate-pulse' : ''}`} />
+                          <Text className="text-gray-600 text-sm leading-relaxed">{benefit.trim()}</Text>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Divider className="my-4" />
+                </>
+              )}
+
+              {/* Footer area: ensure button sticks to bottom */}
+              <div className="mt-auto">
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  className={`${styling.buttonColor} border-0 font-semibold text-white h-12 text-base rounded-lg transition-all duration-300 hover:scale-105 hover:shadow-xl relative overflow-hidden
+                    ${!requireLogin && !canPurchase ? 'opacity-70 !cursor-not-allowed' : ''}`}
+                  disabled={purchasing || (!requireLogin && !canPurchase)}
+                  loading={purchasing && !requireLogin}
+                  onClick={handleCardPurchase}
+                >
+                  <span className="relative z-10">{btnText}</span>
+                  <div className={`absolute inset-0 bg-white opacity-20 transform scale-0 rounded-full transition-transform duration-500 ${isHovered ? 'scale-100' : ''}`}></div>
+                </Button>
+              </div>
+            </div>
           </div>
         </Card>
       </div>
@@ -764,25 +756,28 @@ const Membership: React.FC = () => {
         {loading ? (
           <LoadingSkeleton />
         ) : plans.length > 0 ? (
-          <Row gutter={[24, 24]} justify="center">
+          <Row gutter={[24, 24]} justify="center" className="flex items-stretch">
             {plans.map((plan, index) => (
-              <Col xs={24} md={8} lg={6} key={plan.id}>
-                <PlanCard
-                  plan={plan}
-                  index={index}
-                  isPopular={index === 1 && plans.length === 3}
-                  canPurchase={hasMembership === false}
-                  purchasing={checkingMembership || purchasingId === plan.id}
-                  requireLogin={!isLoggedIn}
-                  onLogin={() => navigate('/login')}
-                  walletBalance={walletBalance}
-                  walletLoading={walletLoading}
-                  onPurchase={(paymentMethod) => {
-                    if (!isLoggedIn) return navigate('/login');
-                    if (hasMembership !== false) return;
-                    handlePurchase(plan.id, paymentMethod);
-                  }}
-                />
+              
+              <Col xs={24} md={8} lg={6} key={plan.id}  className="flex">
+                <div className="h-full">
+                  <PlanCard
+                    plan={plan}
+                    index={index}
+                    isPopular={index === 1 && plans.length === 3}
+                    canPurchase={hasMembership === false}
+                    purchasing={checkingMembership || purchasingId === plan.id}
+                    requireLogin={!isLoggedIn}
+                    onLogin={() => navigate('/login')}
+                    walletBalance={walletBalance}
+                    walletLoading={walletLoading}
+                    onPurchase={(paymentMethod) => {
+                      if (!isLoggedIn) return navigate('/login');
+                      if (hasMembership !== false) return;
+                      handlePurchase(plan.id, paymentMethod);
+                    }}
+                  />
+                </div>
               </Col>
             ))}
           </Row>
